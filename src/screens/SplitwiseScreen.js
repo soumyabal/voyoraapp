@@ -1,0 +1,702 @@
+import React, { useState } from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Switch, TextInput,
+} from 'react-native';
+import useStore from '../store';
+import AddExpenseModal from '../modals/AddExpenseModal';
+import { colors, spacing, radius, typography, shadow } from '../theme';
+import { fmtM, getAllMembers, findMember, findMemberFamily, avatarColor } from '../utils/helpers';
+import {
+  resolveMode, getEffectiveFamilies, getEffectiveMembers,
+  expSharePerFamily, expSharePerPerson,
+  famExpenseShare, calcFamilyExpenseTotal, calcMemberExpenseShare,
+  calcTripItineraryTotal, calcBalances, calcSettlements,
+} from '../utils/costs';
+
+export default function SplitwiseScreen({ trip }) {
+  const {
+    pushItineraryToSplitwise, clearPushedItinerary,
+    deleteExpense, toggleFamilySplit, toggleExpenseMember,
+    updateExpensePayer, updateExpenseSplitMode, setTripSplitMode,
+    toggleExpenseExcluded, updateExpenseAmount,
+  } = useStore();
+  const [showAddExpense, setShowAddExpense] = useState(false);
+
+  const tripMode = trip.splitMode || 'individual';
+  const itinExpenses = trip.expenses.filter(e => e.source === 'itinerary');
+  const manualExpenses = trip.expenses.filter(e => e.source === 'manual');
+
+  const itinIncluded = itinExpenses.filter(e => !e.excluded);
+  const itinSkipped = itinExpenses.filter(e => e.excluded);
+  const itinTotal = itinIncluded.reduce((s, e) => s + e.amount, 0);
+  const manualTotal = manualExpenses.filter(e => !e.excluded).reduce((s, e) => s + e.amount, 0);
+  const grandTotal = trip.expenses.filter(e => !e.excluded).reduce((s, e) => s + e.amount, 0);
+
+  const balances = calcBalances(trip);
+  const settlements = calcSettlements([...balances]);
+
+  const modeLabel = tripMode === 'family'
+    ? 'Equal share per group — like insurance (group head covers dependents)'
+    : 'Equal share per person — great for groups of individuals';
+
+  return (
+    <View style={{ flex: 1 }}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+
+        {/* ── Split Mode Toggle ── */}
+        <View style={styles.modeCard}>
+          <Text style={styles.modeCardLabel}>HOW TO SPLIT</Text>
+          <View style={styles.modeToggle}>
+            <TouchableOpacity
+              style={[styles.modeBtn, tripMode === 'individual' && styles.modeBtnActive]}
+              onPress={() => setTripSplitMode(trip.id, 'individual')}
+            >
+              <Text style={[styles.modeBtnText, tripMode === 'individual' && styles.modeBtnTextActive]}>
+                👤 By Person
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeBtn, tripMode === 'family' && styles.modeBtnActive]}
+              onPress={() => setTripSplitMode(trip.id, 'family')}
+            >
+              <Text style={[styles.modeBtnText, tripMode === 'family' && styles.modeBtnTextActive]}>
+                👨‍👩‍👧 By Group
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.modeDesc}>{modeLabel}</Text>
+        </View>
+
+        {/* ── From Itinerary ── */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>📅 From Itinerary</Text>
+          {itinExpenses.length > 0 && (
+            <View style={[styles.badge, { backgroundColor: colors.greenLight }]}>
+              <Text style={[styles.badgeText, { color: colors.green }]}>{fmtM(itinTotal)}</Text>
+            </View>
+          )}
+          {itinSkipped.length > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{itinSkipped.length} skipped</Text>
+            </View>
+          )}
+        </View>
+
+        {itinExpenses.length === 0 ? (
+          <View style={styles.pushPrompt}>
+            <Text style={styles.pushPromptIcon}>📅</Text>
+            <Text style={styles.pushPromptText}>
+              Your itinerary has{' '}
+              <Text style={{ fontWeight: '700' }}>
+                {trip.days.reduce((s, d) => s + d.activities.filter(a => a.costPerPerson > 0).length, 0)} costed activities
+              </Text>
+              {' '}totalling{' '}
+              <Text style={{ fontWeight: '700' }}>{fmtM(calcTripItineraryTotal(trip))}</Text>.{'\n'}
+              Push them here, then edit actuals and skip what you didn't do.
+            </Text>
+            <TouchableOpacity style={styles.pushBtn} onPress={() => pushItineraryToSplitwise(trip.id)}>
+              <Text style={styles.pushBtnText}>➡️ Move Itinerary to Splitwise</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <View style={styles.clearRow}>
+              <Text style={styles.clearHint}>
+                {itinIncluded.length} splitting · {itinSkipped.length} skipped
+              </Text>
+              <TouchableOpacity onPress={() => clearPushedItinerary(trip.id)}>
+                <Text style={styles.clearText}>✕ Clear all</Text>
+              </TouchableOpacity>
+            </View>
+            {itinExpenses.map(exp => (
+              <ExpenseCard
+                key={exp.id} exp={exp} trip={trip}
+                onDelete={() => deleteExpense(trip.id, exp.id)}
+                onToggleFamily={(famId, v) => toggleFamilySplit(trip.id, exp.id, famId, v)}
+                onToggleMember={(mId, v) => toggleExpenseMember(trip.id, exp.id, mId, v)}
+                onChangePayer={mId => updateExpensePayer(trip.id, exp.id, mId)}
+                onChangeSplitMode={m => updateExpenseSplitMode(trip.id, exp.id, m)}
+                onToggleExcluded={() => toggleExpenseExcluded(trip.id, exp.id)}
+                onUpdateAmount={amt => updateExpenseAmount(trip.id, exp.id, amt)}
+              />
+            ))}
+          </>
+        )}
+
+        {/* ── Manual / Additional Expenses ── */}
+        <View style={[styles.sectionHeader, { marginTop: spacing.xl }]}>
+          <Text style={styles.sectionTitle}>🧾 Additional Expenses</Text>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{manualTotal > 0 ? fmtM(manualTotal) : '$0'}</Text>
+          </View>
+          <TouchableOpacity style={styles.addExpBtn} onPress={() => setShowAddExpense(true)}>
+            <Text style={styles.addExpBtnText}>+ Add</Text>
+          </TouchableOpacity>
+        </View>
+
+        {manualExpenses.length === 0 ? (
+          <View style={[styles.pushPrompt, { borderStyle: 'dashed' }]}>
+            <Text style={styles.pushPromptText}>
+              No additional expenses yet.{'\n'}Add flights, hotel bookings, transfers, shared meals, etc.
+            </Text>
+          </View>
+        ) : (
+          manualExpenses.map(exp => (
+            <ExpenseCard
+              key={exp.id} exp={exp} trip={trip}
+              onDelete={() => deleteExpense(trip.id, exp.id)}
+              onToggleFamily={(famId, v) => toggleFamilySplit(trip.id, exp.id, famId, v)}
+              onToggleMember={(mId, v) => toggleExpenseMember(trip.id, exp.id, mId, v)}
+              onChangePayer={mId => updateExpensePayer(trip.id, exp.id, mId)}
+              onChangeSplitMode={m => updateExpenseSplitMode(trip.id, exp.id, m)}
+              onToggleExcluded={() => toggleExpenseExcluded(trip.id, exp.id)}
+              onUpdateAmount={amt => updateExpenseAmount(trip.id, exp.id, amt)}
+            />
+          ))
+        )}
+
+        {/* ── Cost Breakdown ── */}
+        {grandTotal > 0 && (
+          <View style={[styles.summaryCard, { marginTop: spacing.xl }]}>
+            <View style={styles.summaryHeader}>
+              <Text style={styles.summaryTitle}>
+                {tripMode === 'family' ? '👨‍👩‍👧 Cost by Group' : '👤 Cost by Person'}
+              </Text>
+              <Text style={styles.summaryHint}>{fmtM(grandTotal)} total</Text>
+            </View>
+
+            {trip.families.map(fam => {
+              const famTotal = calcFamilyExpenseTotal(fam, trip);
+              const isFamily = tripMode === 'family';
+              const head = fam.members[0];
+              return (
+                <View key={fam.id} style={styles.famRow}>
+                  <View style={[styles.famDot, { backgroundColor: fam.color }]} />
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.famNameRow}>
+                      <Text style={styles.famName}>{fam.name}</Text>
+                      {isFamily && head && (
+                        <View style={styles.headBadge}>
+                          <Text style={styles.headBadgeText}>head: {head.name.split(' ')[0]}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {isFamily ? (
+                      <Text style={styles.famMeta}>
+                        {fam.members.length} member{fam.members.length !== 1 ? 's' : ''} · group pays as one unit
+                      </Text>
+                    ) : (
+                      <>
+                        <Text style={styles.famMeta}>{fam.members.length} members</Text>
+                        {fam.members.map(m => {
+                          const ms = calcMemberExpenseShare(m, trip);
+                          return (
+                            <View key={m.id} style={styles.memberShareRow}>
+                              <View style={[styles.memberAvatar, { backgroundColor: avatarColor(m.name) }]}>
+                                <Text style={styles.memberAvatarText}>{m.name[0]}</Text>
+                              </View>
+                              <Text style={styles.memberShareName}>{m.name.split(' ')[0]}</Text>
+                              <Text style={styles.memberShareAmt}>{fmtM(ms)}</Text>
+                            </View>
+                          );
+                        })}
+                      </>
+                    )}
+                  </View>
+                  <Text style={[styles.famTotal, { color: fam.color }]}>{fmtM(famTotal)}</Text>
+                </View>
+              );
+            })}
+
+            <View style={styles.grandTotalRow}>
+              <Text style={styles.grandTotalLabel}>Grand Total</Text>
+              <Text style={styles.grandTotalAmt}>{fmtM(grandTotal)}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Balances & Settlements ── */}
+        {balances.some(b => Math.abs(b.net) > 0.5) && (
+          <View style={[styles.summaryCard, { marginTop: spacing.lg }]}>
+            <Text style={styles.balanceTitle}>⚖️ Balances</Text>
+            {balances
+              .filter(b => Math.abs(b.net) > 0.5)
+              .map(({ member, net }) => {
+                const fam = findMemberFamily(trip, member.id);
+                const isHead = tripMode === 'family' && fam?.members[0]?.id === member.id;
+                return (
+                  <View key={member.id} style={styles.balanceRow}>
+                    <View style={[styles.memberAvatar, { backgroundColor: avatarColor(member.name) }]}>
+                      <Text style={styles.memberAvatarText}>{member.name[0]}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.balanceName}>{member.name.split(' ')[0]}{isHead ? ' 👑' : ''}</Text>
+                      {fam && <Text style={[styles.balanceFam, { color: fam.color }]}>{fam.name}</Text>}
+                    </View>
+                    <Text style={[styles.balanceNet, { color: net > 0 ? colors.green : colors.red }]}>
+                      {net > 0 ? '▲ gets back' : '▼ owes'} {fmtM(Math.abs(net))}
+                    </Text>
+                  </View>
+                );
+              })}
+
+            <Text style={styles.settleTitle}>Who Pays Whom</Text>
+            {settlements.length === 0 ? (
+              <Text style={styles.settledText}>All settled up! 🎉</Text>
+            ) : (
+              settlements.map((s, i) => {
+                const fromFam = findMemberFamily(trip, s.from.id);
+                const toFam = findMemberFamily(trip, s.to.id);
+                return (
+                  <View key={i} style={styles.settleItem}>
+                    <View style={[styles.memberAvatar, { backgroundColor: avatarColor(s.from.name) }]}>
+                      <Text style={styles.memberAvatarText}>{s.from.name[0]}</Text>
+                    </View>
+                    <View>
+                      <Text style={styles.settleName}>{s.from.name.split(' ')[0]}</Text>
+                      {fromFam && <Text style={[styles.settleFam, { color: fromFam.color }]}>{fromFam.name}</Text>}
+                    </View>
+                    <Text style={styles.settleArrow}>→</Text>
+                    <View style={[styles.memberAvatar, { backgroundColor: avatarColor(s.to.name) }]}>
+                      <Text style={styles.memberAvatarText}>{s.to.name[0]}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.settleName}>{s.to.name.split(' ')[0]}</Text>
+                      {toFam && <Text style={[styles.settleFam, { color: toFam.color }]}>{toFam.name}</Text>}
+                    </View>
+                    <Text style={styles.settleAmt}>{fmtM(s.amount)}</Text>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
+
+      </ScrollView>
+
+      <AddExpenseModal visible={showAddExpense} trip={trip} onClose={() => setShowAddExpense(false)} />
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ExpenseCard
+// ─────────────────────────────────────────────────────────────────
+function ExpenseCard({
+  exp, trip,
+  onDelete, onToggleFamily, onToggleMember,
+  onChangePayer, onChangeSplitMode,
+  onToggleExcluded, onUpdateAmount,
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [editAmount, setEditAmount] = useState(String(exp.amount));
+
+  // Keep editAmount in sync when the stored amount changes (e.g. initial mount)
+  React.useEffect(() => { setEditAmount(String(exp.amount)); }, [exp.amount]);
+
+  const isExcluded = !!exp.excluded;
+  const effectiveMode = resolveMode(exp, trip);
+  const effFams = getEffectiveFamilies(exp, trip);
+  const effMembers = getEffectiveMembers(exp, trip);
+  const spf = expSharePerFamily(exp, trip);
+  const spp = expSharePerPerson(exp, trip);
+  const payer = findMember(trip, exp.paidBy);
+  const payerFam = findMemberFamily(trip, exp.paidBy);
+  const modeOverride = exp.splitMode;
+
+  const hasEstimate = exp.estimatedAmount != null && exp.estimatedAmount !== exp.amount;
+
+  const splitSummary = effectiveMode === 'family'
+    ? `${effFams.length} group${effFams.length !== 1 ? 's' : ''} · ${fmtM(spf)}/group`
+    : `${effMembers.length} person${effMembers.length !== 1 ? 's' : ''} · ${fmtM(spp)}/person`;
+
+  const commitAmount = () => {
+    const v = parseFloat(editAmount);
+    if (v > 0 && v !== exp.amount) {
+      onUpdateAmount(v);
+    } else {
+      setEditAmount(String(exp.amount));
+    }
+  };
+
+  return (
+    <View style={[styles.expCard, isExcluded && styles.expCardExcluded]}>
+      {/* ── Collapsed header ── */}
+      <TouchableOpacity
+        style={styles.expHeader}
+        onPress={() => setExpanded(e => !e)}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.expIcon, isExcluded && { opacity: 0.35 }]}>
+          <Text style={{ fontSize: 20 }}>{exp.category}</Text>
+        </View>
+
+        <View style={[styles.expInfo, isExcluded && { opacity: 0.45 }]}>
+          <Text style={[styles.expName, isExcluded && styles.expNameStrike]} numberOfLines={1}>
+            {exp.name}
+          </Text>
+          {isExcluded ? (
+            <Text style={styles.skippedHint}>Skipped · tap to restore</Text>
+          ) : (
+            <>
+              <Text style={styles.expSub}>
+                {effectiveMode === 'family' ? '👨‍👩‍👧' : '👤'} {splitSummary}
+              </Text>
+              {payer && (
+                <Text style={styles.expPayer}>
+                  💳 {payer.name.split(' ')[0]}{payerFam ? ` · ${payerFam.name}` : ''}
+                </Text>
+              )}
+            </>
+          )}
+        </View>
+
+        <View style={styles.expRight}>
+          {isExcluded ? (
+            <View style={styles.skippedBadge}>
+              <Text style={styles.skippedBadgeText}>skipped</Text>
+            </View>
+          ) : (
+            <View style={styles.amountCol}>
+              <Text style={styles.expTotal}>{fmtM(exp.amount)}</Text>
+              {hasEstimate && (
+                <Text style={styles.estHint}>est. {fmtM(exp.estimatedAmount)}</Text>
+              )}
+            </View>
+          )}
+          <Text style={styles.expExpandIcon}>{expanded ? '▲' : '▼'}</Text>
+        </View>
+      </TouchableOpacity>
+
+      {/* ── Expanded body ── */}
+      {expanded && (
+        <View style={styles.expBody}>
+
+          {/* 1. Include / skip toggle — always first */}
+          <View style={styles.includeRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.includeTitle}>
+                {isExcluded ? '⛔ Not splitting this expense' : '✅ Splitting this expense'}
+              </Text>
+              <Text style={styles.includeSub}>
+                {isExcluded
+                  ? 'Toggle on to include in settlement'
+                  : 'Toggle off to skip (keeps item visible)'}
+              </Text>
+            </View>
+            <Switch
+              value={!isExcluded}
+              onValueChange={onToggleExcluded}
+              trackColor={{ false: colors.border, true: colors.greenLight }}
+              thumbColor={!isExcluded ? colors.green : '#ccc'}
+            />
+          </View>
+
+          {!isExcluded && (
+            <>
+              {/* 2. Actual amount (editable) */}
+              <View style={styles.amountSection}>
+                <Text style={styles.splitLabel}>
+                  {exp.estimatedAmount != null ? 'Actual amount (edit if different from estimate)' : 'Amount'}
+                </Text>
+                <View style={styles.amountEditRow}>
+                  {exp.estimatedAmount != null && (
+                    <View style={styles.estPill}>
+                      <Text style={styles.estPillText}>Est {fmtM(exp.estimatedAmount)}</Text>
+                    </View>
+                  )}
+                  {exp.estimatedAmount != null && (
+                    <Text style={styles.amountArrow}>→</Text>
+                  )}
+                  <View style={styles.amountInputWrap}>
+                    <Text style={styles.amountDollar}>$</Text>
+                    <TextInput
+                      style={styles.amountInput}
+                      value={editAmount}
+                      onChangeText={setEditAmount}
+                      keyboardType="decimal-pad"
+                      onBlur={commitAmount}
+                      selectTextOnFocus
+                    />
+                  </View>
+                </View>
+              </View>
+
+              {/* 3. Split mode override */}
+              <Text style={[styles.splitLabel, { marginTop: 12 }]}>Split mode</Text>
+              <View style={styles.overrideRow}>
+                {[
+                  { key: null,         label: 'Auto' },
+                  { key: 'individual', label: '👤 Person' },
+                  { key: 'family',     label: '👨‍👩‍👧 Group' },
+                ].map(opt => (
+                  <TouchableOpacity
+                    key={String(opt.key)}
+                    style={[styles.overrideChip, modeOverride === opt.key && styles.overrideChipActive]}
+                    onPress={() => onChangeSplitMode(opt.key)}
+                  >
+                    <Text style={[styles.overrideChipText, modeOverride === opt.key && styles.overrideChipTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* 4. Who's splitting */}
+              <Text style={[styles.splitLabel, { marginTop: 12 }]}>Who's splitting this?</Text>
+
+              {effectiveMode === 'family' ? (
+                trip.families.map(fam => {
+                  const participating = effFams.some(f => f.id === fam.id);
+                  const isPayer = payerFam?.id === fam.id;
+                  return (
+                    <View key={fam.id} style={[styles.splitRow, !participating && { opacity: 0.4 }]}>
+                      <Switch
+                        value={participating}
+                        onValueChange={v => onToggleFamily(fam.id, v)}
+                        trackColor={{ false: colors.border, true: fam.color + '88' }}
+                        thumbColor={participating ? fam.color : '#ccc'}
+                        style={{ transform: [{ scaleX: 0.82 }, { scaleY: 0.82 }] }}
+                      />
+                      <View style={[styles.famDot, { backgroundColor: fam.color }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.splitRowName}>{fam.name}</Text>
+                        <Text style={styles.splitRowSub}>{fam.members.length} members</Text>
+                      </View>
+                      {isPayer && <View style={styles.payerBadge}><Text style={styles.payerBadgeText}>paid</Text></View>}
+                      <Text style={[styles.splitRowAmt, { color: participating ? colors.text : colors.muted }]}>
+                        {participating ? fmtM(spf) : '—'}
+                      </Text>
+                    </View>
+                  );
+                })
+              ) : (
+                trip.families.map(fam => {
+                  const allFamIn = fam.members.every(m => effMembers.some(em => em.id === m.id));
+                  return (
+                    <View key={fam.id} style={styles.indivFamGroup}>
+                      <View style={styles.indivFamHeader}>
+                        <View style={[styles.famDot, { backgroundColor: fam.color, width: 7, height: 7 }]} />
+                        <Text style={[styles.indivFamName, { color: fam.color }]}>{fam.name}</Text>
+                        <TouchableOpacity
+                          style={styles.allToggle}
+                          onPress={() => fam.members.forEach(m => onToggleMember(m.id, !allFamIn))}
+                        >
+                          <Text style={[styles.allToggleText, { color: fam.color }]}>
+                            {allFamIn ? 'Remove all' : 'Add all'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                      {fam.members.map(m => {
+                        const inExp = effMembers.some(em => em.id === m.id);
+                        return (
+                          <View key={m.id} style={[styles.splitRow, !inExp && { opacity: 0.4 }]}>
+                            <Switch
+                              value={inExp}
+                              onValueChange={v => onToggleMember(m.id, v)}
+                              trackColor={{ false: colors.border, true: fam.color + '88' }}
+                              thumbColor={inExp ? fam.color : '#ccc'}
+                              style={{ transform: [{ scaleX: 0.78 }, { scaleY: 0.78 }] }}
+                            />
+                            <View style={[styles.memberAvatar, { backgroundColor: avatarColor(m.name), width: 22, height: 22, borderRadius: 11 }]}>
+                              <Text style={[styles.memberAvatarText, { fontSize: 9 }]}>{m.name[0]}</Text>
+                            </View>
+                            <Text style={[styles.splitRowName, { flex: 1 }]}>{m.name.split(' ')[0]}</Text>
+                            {exp.paidBy === m.id && <View style={styles.payerBadge}><Text style={styles.payerBadgeText}>paid</Text></View>}
+                            <Text style={[styles.splitRowAmt, { color: inExp ? colors.text : colors.muted }]}>
+                              {inExp ? fmtM(spp) : '—'}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })
+              )}
+
+              {/* 5. Who paid */}
+              <Text style={[styles.splitLabel, { marginTop: 14 }]}>Who paid?</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.payerRow}>
+                  {trip.families.map(fam =>
+                    fam.members.map(m => (
+                      <TouchableOpacity
+                        key={m.id}
+                        style={[styles.payerChip, exp.paidBy === m.id && { backgroundColor: fam.color, borderColor: fam.color }]}
+                        onPress={() => onChangePayer(m.id)}
+                      >
+                        <View style={[styles.memberAvatar, { backgroundColor: avatarColor(m.name), width: 22, height: 22, borderRadius: 11 }]}>
+                          <Text style={[styles.memberAvatarText, { fontSize: 8 }]}>{m.name[0]}</Text>
+                        </View>
+                        <View>
+                          <Text style={[styles.payerChipName, exp.paidBy === m.id && { color: '#fff' }]}>
+                            {m.name.split(' ')[0]}
+                          </Text>
+                          <Text style={[styles.payerChipFam, exp.paidBy === m.id && { color: 'rgba(255,255,255,0.7)' }]}>
+                            {fam.name.split(' ')[0]}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </View>
+              </ScrollView>
+            </>
+          )}
+
+          {/* Delete — always available */}
+          <TouchableOpacity style={styles.deleteExpBtn} onPress={onDelete}>
+            <Text style={styles.deleteExpBtnText}>🗑 Remove from list</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  scroll: { flex: 1 },
+  content: { padding: spacing.xxl, paddingBottom: 100 },
+
+  // Mode toggle
+  modeCard: {
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.xl, ...shadow.sm,
+  },
+  modeCardLabel: { fontSize: 10, fontWeight: '800', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 },
+  modeToggle: { flexDirection: 'row', backgroundColor: colors.surface2, borderRadius: radius.md, padding: 3, marginBottom: 8 },
+  modeBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: radius.sm },
+  modeBtnActive: { backgroundColor: colors.primary, elevation: 2 },
+  modeBtnText: { ...typography.smallBold, color: colors.muted },
+  modeBtnTextActive: { color: '#fff' },
+  modeDesc: { ...typography.tiny, color: colors.muted, lineHeight: 16 },
+
+  // Section headers
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.md },
+  sectionTitle: { ...typography.bodyBold, color: colors.text },
+  badge: { backgroundColor: colors.surface2, borderRadius: radius.full, paddingHorizontal: 9, paddingVertical: 2 },
+  badgeText: { ...typography.tinyBold, color: colors.muted },
+  addExpBtn: { marginLeft: 'auto', borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 4 },
+  addExpBtnText: { ...typography.smallBold, color: colors.primary },
+  pushPrompt: { backgroundColor: colors.surface2, borderWidth: 2, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.xxl, alignItems: 'center', marginBottom: spacing.md },
+  pushPromptIcon: { fontSize: 36, marginBottom: 12 },
+  pushPromptText: { ...typography.small, color: colors.muted, textAlign: 'center', lineHeight: 20 },
+  pushBtn: { backgroundColor: colors.green, borderRadius: radius.md, paddingHorizontal: 16, paddingVertical: 10, marginTop: 12 },
+  pushBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  clearRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  clearHint: { ...typography.tiny, color: colors.muted },
+  clearText: { ...typography.tinyBold, color: colors.red },
+
+  // Expense card
+  expCard: {
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    borderRadius: radius.lg, marginBottom: spacing.md, overflow: 'hidden', ...shadow.sm,
+  },
+  expCardExcluded: { backgroundColor: colors.surface2, borderColor: colors.border, borderStyle: 'dashed' },
+  expHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: spacing.md },
+  expIcon: { width: 40, height: 40, backgroundColor: colors.surface2, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  expInfo: { flex: 1 },
+  expName: { ...typography.bodyBold, color: colors.text },
+  expNameStrike: { textDecorationLine: 'line-through', color: colors.muted },
+  expSub: { ...typography.tiny, color: colors.muted, marginTop: 2 },
+  expPayer: { ...typography.tiny, color: colors.muted, marginTop: 1 },
+  skippedHint: { ...typography.tiny, color: colors.muted, fontStyle: 'italic', marginTop: 2 },
+  expRight: { alignItems: 'flex-end', gap: 2 },
+  amountCol: { alignItems: 'flex-end' },
+  expTotal: { fontSize: 16, fontWeight: '900', color: colors.text },
+  estHint: { fontSize: 10, color: colors.muted, textDecorationLine: 'line-through' },
+  expExpandIcon: { fontSize: 10, color: colors.muted, marginTop: 2 },
+  skippedBadge: { backgroundColor: colors.surface2, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1, borderColor: colors.border },
+  skippedBadgeText: { fontSize: 10, fontWeight: '700', color: colors.muted },
+
+  // Expanded body
+  expBody: { padding: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface2 },
+  splitLabel: { fontSize: 10, fontWeight: '800', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+
+  // Include/skip toggle
+  includeRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md,
+    marginBottom: 12, borderWidth: 1, borderColor: colors.border,
+  },
+  includeTitle: { ...typography.smallBold, color: colors.text },
+  includeSub: { ...typography.tiny, color: colors.muted, marginTop: 2 },
+
+  // Amount editing
+  amountSection: { marginBottom: 4 },
+  amountEditRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  estPill: { backgroundColor: colors.surface, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: colors.border },
+  estPillText: { fontSize: 12, color: colors.muted, textDecorationLine: 'line-through' },
+  amountArrow: { fontSize: 16, color: colors.muted },
+  amountInputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.surface, gap: 2 },
+  amountDollar: { fontSize: 15, fontWeight: '700', color: colors.primary },
+  amountInput: { fontSize: 17, fontWeight: '800', color: colors.primary, minWidth: 60, padding: 0 },
+
+  // Mode override chips
+  overrideRow: { flexDirection: 'row', gap: 6 },
+  overrideChip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface },
+  overrideChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  overrideChipText: { ...typography.tiny, fontWeight: '700', color: colors.muted },
+  overrideChipTextActive: { color: colors.primary },
+
+  // Split rows
+  splitRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.border },
+  famDot: { width: 9, height: 9, borderRadius: 5 },
+  splitRowName: { ...typography.smallBold, color: colors.text },
+  splitRowSub: { ...typography.tiny, color: colors.muted },
+  splitRowAmt: { ...typography.smallBold, width: 52, textAlign: 'right' },
+  indivFamGroup: { marginBottom: 4 },
+  indivFamHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 5 },
+  indivFamName: { ...typography.tinyBold, flex: 1, textTransform: 'uppercase', letterSpacing: 0.4 },
+  allToggle: { paddingHorizontal: 8, paddingVertical: 2 },
+  allToggleText: { fontSize: 11, fontWeight: '700' },
+
+  // Payer
+  payerBadge: { backgroundColor: colors.greenLight, borderRadius: radius.full, paddingHorizontal: 7, paddingVertical: 1 },
+  payerBadgeText: { fontSize: 10, fontWeight: '700', color: colors.green },
+  payerRow: { flexDirection: 'row', gap: 8, paddingVertical: 8 },
+  payerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: radius.sm, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface },
+  payerChipName: { fontSize: 12, fontWeight: '700', color: colors.text },
+  payerChipFam: { fontSize: 10, color: colors.muted },
+  deleteExpBtn: { marginTop: 14, alignItems: 'center', padding: 8, borderTopWidth: 1, borderTopColor: colors.border },
+  deleteExpBtnText: { ...typography.small, color: colors.red },
+
+  // Summary card
+  summaryCard: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, overflow: 'hidden', ...shadow.sm },
+  summaryHeader: { padding: spacing.lg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1a1714' },
+  summaryTitle: { ...typography.bodyBold, color: '#fff' },
+  summaryHint: { ...typography.tinyBold, color: 'rgba(255,255,255,0.6)' },
+  famRow: { flexDirection: 'row', alignItems: 'flex-start', padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 10 },
+  famNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
+  famName: { ...typography.bodyBold, color: colors.text },
+  headBadge: { backgroundColor: colors.surface2, borderRadius: radius.full, paddingHorizontal: 7, paddingVertical: 1 },
+  headBadgeText: { fontSize: 10, color: colors.muted, fontWeight: '600' },
+  famMeta: { ...typography.tiny, color: colors.muted, marginBottom: 4 },
+  famTotal: { ...typography.h4, fontWeight: '900' },
+  memberShareRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
+  memberAvatar: { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  memberAvatarText: { color: '#fff', fontSize: 8, fontWeight: '700' },
+  memberShareName: { ...typography.small, color: colors.muted, flex: 1 },
+  memberShareAmt: { ...typography.smallBold, color: colors.text },
+  grandTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.lg, backgroundColor: colors.surface2, borderTopWidth: 2, borderTopColor: colors.border },
+  grandTotalLabel: { ...typography.bodyBold, color: colors.muted },
+  grandTotalAmt: { fontSize: 22, fontWeight: '900', color: colors.text },
+
+  // Balances
+  balanceTitle: { ...typography.bodyBold, color: colors.text, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  balanceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  balanceName: { ...typography.smallBold, color: colors.text },
+  balanceFam: { fontSize: 10, fontWeight: '600' },
+  balanceNet: { ...typography.smallBold },
+  settleTitle: { fontSize: 10, fontWeight: '800', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4, padding: spacing.md, paddingBottom: spacing.sm },
+  settledText: { ...typography.body, color: colors.muted, padding: spacing.lg },
+  settleItem: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: spacing.md, backgroundColor: colors.surface2, marginHorizontal: spacing.md, borderRadius: radius.sm, marginBottom: 6 },
+  settleName: { ...typography.smallBold, color: colors.text },
+  settleFam: { fontSize: 10, fontWeight: '600' },
+  settleArrow: { ...typography.small, color: colors.muted, paddingHorizontal: 4 },
+  settleAmt: { marginLeft: 'auto', ...typography.bodyBold, color: colors.green },
+});

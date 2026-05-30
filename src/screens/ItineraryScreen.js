@@ -80,7 +80,6 @@ function TripExpenseChart({ trip, currentDay, onSelectDay }) {
       <View style={ch.dayLabels}>
         {trip.days.map((d, i) => {
           const isActive = i === currentDay;
-          // Show label for first, last, active and every ~5th
           const show = i === 0 || i === trip.days.length - 1 || isActive || i % 5 === 0;
           return (
             <View key={d.date} style={{ width: barW, marginRight: i < barCount - 1 ? gap : 0 }}>

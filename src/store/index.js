@@ -39,6 +39,31 @@ const useStore = create(
         currentTripId: s.currentTripId === tripId ? null : s.currentTripId,
       })),
 
+      updateTrip: (tripId, updates) => set(s => ({
+        trips: s.trips.map(t => t.id === tripId ? { ...t, ...updates } : t),
+      })),
+
+      duplicateTrip: (tripId) => set(s => {
+        const orig = s.trips.find(t => t.id === tripId);
+        if (!orig) return s;
+        const newTrip = {
+          ...orig,
+          id: uid(),
+          name: `Copy of ${orig.name}`,
+          expenses: [],
+          itineraryPushed: false,
+          families: orig.families.map(f => ({
+            ...f, id: uid(),
+            members: f.members.map(m => ({ ...m, id: uid() })),
+          })),
+          days: orig.days.map(d => ({
+            ...d,
+            activities: d.activities.map(a => ({ ...a, id: uid() })),
+          })),
+        };
+        return { trips: [newTrip, ...s.trips] };
+      }),
+
       createTrip: ({ name, destination, startDate, endDate, mode, familyForms }) => {
         const families = familyForms
           .filter(ff => ff.name || ff.members.some(m => m.name))

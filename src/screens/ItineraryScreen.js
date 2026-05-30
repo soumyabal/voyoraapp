@@ -1,10 +1,104 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Dimensions } from 'react-native';
 import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
 import { fmt, fmtM, getAllMembers } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
+
+const SCREEN_W = Dimensions.get('window').width;
+
+// ── Robinhood-style expense chart ─────────────────────────────────
+function TripExpenseChart({ trip, currentDay, onSelectDay }) {
+  const dayCosts = trip.days.map(d => calcDayCostForTrip(d, trip));
+  const maxCost = Math.max(...dayCosts, 1);
+  const total = dayCosts.reduce((s, c) => s + c, 0);
+  const chartW = SCREEN_W - spacing.xxl * 2 - 32; // account for banner padding
+  const barCount = trip.days.length;
+  const gap = Math.min(4, Math.floor((chartW - barCount * 6) / Math.max(barCount - 1, 1)));
+  const barW = Math.max(6, Math.floor((chartW - gap * (barCount - 1)) / barCount));
+  const chartH = 72;
+
+  if (barCount === 0) return null;
+
+  return (
+    <View style={ch.wrap}>
+      {/* Header row */}
+      <View style={ch.headerRow}>
+        <View>
+          <Text style={ch.label}>SPEND BY DAY</Text>
+          {total > 0 && <Text style={ch.totalLine}>{fmtM(total)} total</Text>}
+        </View>
+        {total === 0 && <Text style={ch.emptyHint}>Add activities to see chart</Text>}
+      </View>
+
+      {/* Bar chart */}
+      <View style={[ch.chartArea, { height: chartH }]}>
+        {trip.days.map((d, i) => {
+          const cost = dayCosts[i];
+          const heightPct = cost > 0 ? Math.max(0.08, cost / maxCost) : 0.04;
+          const barH = Math.round(chartH * heightPct);
+          const isActive = i === currentDay;
+          return (
+            <TouchableOpacity
+              key={d.date}
+              activeOpacity={0.7}
+              onPress={() => onSelectDay(i)}
+              style={[
+                ch.barWrapper,
+                { width: barW, marginRight: i < barCount - 1 ? gap : 0 },
+              ]}
+            >
+              {/* Top label (active only) */}
+              {isActive && cost > 0 && (
+                <Text style={ch.barLabel}>{fmtM(cost)}</Text>
+              )}
+              {/* Spacer pushes bar to bottom */}
+              <View style={{ flex: 1 }} />
+              {/* Bar */}
+              <View
+                style={[
+                  ch.bar,
+                  {
+                    height: barH,
+                    width: barW,
+                    backgroundColor: isActive
+                      ? colors.green
+                      : cost === 0
+                        ? 'rgba(255,255,255,0.08)'
+                        : 'rgba(255,255,255,0.22)',
+                    borderRadius: barW < 10 ? 2 : 4,
+                  },
+                ]}
+              />
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Day labels */}
+      <View style={ch.dayLabels}>
+        {trip.days.map((d, i) => {
+          const isActive = i === currentDay;
+          // Show label for first, last, active and every ~5th
+          const show = i === 0 || i === trip.days.length - 1 || isActive || i % 5 === 0;
+          return (
+            <View key={d.date} style={{ width: barW, marginRight: i < barCount - 1 ? gap : 0 }}>
+              {show && (
+                <Text
+                  style={[ch.dayLabelText, isActive && ch.dayLabelActive]}
+                  numberOfLines={1}
+                >
+                  {i + 1}
+                </Text>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 export default function ItineraryScreen({ trip, switchTab }) {
   const { currentDay, setCurrentDay, deleteActivity, pushItineraryToSplitwise } = useStore();
@@ -48,6 +142,9 @@ export default function ItineraryScreen({ trip, switchTab }) {
             <Text style={styles.pushBtnText}>➡️ Move to Splitwise</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Expense Chart */}
+        <TripExpenseChart trip={trip} currentDay={currentDay} onSelectDay={setCurrentDay} />
 
         {/* Day Navigation */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayNav} contentContainerStyle={{ paddingHorizontal: spacing.xxl }}>
@@ -246,4 +343,70 @@ const styles = StyleSheet.create({
   famChipText: { fontSize: 11, color: colors.muted },
   delBtn: { padding: 4 },
   delBtnText: { fontSize: 16 },
+});
+
+const ch = StyleSheet.create({
+  wrap: {
+    marginHorizontal: spacing.xxl,
+    marginBottom: spacing.md,
+    backgroundColor: '#1a1714',
+    borderRadius: radius.lg,
+    padding: 16,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  totalLine: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    marginTop: 2,
+  },
+  emptyHint: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.35)',
+    alignSelf: 'center',
+  },
+  chartArea: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  barWrapper: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexDirection: 'column',
+  },
+  bar: {},
+  barLabel: {
+    position: 'absolute',
+    top: -18,
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.green,
+    textAlign: 'center',
+  },
+  dayLabels: {
+    flexDirection: 'row',
+    marginTop: 6,
+  },
+  dayLabelText: {
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.3)',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  dayLabelActive: {
+    color: colors.green,
+    fontWeight: '800',
+  },
 });

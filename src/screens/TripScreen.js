@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import {
+  View, Text, TouchableOpacity, StyleSheet,
+  StatusBar, Alert, Share,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useStore from '../store';
 import ItineraryScreen from './ItineraryScreen';
 import TravelersScreen from './TravelersScreen';
 import SplitwiseScreen from './SplitwiseScreen';
+import EditTripModal from '../modals/EditTripModal';
 import { colors, spacing, typography } from '../theme';
-import { fmt } from '../utils/helpers';
+import { fmt, getAllMembers } from '../utils/helpers';
 
 const TABS = [
   { key: 'itinerary', label: '📅 Itinerary' },
@@ -16,8 +20,9 @@ const TABS = [
 
 export default function TripScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { getCurrentTrip } = useStore();
+  const { getCurrentTrip, deleteTrip, duplicateTrip, setCurrentTrip } = useStore();
   const [activeTab, setActiveTab] = useState('itinerary');
+  const [showEditModal, setShowEditModal] = useState(false);
   const trip = getCurrentTrip();
 
   if (!trip) {
@@ -31,8 +36,76 @@ export default function TripScreen({ navigation }) {
     );
   }
 
+  const isExpert = trip.mode === 'expert';
   const hasAccessible = trip.families.some(f => f.members.some(m => m.needs.length > 0));
   const modeLabel = trip.mode === 'ai' ? '🤖 AI Planned' : trip.mode === 'expert' ? '🧳 Expert' : '✍️ Manual';
+
+  const handleShare = async () => {
+    const members = getAllMembers(trip);
+    const totalDays = trip.days?.length || 0;
+    const text = [
+      `✈️ ${trip.name}`,
+      `📍 ${trip.destination}`,
+      `📅 ${fmt(trip.startDate)} – ${fmt(trip.endDate)}  (${totalDays} day${totalDays !== 1 ? 's' : ''})`,
+      `👥 ${members.length} traveler${members.length !== 1 ? 's' : ''}${members.length ? ': ' + members.map(m => m.name).join(', ') : ''}`,
+      '',
+      'Planned with Voyara 🗺️',
+    ].join('\n');
+
+    try {
+      await Share.share({ message: text, title: trip.name });
+    } catch (_) {}
+  };
+
+  const handleDuplicate = () => {
+    Alert.alert(
+      'Duplicate Trip',
+      `Create a copy of "${trip.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Duplicate',
+          onPress: () => {
+            duplicateTrip(trip.id);
+            Alert.alert('Done', 'Trip duplicated and added to your list.');
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Trip',
+      `Are you sure you want to delete "${trip.name}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteTrip(trip.id);
+            setCurrentTrip(null);
+            navigation.goBack();
+          },
+        },
+      ],
+    );
+  };
+
+  const handleMenu = () => {
+    Alert.alert(
+      trip.name,
+      'What would you like to do?',
+      [
+        { text: '✏️  Edit Trip', onPress: () => setShowEditModal(true) },
+        { text: '📋  Duplicate', onPress: handleDuplicate },
+        { text: '📤  Share', onPress: handleShare },
+        { text: '🗑️  Delete Trip', onPress: handleDelete, style: 'destructive' },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -43,6 +116,9 @@ export default function TripScreen({ navigation }) {
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Text style={styles.backText}>← Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleMenu} style={styles.menuBtn} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}>
+            <Text style={styles.menuText}>⋮</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.tripInfo}>
@@ -81,9 +157,39 @@ export default function TripScreen({ navigation }) {
 
       {/* Tab Content */}
       <View style={styles.content}>
-        {activeTab === 'itinerary' && <ItineraryScreen trip={trip} switchTab={setActiveTab} />}
+        {activeTab === 'itinerary' && (
+          isExpert
+            ? <ComingSoon tab="Itinerary" />
+            : <ItineraryScreen trip={trip} switchTab={setActiveTab} />
+        )}
         {activeTab === 'travelers' && <TravelersScreen trip={trip} />}
-        {activeTab === 'splitwise' && <SplitwiseScreen trip={trip} />}
+        {activeTab === 'splitwise' && (
+          isExpert
+            ? <ComingSoon tab="Splitwise" />
+            : <SplitwiseScreen trip={trip} />
+        )}
+      </View>
+
+      <EditTripModal
+        visible={showEditModal}
+        trip={trip}
+        onClose={() => setShowEditModal(false)}
+      />
+    </View>
+  );
+}
+
+function ComingSoon({ tab }) {
+  return (
+    <View style={cs.wrap}>
+      <Text style={cs.icon}>🧳</Text>
+      <Text style={cs.title}>Coming Soon</Text>
+      <Text style={cs.body}>
+        The {tab} tab for Expert-planned trips is on its way.
+        {'\n\n'}Our team curates every detail — sit tight while your itinerary is being crafted.
+      </Text>
+      <View style={cs.badge}>
+        <Text style={cs.badgeText}>Expert Planning in Progress</Text>
       </View>
     </View>
   );
@@ -97,9 +203,16 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     paddingHorizontal: spacing.xxl,
   },
-  headerTop: { marginBottom: spacing.md },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
   backBtn: {},
   backText: { ...typography.bodyBold, color: colors.primary },
+  menuBtn: { padding: 4 },
+  menuText: { fontSize: 22, color: colors.text, fontWeight: '700', lineHeight: 24 },
   tripInfo: { flexDirection: 'row', gap: 12, marginBottom: spacing.lg, alignItems: 'flex-start' },
   emoji: { fontSize: 36 },
   tripName: { ...typography.h3, color: colors.text },
@@ -115,4 +228,35 @@ const styles = StyleSheet.create({
   content: { flex: 1 },
   noTrip: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   noTripText: { ...typography.h4, color: colors.muted },
+});
+
+const cs = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xxl,
+    gap: 16,
+  },
+  icon: { fontSize: 56 },
+  title: { ...typography.h2, color: colors.text, textAlign: 'center' },
+  body: {
+    ...typography.body,
+    color: colors.muted,
+    textAlign: 'center',
+    lineHeight: 22,
+    maxWidth: 300,
+  },
+  badge: {
+    marginTop: 8,
+    backgroundColor: colors.expertLight ?? '#fff3e0',
+    borderRadius: 99,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.expert ?? '#e67e22',
+  },
 });

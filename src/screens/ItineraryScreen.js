@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Dimensions, Alert } from 'react-native';
 import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
@@ -102,6 +102,7 @@ function TripExpenseChart({ trip, currentDay, onSelectDay }) {
 export default function ItineraryScreen({ trip, switchTab }) {
   const { currentDay, setCurrentDay, deleteActivity, pushItineraryToSplitwise } = useStore();
   const [showAddActivity, setShowAddActivity] = useState(false);
+  const [editActivity, setEditActivity] = useState(null);   // null = add mode, object = edit mode
   const day = trip.days[currentDay] || trip.days[0];
   const allMembers = getAllMembers(trip);
   const itinTotal = calcTripItineraryTotal(trip);
@@ -111,6 +112,21 @@ export default function ItineraryScreen({ trip, switchTab }) {
   const handlePush = () => {
     pushItineraryToSplitwise(trip.id);
     switchTab('splitwise');
+  };
+
+  const openEdit = (act) => { setEditActivity(act); setShowAddActivity(true); };
+  const openAdd  = () => { setEditActivity(null); setShowAddActivity(true); };
+  const closeModal = () => { setShowAddActivity(false); setEditActivity(null); };
+
+  const confirmDelete = (act) => {
+    Alert.alert(
+      'Delete Activity',
+      `Remove "${act.name}" from the itinerary?${trip.itineraryPushed && act.costPerPerson > 0 ? '\n\nThe linked Splitwise expense will also be removed.' : ''}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteActivity(trip.id, act.id) },
+      ],
+    );
   };
 
   return (
@@ -137,9 +153,15 @@ export default function ItineraryScreen({ trip, switchTab }) {
               );
             })}
           </ScrollView>
-          <TouchableOpacity style={styles.pushBtn} onPress={handlePush}>
-            <Text style={styles.pushBtnText}>➡️ Move to Splitwise</Text>
-          </TouchableOpacity>
+          {trip.itineraryPushed ? (
+            <View style={styles.syncedBadge}>
+              <Text style={styles.syncedBadgeText}>✅ Synced to Splitwise — edits update automatically</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.pushBtn} onPress={handlePush}>
+              <Text style={styles.pushBtnText}>➡️ Move to Splitwise</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Expense Chart */}
@@ -167,7 +189,7 @@ export default function ItineraryScreen({ trip, switchTab }) {
         {day && (
           <View style={styles.dayHeader}>
             <Text style={styles.dayTitle}>{day.label} — {fmt(day.date)}</Text>
-            <TouchableOpacity style={styles.addActBtn} onPress={() => setShowAddActivity(true)}>
+            <TouchableOpacity style={styles.addActBtn} onPress={openAdd}>
               <Text style={styles.addActBtnText}>+ Activity</Text>
             </TouchableOpacity>
           </View>
@@ -216,24 +238,36 @@ export default function ItineraryScreen({ trip, switchTab }) {
           {!day || day.activities.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyText}>No activities planned yet</Text>
-              <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowAddActivity(true)}>
+              <TouchableOpacity style={styles.emptyBtn} onPress={openAdd}>
                 <Text style={styles.emptyBtnText}>+ Add First Activity</Text>
               </TouchableOpacity>
             </View>
           ) : (
             [...day.activities].sort((a, b) => a.time.localeCompare(b.time)).map(act => (
-              <ActivityCard key={act.id} activity={act} trip={trip} onDelete={() => deleteActivity(trip.id, act.id)} />
+              <ActivityCard
+                key={act.id}
+                activity={act}
+                trip={trip}
+                onEdit={() => openEdit(act)}
+                onDelete={() => confirmDelete(act)}
+              />
             ))
           )}
         </View>
       </ScrollView>
 
-      <AddActivityModal visible={showAddActivity} trip={trip} currentDay={currentDay} onClose={() => setShowAddActivity(false)} />
+      <AddActivityModal
+        visible={showAddActivity}
+        trip={trip}
+        currentDay={currentDay}
+        editActivity={editActivity}
+        onClose={closeModal}
+      />
     </View>
   );
 }
 
-function ActivityCard({ activity: act, trip, onDelete }) {
+function ActivityCard({ activity: act, trip, onEdit, onDelete }) {
   const famChips = act.costPerPerson > 0 ? trip.families.map(fam => ({
     ...fam, cost: fam.members.length * act.costPerPerson,
   })) : [];
@@ -270,9 +304,14 @@ function ActivityCard({ activity: act, trip, onDelete }) {
           </ScrollView>
         )}
       </View>
-      <TouchableOpacity style={styles.delBtn} onPress={onDelete}>
-        <Text style={styles.delBtnText}>🗑</Text>
-      </TouchableOpacity>
+      <View style={styles.actActions}>
+        <TouchableOpacity style={styles.actActionBtn} onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.editBtnText}>✏️</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actActionBtn} onPress={onDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.delBtnText}>🗑</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -280,132 +319,205 @@ function ActivityCard({ activity: act, trip, onDelete }) {
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { paddingBottom: 100 },
-  // Banner
-  banner: { margin: spacing.xxl, borderRadius: radius.lg, backgroundColor: '#1a1714', padding: spacing.xl },
+
+  // ── Cost banner ──────────────────────────────────────────────────
+  banner: {
+    margin: spacing.xxl,
+    marginBottom: 0,
+    backgroundColor: colors.text,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    ...shadow.card,
+  },
   bannerTotal: { marginBottom: spacing.md },
-  bannerLabel: { fontSize: 11, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: 0.5 },
-  bannerAmt: { fontSize: 28, fontWeight: '900', color: colors.yellow, lineHeight: 32, marginTop: 4 },
-  bannerSub: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
-  bannerDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginBottom: spacing.md },
+  bannerLabel: { ...typography.caption, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: 0.8 },
+  bannerAmt: { fontSize: 32, fontWeight: '800', color: '#fff', letterSpacing: -1 },
+  bannerSub: { ...typography.caption, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
+  bannerDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginVertical: spacing.md },
   famScroll: { marginBottom: spacing.md },
-  famCol: { marginRight: spacing.xl },
-  famName: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
-  famAmt: { fontSize: 18, fontWeight: '800', color: '#fff', marginTop: 2 },
-  famSub: { fontSize: 10, color: 'rgba(255,255,255,0.5)' },
-  pushBtn: { backgroundColor: colors.green, borderRadius: radius.sm, paddingVertical: 10, alignItems: 'center', marginTop: 4 },
-  pushBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  // Day nav
-  dayNav: { marginVertical: spacing.md },
-  dayBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface, marginRight: 8 },
+  famCol: { marginRight: spacing.xl, alignItems: 'center' },
+  famName: { ...typography.bodyBold, fontSize: 12 },
+  famAmt: { ...typography.caption, color: '#fff', fontWeight: '700' },
+  famSub: { ...typography.caption, color: 'rgba(255,255,255,0.4)', fontSize: 10 },
+
+  pushBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  pushBtnText: { ...typography.bodyBold, color: '#fff' },
+  syncedBadge: {
+    backgroundColor: 'rgba(0,184,148,0.18)',
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,184,148,0.35)',
+  },
+  syncedBadgeText: { ...typography.caption, color: colors.green, fontWeight: '700' },
+
+  // ── Day navigation ───────────────────────────────────────────────
+  dayNav: { marginTop: spacing.xl },
+  dayBtn: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.lg,
+    marginRight: spacing.sm,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+  },
   dayBtnActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  dayBtnLabel: { ...typography.smallBold, color: colors.text },
+  dayBtnLabel: { ...typography.caption, color: colors.muted, fontWeight: '700', textTransform: 'uppercase' },
   dayBtnLabelActive: { color: colors.primary },
-  dayBtnDate: { ...typography.tiny, color: colors.muted, marginTop: 1 },
-  dayCost: { ...typography.tinyBold, color: colors.green, marginTop: 2 },
-  // Day header
-  dayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xxl, marginBottom: spacing.md },
+  dayBtnDate: { ...typography.caption, color: colors.muted, fontSize: 10, marginTop: 1 },
+  dayCost: { ...typography.caption, color: colors.green, fontWeight: '700', fontSize: 10, marginTop: 1 },
+
+  // ── Day header ───────────────────────────────────────────────────
+  dayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.sm,
+  },
   dayTitle: { ...typography.h4, color: colors.text },
-  addActBtn: { borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: 12, paddingVertical: 6 },
-  addActBtnText: { ...typography.smallBold, color: colors.primary },
-  // Cost strip
-  costStrip: { flexDirection: 'row', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, marginHorizontal: spacing.xxl, marginBottom: spacing.md, overflow: 'hidden' },
-  stripItem: { flex: 1, alignItems: 'center', paddingVertical: 10 },
-  stripDivider: { width: 1, backgroundColor: colors.border },
-  stripLabel: { fontSize: 10, color: colors.muted, textTransform: 'uppercase', fontWeight: '600' },
-  stripVal: { ...typography.bodyBold, color: colors.text, marginTop: 2 },
-  // Family pills
-  famPills: { flexDirection: 'row', gap: 8, paddingVertical: spacing.sm, paddingRight: spacing.xxl },
-  famPill: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 5 },
-  famDot: { width: 8, height: 8, borderRadius: 4 },
-  famPillName: { ...typography.tinyBold, color: colors.muted },
-  famPillAmt: { ...typography.tinyBold, color: colors.text },
-  // Activities
-  activities: { paddingHorizontal: spacing.xxl, gap: 10 },
-  empty: { backgroundColor: colors.surface2, borderWidth: 2, borderColor: colors.border, borderStyle: 'dashed', borderRadius: radius.lg, padding: 32, alignItems: 'center' },
-  emptyText: { ...typography.body, color: colors.muted, marginBottom: 12 },
-  emptyBtn: { borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: 16, paddingVertical: 8 },
-  emptyBtnText: { ...typography.smallBold, color: colors.primary },
-  // Activity card
-  actCard: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 4, padding: spacing.md, flexDirection: 'row', gap: 12, ...shadow.sm },
-  actTimeCol: { alignItems: 'center', minWidth: 50 },
-  actTime: { ...typography.smallBold, color: colors.primary },
-  actIcon: { fontSize: 20, marginTop: 4 },
-  actBody: { flex: 1 },
-  actName: { ...typography.bodyBold, color: colors.text },
-  actDetail: { ...typography.small, color: colors.muted, marginTop: 3 },
-  actTags: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 6 },
-  costBadge: { backgroundColor: colors.yellowLight, borderWidth: 1, borderColor: '#f0d080', borderRadius: radius.full, paddingHorizontal: 9, paddingVertical: 2 },
-  costBadgeText: { fontSize: 11, fontWeight: '700', color: '#9b6e00' },
-  famChips: { flexDirection: 'row', gap: 6, marginTop: 6 },
-  famChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.surface2, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
-  famChipDot: { width: 6, height: 6, borderRadius: 3 },
-  famChipText: { fontSize: 11, color: colors.muted },
-  delBtn: { padding: 4 },
-  delBtnText: { fontSize: 16 },
+  addActBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  addActBtnText: { ...typography.caption, color: '#fff', fontWeight: '800' },
+
+  // ── Day cost strip ───────────────────────────────────────────────
+  costStrip: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.xxl,
+    paddingBottom: spacing.md,
+    gap: 0,
+  },
+  stripItem: { flex: 1, alignItems: 'center' },
+  stripLabel: { ...typography.caption, color: colors.muted, fontSize: 10, textTransform: 'uppercase' },
+  stripVal: { ...typography.bodyBold, color: colors.text, fontSize: 13 },
+  stripDivider: { width: 1, backgroundColor: colors.border, marginHorizontal: spacing.sm },
+
+  // ── Family pills ─────────────────────────────────────────────────
+  famPills: { flexDirection: 'row', paddingBottom: spacing.md },
+  famPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    marginRight: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  famDot: { width: 7, height: 7, borderRadius: 4, marginRight: spacing.xs },
+  famPillName: { ...typography.caption, color: colors.text, fontWeight: '700', marginRight: 3 },
+  famPillAmt: { ...typography.caption, color: colors.muted },
+
+  // ── Activities list ──────────────────────────────────────────────
+  activities: { paddingHorizontal: spacing.xxl, paddingTop: spacing.sm },
+  empty: { alignItems: 'center', paddingVertical: 40 },
+  emptyText: { ...typography.body, color: colors.muted, marginBottom: spacing.lg },
+  emptyBtn: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+  },
+  emptyBtnText: { ...typography.bodyBold, color: colors.primary },
+
+  // ── Activity card ────────────────────────────────────────────────
+  actCard: {
+    backgroundColor: '#fff',
+    borderRadius: radius.lg,
+    borderLeftWidth: 4,
+    marginBottom: spacing.md,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    ...shadow.card,
+  },
+  actTimeCol: {
+    width: 52,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    backgroundColor: 'rgba(0,0,0,0.02)',
+  },
+  actTime: { ...typography.caption, color: colors.muted, fontWeight: '700', fontSize: 11 },
+  actIcon: { fontSize: 16, marginTop: spacing.xs },
+  actBody: { flex: 1, padding: spacing.md },
+  actName: { ...typography.bodyBold, color: colors.text, marginBottom: 2 },
+  actDetail: { ...typography.caption, color: colors.muted, marginBottom: spacing.sm },
+  actTags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xs },
+  costBadge: {
+    backgroundColor: colors.yellowLight,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#f0d080',
+  },
+  costBadgeText: { ...typography.caption, color: '#9b6e00', fontWeight: '700', fontSize: 11 },
+  famChips: { flexDirection: 'row', marginTop: 2 },
+  famChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bg,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginRight: spacing.xs,
+  },
+  famChipDot: { width: 6, height: 6, borderRadius: 3, marginRight: 3 },
+  famChipText: { ...typography.caption, color: colors.muted, fontSize: 10 },
+
+  // ── Edit / Delete actions ────────────────────────────────────────
+  actActions: {
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+    gap: spacing.sm,
+  },
+  actActionBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editBtnText: { fontSize: 14 },
+  delBtnText: { fontSize: 14 },
 });
 
+// ── Chart styles ──────────────────────────────────────────────────
 const ch = StyleSheet.create({
   wrap: {
     marginHorizontal: spacing.xxl,
-    marginBottom: spacing.md,
-    backgroundColor: '#1a1714',
-    borderRadius: radius.lg,
-    padding: 16,
+    marginTop: spacing.xl,
+    backgroundColor: colors.text,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.5)',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  totalLine: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#fff',
-    marginTop: 2,
-  },
-  emptyHint: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.35)',
-    alignSelf: 'center',
-  },
-  chartArea: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  barWrapper: {
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    flexDirection: 'column',
-  },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: spacing.sm },
+  label: { ...typography.caption, color: 'rgba(255,255,255,0.45)', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' },
+  totalLine: { ...typography.bodyBold, color: '#fff', fontSize: 13, marginTop: 1 },
+  emptyHint: { ...typography.caption, color: 'rgba(255,255,255,0.3)', fontSize: 10 },
+  chartArea: { flexDirection: 'row', alignItems: 'flex-end' },
+  barWrapper: { alignItems: 'center', justifyContent: 'flex-end' },
   bar: {},
-  barLabel: {
-    position: 'absolute',
-    top: -18,
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.green,
-    textAlign: 'center',
-  },
-  dayLabels: {
-    flexDirection: 'row',
-    marginTop: 6,
-  },
-  dayLabelText: {
-    fontSize: 9,
-    color: 'rgba(255,255,255,0.3)',
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  dayLabelActive: {
-    color: colors.green,
-    fontWeight: '800',
-  },
+  barLabel: { ...typography.caption, color: '#fff', fontSize: 9, fontWeight: '700', position: 'absolute', top: -14 },
+  dayLabels: { flexDirection: 'row', marginTop: spacing.xs },
+  dayLabelText: { ...typography.caption, color: 'rgba(255,255,255,0.3)', fontSize: 9, textAlign: 'center' },
+  dayLabelActive: { color: colors.green, fontWeight: '700' },
 });

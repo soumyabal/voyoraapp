@@ -96,14 +96,14 @@ export const familyPalette = [
   '#e84393', '#e67e22', '#2d3436', '#fdcb6e',
 ];
 
-// Credit estimation formula (mirrors HTML prototype)
-export function calcCreditEstimate(days, travelers, activeInterests, hasAccessibility) {
-  const base = 20;
-  const daysCost = Math.max(0, days - 1) * 3;
-  const travelersCost = Math.max(0, travelers - 1) * 2;
-  const accessibilityCost = hasAccessibility ? 8 : 0;
-  const costEstimation = 5;
-  const interestsCost = activeInterests * 1;
-  const total = base + daysCost + travelersCost + accessibilityCost + costEstimation + interestsCost;
-  return { base, daysCost, travelersCost, accessibilityCost, costEstimation, interestsCost, total };
+// Credit estimation formula
+// adults: count of adult travelers, children: count of child travelers, needsCount: travelers with special needs
+export function calcCreditEstimate(days, adults, children, needsCount) {
+  const base = 10;
+  const daysCost = Math.max(days, 1) * 3;
+  const adultsCost = adults * 3;
+  const childrenCost = children * 1;
+  const needsCost = needsCount * 2;
+  const total = base + daysCost + adultsCost + childrenCost + needsCost;
+  return { base, daysCost, adultsCost, childrenCost, needsCost, total };
 }

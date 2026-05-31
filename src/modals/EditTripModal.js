@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform,
+  StyleSheet, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
-import useStore from '../store';
+import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography } from '../theme';
 import { FormField, ModalHeader, DateRangePicker } from '../components/ui';
 import { fmt } from '../utils/helpers';
 
 export default function EditTripModal({ visible, trip, onClose }) {
-  const { updateTrip } = useStore();
+  const { updateTrip, duplicateTrip } = useStore();
 
   const [name, setName] = useState('');
   const [destination, setDestination] = useState('');
@@ -29,8 +29,16 @@ export default function EditTripModal({ visible, trip, onClose }) {
 
   const handleClose = () => onClose();
 
-  const handleSave = () => {
-    if (!name.trim() || !destination.trim()) return;
+  // Detect whether the user changed anything that breaks downstream data
+  const datesChanged = trip && (startDate !== trip.startDate || endDate !== trip.endDate);
+  const destChanged  = trip && destination.trim() !== (trip.destination || '').trim();
+  const hasData      = trip && (
+    trip.days?.some(d => d.activities?.length > 0) ||
+    trip.expenses?.length > 0
+  );
+  const isDestructive = (datesChanged || destChanged) && hasData;
+
+  const doSave = () => {
     updateTrip(trip.id, {
       name: name.trim(),
       destination: destination.trim(),
@@ -38,6 +46,36 @@ export default function EditTripModal({ visible, trip, onClose }) {
       endDate,
     });
     onClose();
+  };
+
+  const handleSave = () => {
+    if (!name.trim() || !destination.trim()) return;
+
+    if (isDestructive) {
+      Alert.alert(
+        '⚠️ This will break your itinerary',
+        'Changing the date range or destination does not update your existing itinerary days or Splitwise expenses — your plan will go out of sync.\n\nWe recommend duplicating the trip and editing the copy so the original stays safe.',
+        [
+          {
+            text: 'Duplicate Trip Instead',
+            onPress: () => {
+              duplicateTrip(trip.id);
+              showToast('Duplicate created — find it on the home screen 📋', '✅');
+              onClose();
+            },
+          },
+          {
+            text: 'Save Anyway',
+            style: 'destructive',
+            onPress: doSave,
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
+      return;
+    }
+
+    doSave();
   };
 
   const canSave = name.trim() && destination.trim();
@@ -84,12 +122,14 @@ export default function EditTripModal({ visible, trip, onClose }) {
               </TouchableOpacity>
             </View>
 
-            {/* Note about itinerary */}
-            {trip?.days?.length > 0 && (
-              <View style={styles.noteBanner}>
-                <Text style={styles.noteIcon}>ℹ️</Text>
-                <Text style={styles.noteText}>
-                  Editing dates won't change existing itinerary days. Add or remove activities manually.
+            {/* Inline warning — escalates when destructive changes detected */}
+            {hasData && (
+              <View style={[styles.noteBanner, isDestructive && styles.warnBanner]}>
+                <Text style={styles.noteIcon}>{isDestructive ? '⚠️' : 'ℹ️'}</Text>
+                <Text style={[styles.noteText, isDestructive && styles.warnText]}>
+                  {isDestructive
+                    ? 'Changing the date range or destination will not update your existing itinerary days or Splitwise entries. Duplicate the trip instead to keep the original safe.'
+                    : 'Editing dates won\'t change existing itinerary days. Add or remove activities manually.'}
                 </Text>
               </View>
             )}
@@ -118,6 +158,8 @@ const styles = StyleSheet.create({
   dateBtnText: { ...typography.small, color: colors.text, fontWeight: '600' },
   datePlaceholder: { color: colors.muted, fontWeight: '400' },
   noteBanner: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', backgroundColor: colors.surface2, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
+  warnBanner: { backgroundColor: '#fff8e6', borderColor: '#f59e0b' },
   noteIcon: { fontSize: 16 },
   noteText: { ...typography.small, color: colors.muted, flex: 1, lineHeight: 18 },
+  warnText: { color: '#92400e' },
 });

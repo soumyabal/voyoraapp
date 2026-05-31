@@ -9,7 +9,8 @@ import ItineraryScreen from './ItineraryScreen';
 import TravelersScreen from './TravelersScreen';
 import SplitwiseScreen from './SplitwiseScreen';
 import EditTripModal from '../modals/EditTripModal';
-import { colors, spacing, typography } from '../theme';
+import ChangeModeModal from '../modals/ChangeModeModal';
+import { colors, spacing, typography, radius } from '../theme';
 import { fmt, getAllMembers } from '../utils/helpers';
 
 const TABS = [
@@ -23,6 +24,7 @@ export default function TripScreen({ navigation }) {
   const { getCurrentTrip, deleteTrip, duplicateTrip, setCurrentTrip } = useStore();
   const [activeTab, setActiveTab] = useState('itinerary');
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showModeModal, setShowModeModal] = useState(false);
   const trip = getCurrentTrip();
 
   if (!trip) {
@@ -99,6 +101,7 @@ export default function TripScreen({ navigation }) {
       'What would you like to do?',
       [
         { text: '✏️  Edit Trip', onPress: () => setShowEditModal(true) },
+        { text: '🔄  Switch Planning Mode', onPress: () => setShowModeModal(true) },
         { text: '📋  Duplicate', onPress: handleDuplicate },
         { text: '📤  Share', onPress: handleShare },
         { text: '🗑️  Delete Trip', onPress: handleDelete, style: 'destructive' },
@@ -131,8 +134,8 @@ export default function TripScreen({ navigation }) {
                 <Text style={[styles.tagText, { color: trip.mode === 'ai' ? colors.ai : trip.mode === 'expert' ? colors.expert : colors.primary }]}>{modeLabel}</Text>
               </View>
               {hasAccessible && (
-                <View style={[styles.tag, { backgroundColor: colors.greenLight }]}>
-                  <Text style={[styles.tagText, { color: colors.green }]}>♿ Accessible</Text>
+                <View style={[styles.tag, { backgroundColor: '#fff8e6' }]}>
+                  <Text style={[styles.tagText, { color: '#9b6e00' }]}>♿ Needs</Text>
                 </View>
               )}
             </View>
@@ -144,119 +147,74 @@ export default function TripScreen({ navigation }) {
           {TABS.map(tab => (
             <TouchableOpacity
               key={tab.key}
-              style={[styles.tabBtn, activeTab === tab.key && styles.tabBtnActive]}
+              style={[styles.tab, activeTab === tab.key && styles.tabActive]}
               onPress={() => setActiveTab(tab.key)}
             >
-              <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
-                {tab.label}
-              </Text>
+              <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>{tab.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
       {/* Tab Content */}
-      <View style={styles.content}>
-        {activeTab === 'itinerary' && (
-          isExpert
-            ? <ComingSoon tab="Itinerary" />
-            : <ItineraryScreen trip={trip} switchTab={setActiveTab} />
-        )}
+      <View style={{ flex: 1 }}>
+        {activeTab === 'itinerary' && <ItineraryScreen trip={trip} switchTab={setActiveTab} />}
         {activeTab === 'travelers' && <TravelersScreen trip={trip} />}
-        {activeTab === 'splitwise' && (
-          isExpert
-            ? <ComingSoon tab="Splitwise" />
-            : <SplitwiseScreen trip={trip} />
-        )}
+        {activeTab === 'splitwise' && <SplitwiseScreen trip={trip} />}
       </View>
 
-      <EditTripModal
-        visible={showEditModal}
-        trip={trip}
-        onClose={() => setShowEditModal(false)}
-      />
-    </View>
-  );
-}
-
-function ComingSoon({ tab }) {
-  return (
-    <View style={cs.wrap}>
-      <Text style={cs.icon}>🧳</Text>
-      <Text style={cs.title}>Coming Soon</Text>
-      <Text style={cs.body}>
-        The {tab} tab for Expert-planned trips is on its way.
-        {'\n\n'}Our team curates every detail — sit tight while your itinerary is being crafted.
-      </Text>
-      <View style={cs.badge}>
-        <Text style={cs.badgeText}>Expert Planning in Progress</Text>
-      </View>
+      <EditTripModal visible={showEditModal} trip={trip} onClose={() => setShowEditModal(false)} />
+      <ChangeModeModal visible={showModeModal} trip={trip} onClose={() => setShowModeModal(false)} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
+  noTrip: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  noTripText: { ...typography.h3, color: colors.muted, marginBottom: spacing.lg },
+
+  // ── Header ──────────────────────────────────────────────────────
   header: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingHorizontal: spacing.xxl,
+    paddingBottom: spacing.md,
   },
   headerTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
-  backBtn: {},
+  backBtn: { paddingVertical: spacing.sm },
   backText: { ...typography.bodyBold, color: colors.primary },
-  menuBtn: { padding: 4 },
-  menuText: { fontSize: 22, color: colors.text, fontWeight: '700', lineHeight: 24 },
-  tripInfo: { flexDirection: 'row', gap: 12, marginBottom: spacing.lg, alignItems: 'flex-start' },
-  emoji: { fontSize: 36 },
-  tripName: { ...typography.h3, color: colors.text },
-  tripMeta: { ...typography.small, color: colors.muted, marginTop: 3 },
-  tags: { flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' },
-  tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99 },
-  tagText: { fontSize: 11, fontWeight: '600' },
-  tabBar: { flexDirection: 'row', gap: 0 },
-  tabBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
-  tabBtnActive: { borderBottomColor: colors.primary },
-  tabText: { fontSize: 13, fontWeight: '600', color: colors.muted },
-  tabTextActive: { color: colors.primary },
-  content: { flex: 1 },
-  noTrip: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  noTripText: { ...typography.h4, color: colors.muted },
-});
+  menuBtn: { paddingVertical: spacing.sm },
+  menuText: { fontSize: 22, color: colors.text, fontWeight: '700' },
+  tripInfo: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  emoji: { fontSize: 32, marginTop: 2 },
+  tripName: { ...typography.h3, color: colors.text, flex: 1 },
+  tripMeta: { ...typography.caption, color: colors.muted, marginTop: 2 },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
+  tag: { borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  tagText: { ...typography.caption, fontWeight: '700', fontSize: 11 },
 
-const cs = StyleSheet.create({
-  wrap: {
+  // ── Tab bar ──────────────────────────────────────────────────────
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  tab: {
     flex: 1,
+    paddingVertical: spacing.md,
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xxl,
-    gap: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
-  icon: { fontSize: 56 },
-  title: { ...typography.h2, color: colors.text, textAlign: 'center' },
-  body: {
-    ...typography.body,
-    color: colors.muted,
-    textAlign: 'center',
-    lineHeight: 22,
-    maxWidth: 300,
-  },
-  badge: {
-    marginTop: 8,
-    backgroundColor: colors.expertLight ?? '#fff3e0',
-    borderRadius: 99,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.expert ?? '#e67e22',
-  },
+  tabActive: { borderBottomColor: colors.primary },
+  tabText: { ...typography.caption, color: colors.muted, fontWeight: '600' },
+  tabTextActive: { color: colors.primary, fontWeight: '800' },
 });

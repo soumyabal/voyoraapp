@@ -5,6 +5,29 @@ import { sampleTrips } from '../data/sampleData';
 import { uid, getAllMembers, findMemberFamily, TRIP_EMOJIS, TRIP_BG_COLORS, familyPalette } from '../utils/helpers';
 import { getExpSplitBetween } from '../utils/costs';
 
+// ── Activity → Expense sync helper ─────────────────────────────────────────
+function activityToExpense(act, dayLabel, allMembers, allFamilyIds) {
+  const cat = act.type === 'food' ? '🍽️'
+    : act.type === 'transport' ? '✈️'
+    : act.type === 'stay' ? '🏨'
+    : '🎯';
+  const amount = parseFloat((act.costPerPerson * allMembers.length).toFixed(2));
+  return {
+    id: uid(),
+    name: `${act.name} (${dayLabel})`,
+    amount,
+    estimatedAmount: amount,
+    category: cat,
+    paidBy: allMembers[0]?.id ?? null,
+    splitMode: null,
+    participatingFamilies: [...allFamilyIds],
+    participatingMembers: null,
+    excluded: false,
+    source: 'itinerary',
+    activityId: act.id,
+  };
+}
+
 // Toast reference (set by Toast component)
 let _showToast = null;
 export const setToastRef = fn => { _showToast = fn; };
@@ -15,10 +38,11 @@ const useStore = create(
     (set, get) => ({
       // ── STATE ───────────────────────────────────────────────
       trips: sampleTrips,
+      profiles: [],                  // global traveler profiles — persist across all trips
       currentTripId: null,
       currentDay: 0,
       planMode: null,
-      account: { loggedIn: false, name: '', email: '', credits: 0, history: [] },
+      account: { loggedIn: false, name: '', email: '', credits: 0, history: [], plan: 'free' },
 
       // ── GETTERS (computed) ──────────────────────────────────
       getCurrentTrip: () => {
@@ -105,18 +129,76 @@ const useStore = create(
 
       // ── ACTIVITIES ──────────────────────────────────────────
       addActivity: (tripId, dayIndex, activity) => set(s => ({
-        trips: s.trips.map(t => t.id !== tripId ? t : {
-          ...t,
-          days: t.days.map((d, i) => i !== dayIndex ? d : {
-            ...d, activities: [...d.activities, { ...activity, id: uid() }],
-          }),
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+          const actWithId = { ...activity, id: activity.id || uid() };
+          const newDays = t.days.map((d, i) => i !== dayIndex ? d : {
+            ...d, activities: [...d.activities, actWithId],
+          });
+          // Auto-sync: if itinerary already pushed and activity has a cost, add expense
+          let newExpenses = t.expenses;
+          if (t.itineraryPushed && actWithId.costPerPerson > 0) {
+            const allMembers = getAllMembers({ ...t, days: newDays });
+            const allFamilyIds = t.families.map(f => f.id);
+            const dayLabel = t.days[dayIndex]?.label || `Day ${dayIndex + 1}`;
+            newExpenses = [...t.expenses, activityToExpense(actWithId, dayLabel, allMembers, allFamilyIds)];
+          }
+          return { ...t, days: newDays, expenses: newExpenses };
+        }),
+      })),
+
+      updateActivity: (tripId, actId, updates) => set(s => ({
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+          const newDays = t.days.map(d => ({
+            ...d,
+            activities: d.activities.map(a => a.id !== actId ? a : { ...a, ...updates }),
+          }));
+          if (!t.itineraryPushed) return { ...t, days: newDays };
+
+          // Find the updated activity and its day
+          const day = newDays.find(d => d.activities.some(a => a.id === actId));
+          const updatedAct = day?.activities.find(a => a.id === actId);
+          if (!updatedAct) return { ...t, days: newDays };
+
+          const allMembers = getAllMembers({ ...t, days: newDays });
+          const allFamilyIds = t.families.map(f => f.id);
+          const hasLinkedExpense = t.expenses.some(e => e.activityId === actId);
+
+          let newExpenses;
+          if (updatedAct.costPerPerson <= 0) {
+            // Cost dropped to 0 — remove linked expense
+            newExpenses = t.expenses.filter(e => e.activityId !== actId);
+          } else if (!hasLinkedExpense) {
+            // Cost added where there was none — create expense
+            newExpenses = [...t.expenses, activityToExpense(updatedAct, day.label, allMembers, allFamilyIds)];
+          } else {
+            // Update existing linked expense — preserve user's paidBy / participatingFamilies overrides
+            const cat = updatedAct.type === 'food' ? '🍽️' : updatedAct.type === 'transport' ? '✈️' : updatedAct.type === 'stay' ? '🏨' : '🎯';
+            const newAmount = parseFloat((updatedAct.costPerPerson * allMembers.length).toFixed(2));
+            newExpenses = t.expenses.map(e => e.activityId !== actId ? e : {
+              ...e,
+              name: `${updatedAct.name} (${day.label})`,
+              amount: newAmount,
+              estimatedAmount: newAmount,
+              category: cat,
+            });
+          }
+          return { ...t, days: newDays, expenses: newExpenses };
         }),
       })),
 
       deleteActivity: (tripId, actId) => set(s => ({
-        trips: s.trips.map(t => t.id !== tripId ? t : {
-          ...t,
-          days: t.days.map(d => ({ ...d, activities: d.activities.filter(a => a.id !== actId) })),
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+          const newDays = t.days.map(d => ({
+            ...d, activities: d.activities.filter(a => a.id !== actId),
+          }));
+          // Auto-sync: remove linked expense when itinerary is pushed
+          const newExpenses = t.itineraryPushed
+            ? t.expenses.filter(e => e.activityId !== actId)
+            : t.expenses;
+          return { ...t, days: newDays, expenses: newExpenses };
         }),
       })),
 
@@ -141,6 +223,45 @@ const useStore = create(
           families: t.families.map(f => f.id !== famId ? f : {
             ...f, members: [...f.members, { ...member, id: uid() }],
           }),
+        }),
+      })),
+
+      updateTraveler: (tripId, famId, memberId, updates) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          families: t.families.map(f => f.id !== famId ? f : {
+            ...f,
+            members: f.members.map(m => m.id !== memberId ? m : { ...m, ...updates }),
+          }),
+        }),
+      })),
+
+      deleteTraveler: (tripId, famId, memberId) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          families: t.families.map(f => f.id !== famId ? f : {
+            ...f, members: f.members.filter(m => m.id !== memberId),
+          }),
+        }),
+      })),
+
+      updateFamily: (tripId, famId, updates) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          families: t.families.map(f => f.id !== famId ? f : { ...f, ...updates }),
+        }),
+      })),
+
+      deleteFamily: (tripId, famId) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          families: t.families.filter(f => f.id !== famId),
+          expenses: t.expenses.map(e => ({
+            ...e,
+            participatingFamilies: e.participatingFamilies
+              ? e.participatingFamilies.filter(id => id !== famId)
+              : null,
+          })),
         }),
       })),
 
@@ -260,6 +381,7 @@ const useStore = create(
                 participatingMembers: null,   // null = all in participating families
                 excluded: false,              // user can soft-hide from split
                 source: 'itinerary',
+                activityId: act.id,           // ← link for live sync
               });
             });
           });
@@ -275,6 +397,83 @@ const useStore = create(
           itineraryPushed: false,
         }),
       })),
+
+      // ── TRAVELER PROFILES ────────────────────────────────────
+      // Profiles are global and persist across all trips.
+      // A trip member can optionally link to a profile via member.profileId.
+      // One profile → many trips; one member has at most one profile link.
+
+      createProfile: (profile) => set(s => ({
+        profiles: [{ ...profile, id: uid(), createdAt: new Date().toISOString().slice(0, 10) }, ...s.profiles],
+      })),
+
+      updateProfile: (profileId, updates) => set(s => ({
+        profiles: s.profiles.map(p => p.id !== profileId ? p : { ...p, ...updates }),
+        // Also cascade name change into any linked trip members
+        trips: updates.name
+          ? s.trips.map(t => ({
+              ...t,
+              families: t.families.map(f => ({
+                ...f,
+                members: f.members.map(m => m.profileId === profileId ? { ...m, name: updates.name } : m),
+              })),
+            }))
+          : s.trips,
+      })),
+
+      deleteProfile: (profileId) => set(s => ({
+        profiles: s.profiles.filter(p => p.id !== profileId),
+        // Unlink profile from any trip members (member stays, just loses the link)
+        trips: s.trips.map(t => ({
+          ...t,
+          families: t.families.map(f => ({
+            ...f,
+            members: f.members.map(m => m.profileId === profileId ? { ...m, profileId: null } : m),
+          })),
+        })),
+      })),
+
+      // Link an existing profile to a trip member (copies profile data into member)
+      linkProfileToMember: (tripId, famId, memberId, profileId) => set(s => {
+        const profile = s.profiles.find(p => p.id === profileId);
+        if (!profile) return s;
+        return {
+          trips: s.trips.map(t => t.id !== tripId ? t : {
+            ...t,
+            families: t.families.map(f => f.id !== famId ? f : {
+              ...f,
+              members: f.members.map(m => m.id !== memberId ? m : {
+                ...m,
+                profileId,
+                name: profile.name,
+                age: profile.age,
+                needs: [...(profile.needs || [])],
+              }),
+            }),
+          }),
+        };
+      }),
+
+      // Add a new trip member directly from a profile
+      addMemberFromProfile: (tripId, famId, profileId) => set(s => {
+        const profile = s.profiles.find(p => p.id === profileId);
+        if (!profile) return s;
+        return {
+          trips: s.trips.map(t => t.id !== tripId ? t : {
+            ...t,
+            families: t.families.map(f => f.id !== famId ? f : {
+              ...f,
+              members: [...f.members, {
+                id: uid(),
+                profileId,
+                name: profile.name,
+                age: profile.age || 30,
+                needs: [...(profile.needs || [])],
+              }],
+            }),
+          }),
+        };
+      }),
 
       // ── ACCOUNT / CREDITS ────────────────────────────────────
       signUp: (name, email) => {

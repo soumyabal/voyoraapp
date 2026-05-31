@@ -8,17 +8,24 @@ import { ModalHeader, FormField, ChipSelector, InfoBanner } from '../components/
 const familyChipOptions = (trip) => trip.families.map(f => ({ value: f.id, label: f.name, _color: f.color }));
 const needsOptions = NEEDS_OPTIONS.map(n => ({ value: n, label: n }));
 
-export default function AddTravelerModal({ visible, trip, onClose }) {
+export default function AddTravelerModal({ visible, trip, defaultFamId, onClose }) {
   const { addTraveler } = useStore();
 
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
-  const [familyId, setFamilyId] = useState(trip.families[0]?.id || '');
+  const [familyId, setFamilyId] = useState(defaultFamId || trip.families[0]?.id || '');
   const [selectedNeeds, setSelectedNeeds] = useState([]);
+
+  // Re-seed familyId whenever the modal opens (e.g. tapped ➕ on a specific family)
+  React.useEffect(() => {
+    if (visible) {
+      setFamilyId(defaultFamId || trip.families[0]?.id || '');
+    }
+  }, [visible, defaultFamId]);
 
   const reset = () => {
     setName(''); setAge('');
-    setFamilyId(trip.families[0]?.id || '');
+    setFamilyId(defaultFamId || trip.families[0]?.id || '');
     setSelectedNeeds([]);
   };
 

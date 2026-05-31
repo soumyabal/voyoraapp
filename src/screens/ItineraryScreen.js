@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Dimensions, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Dimensions, Alert, Linking } from 'react-native';
 import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
@@ -99,10 +99,11 @@ function TripExpenseChart({ trip, currentDay, onSelectDay }) {
   );
 }
 
-export default function ItineraryScreen({ trip, switchTab }) {
+
+export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
   const { currentDay, setCurrentDay, deleteActivity, pushItineraryToSplitwise } = useStore();
   const [showAddActivity, setShowAddActivity] = useState(false);
-  const [editActivity, setEditActivity] = useState(null);   // null = add mode, object = edit mode
+  const [editActivity, setEditActivity] = useState(null);
   const day = trip.days[currentDay] || trip.days[0];
   const allMembers = getAllMembers(trip);
   const itinTotal = calcTripItineraryTotal(trip);
@@ -238,8 +239,13 @@ export default function ItineraryScreen({ trip, switchTab }) {
           {!day || day.activities.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyText}>No activities planned yet</Text>
+              {!!onPlanWithAI && (
+                <TouchableOpacity style={styles.emptyAiBtn} onPress={onPlanWithAI} activeOpacity={0.85}>
+                  <Text style={styles.emptyAiBtnText}>✨ Plan with AI</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={styles.emptyBtn} onPress={openAdd}>
-                <Text style={styles.emptyBtnText}>+ Add First Activity</Text>
+                <Text style={styles.emptyBtnText}>+ Add Manually</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -272,15 +278,38 @@ function ActivityCard({ activity: act, trip, onEdit, onDelete }) {
     ...fam, cost: fam.members.length * act.costPerPerson,
   })) : [];
 
+  const isNote = act.type === 'note';
+
+  const handleMapPress = () => { if (act.mapUrl) Linking.openURL(act.mapUrl); };
+  const handleUrlPress = () => { if (act.url) Linking.openURL(act.url); };
+
   return (
-    <View style={[styles.actCard, { borderLeftColor: activityColors[act.type] || colors.muted }]}>
+    <View style={[styles.actCard, { borderLeftColor: activityColors[act.type] || colors.muted }, isNote && styles.actCardNote]}>
       <View style={styles.actTimeCol}>
         <Text style={styles.actTime}>{act.time}</Text>
         <Text style={styles.actIcon}>{activityIcons[act.type] || '📌'}</Text>
       </View>
       <View style={styles.actBody}>
-        <Text style={styles.actName}>{act.name}</Text>
+        {/* Name + rating on same row */}
+        <View style={styles.actNameRow}>
+          <Text style={[styles.actName, isNote && styles.actNameNote]} numberOfLines={2}>{act.name}</Text>
+          {!!act.rating && (
+            <View style={styles.ratingBadge}>
+              <Text style={styles.ratingText}>⭐ {act.rating}</Text>
+            </View>
+          )}
+        </View>
+
         {!!act.detail && <Text style={styles.actDetail}>{act.detail}</Text>}
+
+        {/* AI Tip */}
+        {!!act.note && !isNote && (
+          <View style={styles.aiTipRow}>
+            <Text style={styles.aiTipIcon}>💡</Text>
+            <Text style={styles.aiTipText}>{act.note}</Text>
+          </View>
+        )}
+
         <View style={styles.actTags}>
           {act.costPerPerson > 0 && (
             <View style={styles.costBadge}><Text style={styles.costBadgeText}>~${act.costPerPerson}/person</Text></View>
@@ -291,6 +320,27 @@ function ActivityCard({ activity: act, trip, onEdit, onDelete }) {
             </View>
           )}
         </View>
+
+        {/* Address → opens Google Maps */}
+        {!!act.address && (
+          <TouchableOpacity style={styles.locationRow} onPress={handleMapPress} activeOpacity={0.7}>
+            <Text style={styles.locationIcon}>📍</Text>
+            <Text style={styles.locationText} numberOfLines={1}>{act.address}</Text>
+            {!!act.mapUrl && <Text style={styles.locationArrow}>›</Text>}
+          </TouchableOpacity>
+        )}
+
+        {/* Website link */}
+        {!!act.url && (
+          <TouchableOpacity style={styles.urlRow} onPress={handleUrlPress} activeOpacity={0.7}>
+            <Text style={styles.urlIcon}>🌐</Text>
+            <Text style={styles.urlText} numberOfLines={1}>
+              {act.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+            </Text>
+            <Text style={styles.locationArrow}>›</Text>
+          </TouchableOpacity>
+        )}
+
         {famChips.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.famChips}>
@@ -327,7 +377,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.text,
     borderRadius: radius.xl,
     padding: spacing.xl,
-    ...shadow.card,
+    ...shadow.sm,
   },
   bannerTotal: { marginBottom: spacing.md },
   bannerLabel: { ...typography.caption, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: 0.8 },
@@ -427,6 +477,15 @@ const styles = StyleSheet.create({
   activities: { paddingHorizontal: spacing.xxl, paddingTop: spacing.sm },
   empty: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { ...typography.body, color: colors.muted, marginBottom: spacing.lg },
+  emptyAiBtn: {
+    backgroundColor: colors.ai,
+    borderRadius: radius.xl,
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.md,
+    ...shadow.sm,
+  },
+  emptyAiBtnText: { ...typography.bodyBold, color: '#fff', fontSize: 15 },
   emptyBtn: {
     borderWidth: 1.5,
     borderColor: colors.primary,
@@ -444,8 +503,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     flexDirection: 'row',
     overflow: 'hidden',
-    ...shadow.card,
+    ...shadow.sm,
   },
+  actCardNote: { backgroundColor: '#f9fafb' },
   actTimeCol: {
     width: 52,
     alignItems: 'center',
@@ -457,8 +517,52 @@ const styles = StyleSheet.create({
   actTime: { ...typography.caption, color: colors.muted, fontWeight: '700', fontSize: 11 },
   actIcon: { fontSize: 16, marginTop: spacing.xs },
   actBody: { flex: 1, padding: spacing.md },
-  actName: { ...typography.bodyBold, color: colors.text, marginBottom: 2 },
+  actNameRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 2 },
+  actName: { ...typography.bodyBold, color: colors.text, flex: 1 },
+  actNameNote: { color: colors.muted, fontWeight: '500' },
+  ratingBadge: {
+    backgroundColor: '#fff3e0',
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#ffe0b2',
+    marginLeft: spacing.sm,
+    flexShrink: 0,
+  },
+  ratingText: { fontSize: 10, fontWeight: '700', color: '#e65100' },
   actDetail: { ...typography.caption, color: colors.muted, marginBottom: spacing.sm },
+  aiTipRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#f0faf8',
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: '#b2dfdb',
+  },
+  aiTipIcon: { fontSize: 11, marginTop: 1 },
+  aiTipText: { ...typography.caption, color: '#00796b', flex: 1, lineHeight: 16, fontSize: 11 },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  locationIcon: { fontSize: 11 },
+  locationText: { ...typography.caption, color: colors.primary, flex: 1, fontSize: 11, textDecorationLine: 'underline' },
+  locationArrow: { ...typography.caption, color: colors.muted, fontSize: 14, fontWeight: '700' },
+  urlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  urlIcon: { fontSize: 11 },
+  urlText: { ...typography.caption, color: colors.primary, flex: 1, fontSize: 11, textDecorationLine: 'underline' },
   actTags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xs },
   costBadge: {
     backgroundColor: colors.yellowLight,

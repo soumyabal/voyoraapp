@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { sampleTrips } from '../data/sampleData';
+import { sampleTrips, sampleTravelers, sampleGroups } from '../data/sampleData';
 import { uid, getAllMembers, findMemberFamily, TRIP_EMOJIS, TRIP_BG_COLORS, familyPalette } from '../utils/helpers';
 import { getExpSplitBetween } from '../utils/costs';
+import { generateSmartItinerary as planSmartItinerary } from '../utils/itineraryPlanner';
 
 // ── Activity → Expense sync helper ─────────────────────────────────────────
 function activityToExpense(act, dayLabel, allMembers, allFamilyIds) {
@@ -38,11 +39,14 @@ const useStore = create(
     (set, get) => ({
       // ── STATE ───────────────────────────────────────────────
       trips: sampleTrips,
-      profiles: [],                  // global traveler profiles — persist across all trips
+      travelers: sampleTravelers,    // global traveler library — unique people
+      groups: sampleGroups,          // reusable named collections of travelers
+      chatHistory: {},               // { [tripId]: [{ id, role, content, ts }] }
       currentTripId: null,
       currentDay: 0,
       planMode: null,
-      account: { loggedIn: false, name: '', email: '', credits: 0, history: [], plan: 'free' },
+      account: { loggedIn: false, name: '', email: '', aiPlannerUsed: false, aiReviewsUsed: 0, plan: 'free' },
+      subscription: { plan: 'free', aiMessagesUsed: 0, upgradedAt: null },
 
       // ── GETTERS (computed) ──────────────────────────────────
       getCurrentTrip: () => {
@@ -88,7 +92,7 @@ const useStore = create(
         return { trips: [newTrip, ...s.trips] };
       }),
 
-      createTrip: ({ name, destination, startDate, endDate, mode, familyForms }) => {
+      createTrip: ({ name, destination, startDate, endDate, mode, familyForms = [], skipDefaultFamily = false }) => {
         const families = familyForms
           .filter(ff => ff.name || ff.members.some(m => m.name))
           .map((ff, fi) => ({
@@ -100,7 +104,7 @@ const useStore = create(
               .map(m => ({ id: uid(), name: m.name, age: parseInt(m.age) || 25, needs: [] })),
           }));
 
-        if (families.length === 0) {
+        if (families.length === 0 && !skipDefaultFamily) {
           families.push({ id: uid(), name: 'My Family', color: familyPalette[0], members: [{ id: uid(), name: 'Traveler 1', age: 30, needs: [] }] });
         }
         if (families.some(f => f.members.length === 0)) {
@@ -217,6 +221,21 @@ const useStore = create(
         };
       }),
 
+      // Like addFamily but preserves full member objects (travelerId, needs, etc.)
+      addFamilyFull: (tripId, { name, members, color: c, groupId }) => set(s => {
+        const trip = s.trips.find(t => t.id === tripId);
+        const color = c || familyPalette[trip ? trip.families.length % familyPalette.length : 0];
+        return {
+          trips: s.trips.map(t => t.id !== tripId ? t : {
+            ...t,
+            families: [...t.families, {
+              id: uid(), name, color, groupId: groupId || null,
+              members: members.map(m => ({ id: uid(), ...m })),
+            }],
+          }),
+        };
+      }),
+
       addTraveler: (tripId, famId, member) => set(s => ({
         trips: s.trips.map(t => t.id !== tripId ? t : {
           ...t,
@@ -226,7 +245,7 @@ const useStore = create(
         }),
       })),
 
-      updateTraveler: (tripId, famId, memberId, updates) => set(s => ({
+      updateTripMember: (tripId, famId, memberId, updates) => set(s => ({
         trips: s.trips.map(t => t.id !== tripId ? t : {
           ...t,
           families: t.families.map(f => f.id !== famId ? f : {
@@ -398,135 +417,244 @@ const useStore = create(
         }),
       })),
 
-      // ── TRAVELER PROFILES ────────────────────────────────────
-      // Profiles are global and persist across all trips.
-      // A trip member can optionally link to a profile via member.profileId.
-      // One profile → many trips; one member has at most one profile link.
+      // ── TRAVELER LIBRARY (global) ────────────────────────────
+      // Layer 1: unique people with baseline preferences.
+      // Trip members link to travelers via member.travelerId.
 
-      createProfile: (profile) => set(s => ({
-        profiles: [{ ...profile, id: uid(), createdAt: new Date().toISOString().slice(0, 10) }, ...s.profiles],
+      createTraveler: (traveler) => set(s => ({
+        travelers: [{ ...traveler, id: uid(), createdAt: new Date().toISOString().slice(0, 10) }, ...s.travelers],
       })),
 
-      updateProfile: (profileId, updates) => set(s => ({
-        profiles: s.profiles.map(p => p.id !== profileId ? p : { ...p, ...updates }),
-        // Also cascade name change into any linked trip members
+      updateTraveler: (travelerId, updates) => set(s => ({
+        travelers: s.travelers.map(tv => tv.id !== travelerId ? tv : { ...tv, ...updates }),
+        // Cascade name change into linked trip members that haven't been overridden
         trips: updates.name
           ? s.trips.map(t => ({
               ...t,
               families: t.families.map(f => ({
                 ...f,
-                members: f.members.map(m => m.profileId === profileId ? { ...m, name: updates.name } : m),
+                members: f.members.map(m =>
+                  m.travelerId === travelerId && !m._nameOverride
+                    ? { ...m, name: updates.name }
+                    : m
+                ),
               })),
             }))
           : s.trips,
       })),
 
-      deleteProfile: (profileId) => set(s => ({
-        profiles: s.profiles.filter(p => p.id !== profileId),
-        // Unlink profile from any trip members (member stays, just loses the link)
+      deleteTravelerFromLibrary: (travelerId) => set(s => ({
+        travelers: s.travelers.filter(tv => tv.id !== travelerId),
+        // Unlink from trip members (member stays, just loses the FK)
         trips: s.trips.map(t => ({
           ...t,
           families: t.families.map(f => ({
             ...f,
-            members: f.members.map(m => m.profileId === profileId ? { ...m, profileId: null } : m),
+            members: f.members.map(m =>
+              m.travelerId === travelerId ? { ...m, travelerId: null } : m
+            ),
           })),
+        })),
+        // Remove from any groups
+        groups: s.groups.map(g => ({
+          ...g, travelerIds: g.travelerIds.filter(id => id !== travelerId),
         })),
       })),
 
-      // Link an existing profile to a trip member (copies profile data into member)
-      linkProfileToMember: (tripId, famId, memberId, profileId) => set(s => {
-        const profile = s.profiles.find(p => p.id === profileId);
-        if (!profile) return s;
+      // ── GROUPS (Layer 2: reusable collections) ───────────────
+      createGroup: (group) => set(s => ({
+        groups: [{ ...group, id: uid() }, ...s.groups],
+      })),
+
+      updateGroup: (groupId, updates) => set(s => ({
+        groups: s.groups.map(g => g.id !== groupId ? g : { ...g, ...updates }),
+      })),
+
+      deleteGroup: (groupId) => set(s => ({
+        groups: s.groups.filter(g => g.id !== groupId),
+        // Unlink group from any trip families
+        trips: s.trips.map(t => ({
+          ...t,
+          families: t.families.map(f =>
+            f.groupId === groupId ? { ...f, groupId: null } : f
+          ),
+        })),
+      })),
+
+      addTravelerToGroup: (groupId, travelerId) => set(s => ({
+        groups: s.groups.map(g =>
+          g.id !== groupId || g.travelerIds.includes(travelerId)
+            ? g
+            : { ...g, travelerIds: [...g.travelerIds, travelerId] }
+        ),
+      })),
+
+      removeTravelerFromGroup: (groupId, travelerId) => set(s => ({
+        groups: s.groups.map(g =>
+          g.id !== groupId ? g : { ...g, travelerIds: g.travelerIds.filter(id => id !== travelerId) }
+        ),
+      })),
+
+      // ── ADD GROUP TO TRIP (Layer 3) ──────────────────────────
+      // Creates a trip family from a saved group, only including selectedTravelerIds.
+      addGroupToTrip: (tripId, groupId, selectedTravelerIds) => set(s => {
+        const group = s.groups.find(g => g.id === groupId);
+        if (!group) return s;
+        const trip = s.trips.find(t => t.id === tripId);
+        if (!trip) return s;
+
+        const members = selectedTravelerIds
+          .map(tvId => s.travelers.find(tv => tv.id === tvId))
+          .filter(Boolean)
+          .map(tv => ({
+            id: uid(),
+            travelerId: tv.id,
+            name: tv.name,
+            age: tv.age || 25,
+            needs: [...(tv.needs || [])],
+          }));
+
+        const newFamily = {
+          id: uid(),
+          groupId,
+          name: group.name,
+          color: group.color,
+          members,
+        };
+
         return {
           trips: s.trips.map(t => t.id !== tripId ? t : {
-            ...t,
-            families: t.families.map(f => f.id !== famId ? f : {
-              ...f,
-              members: f.members.map(m => m.id !== memberId ? m : {
-                ...m,
-                profileId,
-                name: profile.name,
-                age: profile.age,
-                needs: [...(profile.needs || [])],
-              }),
-            }),
+            ...t, families: [...t.families, newFamily],
           }),
         };
       }),
 
-      // Add a new trip member directly from a profile
-      addMemberFromProfile: (tripId, famId, profileId) => set(s => {
-        const profile = s.profiles.find(p => p.id === profileId);
-        if (!profile) return s;
-        return {
-          trips: s.trips.map(t => t.id !== tripId ? t : {
-            ...t,
-            families: t.families.map(f => f.id !== famId ? f : {
-              ...f,
-              members: [...f.members, {
-                id: uid(),
-                profileId,
-                name: profile.name,
-                age: profile.age || 30,
-                needs: [...(profile.needs || [])],
-              }],
+      // ── TRIP-SPECIFIC MEMBER OVERRIDES ───────────────────────
+      // Sparse overrides let a traveler's preferences differ per trip
+      // without mutating their global record.
+      setMemberOverride: (tripId, famId, memberId, overrides) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          families: t.families.map(f => f.id !== famId ? f : {
+            ...f,
+            members: f.members.map(m => m.id !== memberId ? m : {
+              ...m,
+              ...overrides,
+              _nameOverride: overrides.name !== undefined ? true : m._nameOverride,
             }),
           }),
-        };
-      }),
+        }),
+      })),
 
-      // ── ACCOUNT / CREDITS ────────────────────────────────────
+      // ── ACCOUNT ───────────────────────────────────────────────
       signUp: (name, email) => {
-        const account = {
-          loggedIn: true, name, email, credits: 100,
-          history: [{ date: new Date().toISOString().slice(0, 10), desc: 'Welcome bonus', delta: +100, balance: 100 }],
-        };
-        set({ account });
+        set({
+          account: { loggedIn: true, name, email, aiPlannerUsed: false, aiReviewsUsed: 0, plan: 'free' },
+        });
       },
 
       signIn: (email) => {
         const name = email.split('@')[0].replace(/[^a-zA-Z]/g, ' ').trim() || 'Traveler';
-        const account = {
-          loggedIn: true, name, email, credits: 100,
-          history: [{ date: new Date().toISOString().slice(0, 10), desc: 'Welcome bonus', delta: +100, balance: 100 }],
-        };
-        set({ account });
+        set({
+          account: { loggedIn: true, name, email, aiPlannerUsed: false, aiReviewsUsed: 0, plan: 'free' },
+        });
       },
 
       signOut: () => set({
-        account: { loggedIn: false, name: '', email: '', credits: 0, history: [] },
+        account: { loggedIn: false, name: '', email: '', aiPlannerUsed: false, aiReviewsUsed: 0, plan: 'free' },
       }),
 
-      deductCredits: (amount) => set(s => {
-        const newCredits = Math.max(0, s.account.credits - amount);
-        return {
-          account: {
-            ...s.account,
-            credits: newCredits,
-            history: [
-              { date: new Date().toISOString().slice(0, 10), desc: 'AI Trip Generation', delta: -amount, balance: newCredits },
-              ...s.account.history,
-            ],
-          },
-        };
+      // Use the 1 free AI trip plan (called when creating a trip with AI mode)
+      useAIPlannerCredit: () => set(s => ({
+        account: { ...s.account, aiPlannerUsed: true },
+      })),
+
+      // Use one of the 3 free AI trip reviews (called when opening AI chat for a trip)
+      useAIReview: () => set(s => ({
+        account: { ...s.account, aiReviewsUsed: Math.min(s.account.aiReviewsUsed + 1, 99) },
+      })),
+
+      // ── SUBSCRIPTION ────────────────────────────────────────
+      upgradeToPro: () => set(s => ({
+        subscription: { ...s.subscription, plan: 'pro', upgradedAt: new Date().toISOString() },
+        account: { ...s.account, plan: 'pro' },
+      })),
+
+      useFreeAIMessage: () => set(s => ({
+        subscription: { ...s.subscription, aiMessagesUsed: s.subscription.aiMessagesUsed + 1 },
+      })),
+
+      resetToFree: () => set(s => ({
+        subscription: { plan: 'free', aiMessagesUsed: 0, upgradedAt: null },
+        account: { ...s.account, plan: 'free', aiPlannerUsed: false, aiReviewsUsed: 0 },
+      })),
+
+      // ── CHAT HISTORY ─────────────────────────────────────────
+      addChatMessage: (tripId, message) => set(s => {
+        const prev = s.chatHistory[tripId] || [];
+        return { chatHistory: { ...s.chatHistory, [tripId]: [...prev, message] } };
       }),
 
-      addCredits: (amount) => set(s => {
-        const newCredits = s.account.credits + amount;
-        return {
-          account: {
-            ...s.account,
-            credits: newCredits,
-            history: [
-              { date: new Date().toISOString().slice(0, 10), desc: `Purchased ${amount} credits`, delta: +amount, balance: newCredits },
-              ...s.account.history,
-            ],
-          },
-        };
+      clearChatHistory: (tripId) => set(s => {
+        const next = { ...s.chatHistory };
+        delete next[tripId];
+        return { chatHistory: next };
       }),
+
+      // Write a pre-built dayActivities array into the trip (called from AIPlannerModal)
+      applyPlannedActivities: (tripId, dayActivities) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          days: t.days.map((d, i) => ({
+            ...d,
+            activities: (dayActivities[i] || []).map(a => ({ ...a, id: a.id || uid() })),
+          })),
+        }),
+      })),
+
+      // Smart itinerary: calls planner for known destinations, falls back to generics
+      generateSmartItinerary: (tripId) => {
+        const { trips, travelers } = get();
+        const trip = trips.find(t => t.id === tripId);
+        if (!trip) return;
+        const dayActivities = planSmartItinerary(trip, travelers);
+        if (!dayActivities) {
+          get().injectAIActivities(tripId);
+          return;
+        }
+        set(s => ({
+          trips: s.trips.map(t => t.id !== tripId ? t : {
+            ...t,
+            days: t.days.map((d, i) => ({
+              ...d,
+              activities: (dayActivities[i] || []).map(a => ({ ...a, id: a.id || uid() })),
+            })),
+          }),
+        }));
+      },
 
       // Inject AI activities into a newly created trip (simulated)
       injectAIActivities: (tripId) => {
+        // Try smart planner first
+        const { trips, travelers } = get();
+        const trip = trips.find(t => t.id === tripId);
+        if (trip) {
+          const dayActivities = planSmartItinerary(trip, travelers);
+          if (dayActivities) {
+            set(s => ({
+              trips: s.trips.map(t => t.id !== tripId ? t : {
+                ...t,
+                days: t.days.map((d, i) => ({
+                  ...d,
+                  activities: (dayActivities[i] || []).map(a => ({ ...a, id: a.id || uid() })),
+                })),
+              }),
+            }));
+            return;
+          }
+        }
+
+        // Fallback: generic templates for unknown destinations
         const templates = [
           [
             { type: 'transport', time: '08:00', name: 'Airport transfer to hotel', detail: 'Private taxi or shuttle', access: 'Accessible vehicle on request', costPerPerson: 20 },

@@ -1,662 +1,885 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, Modal, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
+/**
+ * NewTripModal.js
+ *
+ * 3-step trip creation wizard:
+ *   Step 1 — Trip Header   (name, destination, dates)
+ *   Step 2 — Travelers     (multi-family builder — add groups or new families)
+ *   Step 3 — Plan Trip     (Manual | AI | Expert)
+ */
+
+import React, { useState } from 'react';
+import {
+  View, Text, Modal, ScrollView, TouchableOpacity, TextInput,
+  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Switch,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useStore, { showToast } from '../store';
-import { colors, spacing, radius, typography } from '../theme';
-import { calcCreditEstimate, NEEDS_OPTIONS } from '../utils/helpers';
-import { DateRangePicker } from '../components/ui';
-
-const CREDIT_PACKS = [
-  { credits: 100,  price: '$0.99',  label: '100 credits' },
-  { credits: 500,  price: '$3.99',  label: '500 credits', best: true },
-  { credits: 1000, price: '$6.99',  label: '1000 credits' },
-];
+import { colors, spacing, radius, typography, shadow } from '../theme';
+import { DateRangePicker, LocationSearchField } from '../components/ui';
+import { avatarColor } from '../utils/helpers';
+import { BYPASS_SUBSCRIPTION, PRO_MONTHLY_PRICE } from '../config';
 
 const MODES = [
-  { key: 'manual', icon: '✍️', label: 'Plan Manually', desc: 'Build your itinerary from scratch' },
-  { key: 'ai', icon: '🤖', label: 'Plan with AI', desc: 'Tell us your preferences, get a smart itinerary', color: colors.ai },
-  { key: 'expert', icon: '🧳', label: 'Plan with Expert', desc: 'Connect with a travel consultant', color: colors.expert },
+  { key: 'manual', icon: '✍️', label: 'Plan Manually',    desc: 'Build your itinerary from scratch — full control',     color: colors.primary },
+  { key: 'ai',     icon: '🤖', label: 'Plan with AI',     desc: 'Get a smart itinerary based on your dates & travelers', color: colors.ai },
+  { key: 'expert', icon: '🧳', label: 'Plan with Expert', desc: 'Connect with a travel consultant within 24 hrs',        color: colors.expert },
 ];
 
-const EMPTY_MEMBER = { name: '', age: '', type: 'adult', needs: [] };
+const PALETTE = ['#6c5ce7', '#0984e3', '#00b894', '#e17055', '#e84393', '#e67e22', '#fdcb6e', '#74b9ff'];
+const uid = () => Math.random().toString(36).slice(2, 9);
 
+// ─── Step 2: Multi-family Traveler Picker ────────────────────────
+function TravelerStep({ travelers, groups, tripFamilies, setTripFamilies }) {
+  // Inline UI state
+  const [showGroupPicker, setShowGroupPicker] = useState(false);
+  const [showNewFamilyForm, setShowNewFamilyForm] = useState(false);
+  const [newFamilyName, setNewFamilyName] = useState('');
+
+  // Per-family member-adder state
+  const [expandedFamilyId, setExpandedFamilyId] = useState(null);
+  const [memberTab, setMemberTab] = useState('library'); // 'library' | 'new'
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberAge, setNewMemberAge] = useState('');
+  const [newMemberSave, setNewMemberSave] = useState(true);
+
+  // ── Helpers ───────────────────────────────────────────────────
+  const addedGroupIds = new Set(tripFamilies.map(f => f.groupId).filter(Boolean));
+  const totalMembers = tripFamilies.reduce((sum, f) => sum + f.members.length, 0);
+
+  const getMembersInTrip = () => new Set(
+    tripFamilies.flatMap(f => f.members.map(m => m.travelerId).filter(Boolean))
+  );
+
+  const nextColor = () => PALETTE[tripFamilies.length % PALETTE.length];
+
+  // ── Add saved group ───────────────────────────────────────────
+  const addGroup = (g) => {
+    const groupTravelers = (g.travelerIds || [])
+      .map(id => travelers.find(tv => tv.id === id))
+      .filter(Boolean);
+    setTripFamilies(prev => [...prev, {
+      id: uid(),
+      name: g.name,
+      color: g.color,
+      groupId: g.id,
+      members: groupTravelers.map(tv => ({ id: uid(), name: tv.name, age: tv.age, travelerId: tv.id, saveToLibrary: false })),
+    }]);
+    setShowGroupPicker(false);
+  };
+
+  // ── Create new family ─────────────────────────────────────────
+  const createFamily = () => {
+    if (!newFamilyName.trim()) { showToast('Enter a family name', '⚠️'); return; }
+    const fam = { id: uid(), name: newFamilyName.trim(), color: nextColor(), groupId: null, members: [] };
+    setTripFamilies(prev => [...prev, fam]);
+    setNewFamilyName('');
+    setShowNewFamilyForm(false);
+    setExpandedFamilyId(fam.id);
+    setMemberTab('library');
+  };
+
+  // ── Remove family ─────────────────────────────────────────────
+  const removeFamily = (famId) => {
+    setTripFamilies(prev => prev.filter(f => f.id !== famId));
+    if (expandedFamilyId === famId) setExpandedFamilyId(null);
+  };
+
+  // ── Add library traveler to family ────────────────────────────
+  const addLibraryMember = (famId, tv) => {
+    setTripFamilies(prev => prev.map(f => {
+      if (f.id !== famId) return f;
+      if (f.members.some(m => m.travelerId === tv.id)) return f; // already in
+      return { ...f, members: [...f.members, { id: uid(), name: tv.name, age: tv.age, travelerId: tv.id, saveToLibrary: false }] };
+    }));
+  };
+
+  // ── Remove library traveler from family ───────────────────────
+  const removeMember = (famId, memberId) => {
+    setTripFamilies(prev => prev.map(f =>
+      f.id !== famId ? f : { ...f, members: f.members.filter(m => m.id !== memberId) }
+    ));
+  };
+
+  // ── Add new (unlibrary) member ────────────────────────────────
+  const addNewMember = (famId) => {
+    if (!newMemberName.trim()) { showToast('Enter a name', '⚠️'); return; }
+    const mem = {
+      id: uid(),
+      name: newMemberName.trim(),
+      age: parseInt(newMemberAge) || null,
+      travelerId: null,
+      saveToLibrary: newMemberSave,
+    };
+    setTripFamilies(prev => prev.map(f =>
+      f.id !== famId ? f : { ...f, members: [...f.members, mem] }
+    ));
+    setNewMemberName(''); setNewMemberAge(''); setNewMemberSave(true);
+  };
+
+  // ── Toggle member adder ───────────────────────────────────────
+  const toggleExpand = (famId) => {
+    if (expandedFamilyId === famId) {
+      setExpandedFamilyId(null);
+    } else {
+      setExpandedFamilyId(famId);
+      setMemberTab('library');
+      setNewMemberName(''); setNewMemberAge(''); setNewMemberSave(true);
+    }
+  };
+
+  const inTripIds = getMembersInTrip();
+
+  return (
+    <View>
+      {/* ── Section header ────────────────────────────── */}
+      <View style={t.sectionHeader}>
+        <Text style={t.sectionTitle}>
+          {totalMembers > 0 ? `${tripFamilies.length} group${tripFamilies.length !== 1 ? 's' : ''} · ${totalMembers} traveler${totalMembers !== 1 ? 's' : ''}` : 'Who\'s coming?'}
+        </Text>
+        <Text style={t.sectionSub}>You can also add travelers from the trip's People tab later</Text>
+      </View>
+
+      {/* ── Empty state ───────────────────────────────── */}
+      {tripFamilies.length === 0 && !showGroupPicker && !showNewFamilyForm && (
+        <View style={t.emptyState}>
+          <Text style={t.emptyIcon}>✈️</Text>
+          <Text style={t.emptyTitle}>Add your travel groups</Text>
+          <Text style={t.emptyBody}>
+            Each family or group can track their own budget, needs, and activities — all in one trip.
+          </Text>
+        </View>
+      )}
+
+      {/* ── Family cards ──────────────────────────────── */}
+      {tripFamilies.map(fam => (
+        <View key={fam.id} style={[t.familyCard, { borderLeftColor: fam.color }]}>
+
+          {/* Card header */}
+          <View style={t.cardHeader}>
+            <View style={[t.colorDot, { backgroundColor: fam.color }]} />
+            <Text style={t.familyName}>{fam.name}</Text>
+            {fam.groupId && (
+              <View style={t.libraryBadge}>
+                <Text style={t.libraryBadgeText}>📚 Saved</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              onPress={() => removeFamily(fam.id)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={t.removeBtn}
+            >
+              <Text style={t.removeBtnText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Member chips */}
+          {fam.members.length > 0 && (
+            <View style={t.memberChips}>
+              {fam.members.map(m => (
+                <View key={m.id} style={t.chip}>
+                  <View style={[t.chipAvatar, { backgroundColor: avatarColor(m.name) }]}>
+                    <Text style={t.chipAvatarText}>{m.name[0]}</Text>
+                  </View>
+                  <Text style={t.chipName}>{m.name.split(' ')[0]}</Text>
+                  {m.age ? <Text style={t.chipAge}>{m.age}</Text> : null}
+                  <TouchableOpacity onPress={() => removeMember(fam.id, m.id)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Text style={t.chipRemove}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Add member button */}
+          <TouchableOpacity
+            style={t.addMemberBtn}
+            onPress={() => toggleExpand(fam.id)}
+          >
+            <Text style={t.addMemberText}>
+              {expandedFamilyId === fam.id ? '↑ Close' : '+ Add Member'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Member adder — expands inline */}
+          {expandedFamilyId === fam.id && (
+            <View style={t.memberAdder}>
+              {/* Tab toggle */}
+              <View style={t.tabToggle}>
+                {['library', 'new'].map(tab => (
+                  <TouchableOpacity
+                    key={tab}
+                    style={[t.tabBtn, memberTab === tab && t.tabBtnActive]}
+                    onPress={() => setMemberTab(tab)}
+                  >
+                    <Text style={[t.tabBtnText, memberTab === tab && t.tabBtnTextActive]}>
+                      {tab === 'library' ? '📚 From Library' : '✨ New Person'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Library tab */}
+              {memberTab === 'library' && (
+                travelers.length === 0 ? (
+                  <Text style={t.emptyLib}>No travelers in your library yet — add via the Travelers tab on the home screen.</Text>
+                ) : (
+                  <View style={t.libraryList}>
+                    {travelers.map(tv => {
+                      const alreadyIn = fam.members.some(m => m.travelerId === tv.id);
+                      const inOther = !alreadyIn && inTripIds.has(tv.id);
+                      return (
+                        <TouchableOpacity
+                          key={tv.id}
+                          style={[t.libRow, alreadyIn && t.libRowDone]}
+                          onPress={() => !alreadyIn && addLibraryMember(fam.id, tv)}
+                          activeOpacity={alreadyIn ? 1 : 0.7}
+                          disabled={alreadyIn}
+                        >
+                          <View style={[t.libAvatar, { backgroundColor: avatarColor(tv.name) }]}>
+                            <Text style={t.libAvatarText}>{tv.emoji || tv.name[0]}</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[t.libName, alreadyIn && { color: colors.muted }]}>{tv.name}</Text>
+                            {tv.age ? <Text style={t.libMeta}>{tv.age}yo</Text> : null}
+                          </View>
+                          {alreadyIn
+                            ? <Text style={t.addedTag}>✓ Added</Text>
+                            : inOther
+                              ? <Text style={[t.addedTag, { color: colors.muted }]}>In another group</Text>
+                              : <Text style={t.addTag}>+ Add</Text>
+                          }
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )
+              )}
+
+              {/* New person tab */}
+              {memberTab === 'new' && (
+                <View style={t.newPersonForm}>
+                  <View style={t.newPersonRow}>
+                    <TextInput
+                      style={[t.input, { flex: 2 }]}
+                      value={newMemberName}
+                      onChangeText={setNewMemberName}
+                      placeholder="Full name"
+                      placeholderTextColor={colors.muted}
+                      autoCapitalize="words"
+                      autoFocus
+                    />
+                    <TextInput
+                      style={[t.input, { width: 68 }]}
+                      value={newMemberAge}
+                      onChangeText={setNewMemberAge}
+                      placeholder="Age"
+                      placeholderTextColor={colors.muted}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={t.saveToggleRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={t.saveToggleLabel}>Save to Traveler Library</Text>
+                      <Text style={t.saveToggleSub}>Reuse this person on future trips</Text>
+                    </View>
+                    <Switch
+                      value={newMemberSave}
+                      onValueChange={setNewMemberSave}
+                      trackColor={{ false: colors.border, true: colors.primary }}
+                      thumbColor="#fff"
+                    />
+                  </View>
+                  <TouchableOpacity style={t.addPersonBtn} onPress={() => addNewMember(fam.id)}>
+                    <Text style={t.addPersonBtnText}>Add to {fam.name}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+      ))}
+
+      {/* ── Inline group picker ───────────────────────── */}
+      {showGroupPicker && (
+        <View style={t.pickerPanel}>
+          <View style={t.pickerHeader}>
+            <Text style={t.pickerTitle}>Saved Groups</Text>
+            <TouchableOpacity onPress={() => setShowGroupPicker(false)}>
+              <Text style={t.pickerClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          {groups.length === 0 ? (
+            <Text style={t.emptyLib}>No saved groups yet. Create groups in the Travelers tab.</Text>
+          ) : (
+            groups.map(g => {
+              const groupTvs = (g.travelerIds || [])
+                .map(id => travelers.find(tv => tv.id === id)).filter(Boolean);
+              const already = addedGroupIds.has(g.id);
+              return (
+                <View key={g.id} style={[t.groupPickerRow, already && { opacity: 0.5 }]}>
+                  <View style={[t.colorDot, { backgroundColor: g.color }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={t.groupPickerName}>{g.name}</Text>
+                    <Text style={t.groupPickerMembers}>
+                      {groupTvs.map(tv => tv.name.split(' ')[0]).join(' · ') || 'No members'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[t.groupPickerBtn, already && { backgroundColor: colors.surface2 }]}
+                    onPress={() => !already && addGroup(g)}
+                    disabled={already}
+                  >
+                    <Text style={[t.groupPickerBtnText, already && { color: colors.muted }]}>
+                      {already ? '✓ Added' : 'Add →'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })
+          )}
+        </View>
+      )}
+
+      {/* ── New family inline form ─────────────────────── */}
+      {showNewFamilyForm && (
+        <View style={t.newFamilyForm}>
+          <Text style={t.newFamilyTitle}>New Group Name</Text>
+          <View style={t.newFamilyRow}>
+            <TextInput
+              style={[t.input, { flex: 1 }]}
+              value={newFamilyName}
+              onChangeText={setNewFamilyName}
+              placeholder="e.g. Sharma Family, Team A..."
+              placeholderTextColor={colors.muted}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={createFamily}
+            />
+            <TouchableOpacity
+              style={[t.createBtn, !newFamilyName.trim() && { opacity: 0.4 }]}
+              onPress={createFamily}
+              disabled={!newFamilyName.trim()}
+            >
+              <Text style={t.createBtnText}>Create</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setShowNewFamilyForm(false); setNewFamilyName(''); }}>
+              <Text style={t.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* ── Primary CTAs ──────────────────────────────── */}
+      {!showGroupPicker && !showNewFamilyForm && (
+        <View style={t.ctaRow}>
+          <TouchableOpacity
+            style={t.ctaBtn}
+            onPress={() => setShowGroupPicker(true)}
+          >
+            <Text style={t.ctaIcon}>📚</Text>
+            <Text style={t.ctaLabel}>Add Saved Group</Text>
+          </TouchableOpacity>
+          <View style={t.ctaDivider} />
+          <TouchableOpacity
+            style={t.ctaBtn}
+            onPress={() => setShowNewFamilyForm(true)}
+          >
+            <Text style={t.ctaIcon}>➕</Text>
+            <Text style={t.ctaLabel}>New Family</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─── Main Modal ───────────────────────────────────────────────────
 export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }) {
   const insets = useSafeAreaInsets();
-  const { account, createTrip, injectAIActivities, deductCredits, addCredits } = useStore();
-  const scrollRef = useRef(null);
-  const [step, setStep] = useState(1);
-  const [mode, setMode] = useState(null);
-  const [name, setName] = useState('');
-  const [destination, setDestination] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [familyForms, setFamilyForms] = useState([{ name: 'My Family', members: [{ ...EMPTY_MEMBER }], collapsed: false }]);
-  const [generating, setGenerating] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showCreditBuy, setShowCreditBuy] = useState(false);
+  const {
+    account, travelers, groups,
+    createTrip, addFamilyFull, createTraveler, injectAIActivities,
+    useAIPlannerCredit, upgradeToPro,
+  } = useStore();
 
+  // ── Wizard state ──────────────────────────────────────────────
+  const [step, setStep]               = useState(1);
+  const [mode, setMode]               = useState(null);
+  const [name, setName]               = useState('');
+  const [destination, setDestination] = useState('');
+  const [startDate, setStartDate]     = useState('');
+  const [endDate, setEndDate]         = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // Step 2 — list of families being built for this trip
+  // Each: { id, name, color, groupId, members: [{ id, name, age, travelerId, saveToLibrary }] }
+  const [tripFamilies, setTripFamilies] = useState([]);
+
+  // Step 3
+  const [generating, setGenerating] = useState(false);
+
+  // ── Quota ─────────────────────────────────────────────────────
+  const isPro = BYPASS_SUBSCRIPTION || account.plan === 'pro';
+  const canUseAIPlanner = isPro || !account.aiPlannerUsed;
+
+  // ── Reset ─────────────────────────────────────────────────────
   const reset = () => {
     setStep(1); setMode(null); setName(''); setDestination('');
     setStartDate(''); setEndDate('');
-    setFamilyForms([{ name: 'My Family', members: [{ ...EMPTY_MEMBER }], collapsed: false }]);
-    setGenerating(false); setShowCreditBuy(false);
+    setTripFamilies([]);
+    setGenerating(false);
   };
 
   const handleClose = () => { reset(); onClose(); };
+  const prevStep = () => setStep(s => s - 1);
 
   const nextStep = () => {
-    if (step === 1 && !mode) { showToast('Please choose a planning mode', '⚠️'); return; }
-    if (step === 2) {
-      if (!name.trim()) { showToast('Please enter a trip name', '⚠️'); return; }
-      if (!destination.trim()) { showToast('Please enter a destination', '⚠️'); return; }
-      if (!startDate || !endDate) { showToast('Please set start & end dates', '⚠️'); return; }
-      if (new Date(startDate) >= new Date(endDate)) { showToast('End date must be after start date', '⚠️'); return; }
-      if (mode === 'ai' && !account.loggedIn) { handleClose(); onNeedAuth(); return; }
+    if (step === 1) {
+      if (!name.trim())        { showToast('Enter a trip name', '⚠️'); return; }
+      if (!destination.trim()) { showToast('Enter a destination', '⚠️'); return; }
+      if (!startDate || !endDate) { showToast('Set your travel dates', '⚠️'); return; }
+      if (new Date(startDate) >= new Date(endDate)) { showToast('End date must be after start', '⚠️'); return; }
     }
     setStep(s => s + 1);
   };
 
-  const addFamilyForm = () =>
-    setFamilyForms(prev => [...prev, { name: `Family ${prev.length + 1}`, members: [{ ...EMPTY_MEMBER }], collapsed: false }]);
-
-  const toggleFamilyCollapse = (fi) =>
-    setFamilyForms(prev => prev.map((f, idx) => idx === fi ? { ...f, collapsed: !f.collapsed } : f));
-
-  const updateFamilyName = (i, val) =>
-    setFamilyForms(prev => prev.map((f, idx) => idx === i ? { ...f, name: val } : f));
-
-  const addMember = (fi) =>
-    setFamilyForms(prev => prev.map((f, idx) => idx !== fi ? f : { ...f, members: [...f.members, { ...EMPTY_MEMBER }] }));
-
-  const updateMember = (fi, mi, field, val) =>
-    setFamilyForms(prev => prev.map((f, idx) => idx !== fi ? f : {
-      ...f, members: f.members.map((m, midx) => midx !== mi ? m : { ...m, [field]: val }),
-    }));
-
-  const removeMember = (fi, mi) =>
-    setFamilyForms(prev => prev.map((f, idx) => idx !== fi ? f : {
-      ...f, members: f.members.filter((_, midx) => midx !== mi),
-    }));
-
-  const toggleMemberNeed = (fi, mi, need) => {
-    const fam = familyForms[fi];
-    const member = fam.members[mi];
-    const curr = member.needs || [];
-    const next = curr.includes(need) ? curr.filter(n => n !== need) : [...curr, need];
-    updateMember(fi, mi, 'needs', next);
-  };
-
-  // ── Credit estimation (reactive) ─────────────────────────────────
-  const days = startDate && endDate
-    ? Math.round((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24)) + 1
-    : 0;
-  const namedMembers = familyForms.flatMap(f => f.members.filter(m => m.name.trim()));
-  const adults = namedMembers.filter(m => m.type !== 'child').length;
-  const children = namedMembers.filter(m => m.type === 'child').length;
-  const needsCount = namedMembers.filter(m => m.needs?.length > 0).length;
-  const travelers = adults + children || 1;
-
-  const creditEst = mode === 'ai' && account.loggedIn && days > 0
-    ? calcCreditEstimate(days, adults || 1, children, needsCount)
-    : null;
-
+  // ── Create trip ───────────────────────────────────────────────
   const handleCreate = () => {
-    if (mode === 'ai' && creditEst) {
-      if (account.credits < creditEst.total) {
-        setShowCreditBuy(true);
-        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-        return;
-      }
-    }
+    if (!mode) { showToast('Choose a planning mode', '⚠️'); return; }
+    if (mode === 'ai' && !account.loggedIn) { handleClose(); onNeedAuth(); return; }
 
-    const trip = createTrip({ name, destination, startDate, endDate, mode, familyForms });
+    const hasSelectedFamilies = tripFamilies.length > 0;
+    const trip = createTrip({
+      name, destination, startDate, endDate, mode,
+      familyForms: [],
+      skipDefaultFamily: hasSelectedFamilies,
+    });
 
-    if (mode === 'ai' && creditEst) {
-      deductCredits(creditEst.total);
+    // Persist new members flagged "Save to Library" and build families
+    tripFamilies.forEach(fam => {
+      const processedMembers = fam.members.map(m => {
+        if (!m.travelerId && m.saveToLibrary) {
+          const tvId = 'tv_' + uid();
+          createTraveler({
+            id: tvId, name: m.name, age: m.age || null,
+            emoji: '👤', dietary: [], needs: [],
+            pacePreference: 'moderate', interests: [], notes: '',
+          });
+          return { ...m, travelerId: tvId };
+        }
+        return m;
+      });
+
+      addFamilyFull(trip.id, {
+        name: fam.name,
+        color: fam.color,
+        groupId: fam.groupId || null,
+        members: processedMembers.map(m => ({
+          name: m.name,
+          age: m.age || 30,
+          needs: [],
+          travelerId: m.travelerId || null,
+        })),
+      });
+    });
+
+    if (mode === 'ai') {
+      useAIPlannerCredit();
       setGenerating(true);
       setTimeout(() => {
         injectAIActivities(trip.id);
         setGenerating(false);
         reset();
-        showToast('AI itinerary with cost estimates ready!', '🤖');
+        showToast('AI itinerary ready! 🤖', '✅');
         onCreated(trip);
-      }, 3000);
+      }, 2800);
     } else {
       reset();
       showToast(
-        mode === 'expert'
-          ? 'Trip created! Expert will contact you within 24hrs 🧳'
-          : 'Trip created! Start adding activities 🗺️',
+        mode === 'expert' ? 'Trip created! Expert will reach out within 24 hrs 🧳' : 'Trip created! Start adding activities 🗺️',
         '✅',
       );
       onCreated(trip);
     }
   };
 
-  // ── Credit estimate card (reused in Step 2 and Step 3) ───────────
-  const CreditEstCard = () => {
-    if (!creditEst) return null;
-    const enough = account.credits >= creditEst.total;
-    return (
-      <View style={[styles.estimator, { borderColor: enough ? colors.green : colors.red }]}>
-        <View style={styles.estHeader}>
-          <Text style={styles.estTitle}>💳 Credit Cost</Text>
-          <Text style={[styles.estTotal, { color: enough ? colors.green : colors.red }]}>
-            {creditEst.total} cr
-          </Text>
-        </View>
-        <Text style={styles.estBalance}>
-          Balance: {account.credits} cr → After: {account.credits - creditEst.total} cr
-        </Text>
-        {[
-          { label: 'AI planning base', cr: creditEst.base },
-          { label: `${days} day${days !== 1 ? 's' : ''} × 3 cr`, cr: creditEst.daysCost },
-          adults > 0 && { label: `${adults} adult${adults !== 1 ? 's' : ''} × 3 cr`, cr: creditEst.adultsCost },
-          children > 0 && { label: `${children} child${children !== 1 ? 'ren' : ''} × 1 cr`, cr: creditEst.childrenCost },
-          needsCount > 0 && { label: `${needsCount} accessibility need${needsCount !== 1 ? 's' : ''} × 2 cr`, cr: creditEst.needsCost },
-        ].filter(Boolean).map((item, i) => (
-          <View key={i} style={styles.estItem}>
-            <Text style={styles.estItemLabel}>{item.label}</Text>
-            <Text style={styles.estItemCr}>{item.cr} cr</Text>
-          </View>
-        ))}
-        {!enough && (
-          <Text style={styles.estWarn}>⚠️ Not enough credits to generate this trip</Text>
-        )}
-      </View>
-    );
-  };
+  const days = startDate && endDate
+    ? Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1
+    : 0;
+
+  const totalTravelers = tripFamilies.reduce((sum, f) => sum + f.members.length, 0);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={[s.container, { paddingTop: insets.top }]}>
 
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerSide}>
-            <TouchableOpacity onPress={step > 1 ? () => setStep(s => s - 1) : handleClose}>
-              <Text style={styles.backText}>{step > 1 ? '← Back' : 'Cancel'}</Text>
+          {/* ── Header ───────────────────────────────── */}
+          <View style={s.header}>
+            <TouchableOpacity onPress={step > 1 ? prevStep : handleClose} style={s.headerBtn}>
+              <Text style={s.backText}>{step > 1 ? '← Back' : 'Cancel'}</Text>
             </TouchableOpacity>
+            <Text style={s.headerTitle}>✈️ New Trip</Text>
+            <View style={s.headerBtn} />
           </View>
-          <Text style={styles.headerTitle}>✈️ Start Planning</Text>
-          <View style={styles.headerSide} />
-        </View>
 
-        {/* Step indicator */}
-        <View style={styles.steps}>
-          {[
-            { n: 1, label: 'Mode' },
-            { n: 2, label: 'Details' },
-            { n: 3, label: 'Travelers' },
-          ].map((s, idx) => (
-            <React.Fragment key={s.n}>
-              <View style={styles.stepItem}>
-                <View style={[styles.stepDot, step > s.n && styles.stepDone, step === s.n && styles.stepActive]}>
-                  <Text style={[styles.stepNum, step >= s.n && { color: '#fff' }]}>{s.n}</Text>
+          {/* ── Step indicator ───────────────────────── */}
+          <View style={s.steps}>
+            {[{ n: 1, label: 'Details' }, { n: 2, label: 'Travelers' }, { n: 3, label: 'Plan' }].map((st, idx) => (
+              <React.Fragment key={st.n}>
+                <View style={s.stepItem}>
+                  <View style={[s.stepDot, step > st.n && s.stepDone, step === st.n && s.stepActive]}>
+                    <Text style={[s.stepNum, step >= st.n && { color: '#fff' }]}>{st.n}</Text>
+                  </View>
+                  <Text style={[s.stepLabel, step === st.n && s.stepLabelActive, step > st.n && s.stepLabelDone]}>
+                    {st.label}
+                  </Text>
                 </View>
-                <Text numberOfLines={1} style={[
-                  styles.stepLabel,
-                  step === s.n && styles.stepLabelActive,
-                  step > s.n && styles.stepLabelDone,
-                ]}>{s.label}</Text>
-              </View>
-              {idx < 2 && <View style={[styles.stepLine, step > s.n && { backgroundColor: colors.green }]} />}
-            </React.Fragment>
-          ))}
-        </View>
-
-        {generating ? (
-          <View style={styles.generating}>
-            <Text style={styles.genIcon}>⚙️</Text>
-            <Text style={styles.genTitle}>AI is Building Your Itinerary</Text>
-            <Text style={styles.genSub}>Analyzing preferences and estimating costs...</Text>
-            <ActivityIndicator color={colors.ai} size="large" style={{ marginTop: 20 }} />
+                {idx < 2 && <View style={[s.stepLine, step > st.n && { backgroundColor: colors.green }]} />}
+              </React.Fragment>
+            ))}
           </View>
-        ) : (
-          <ScrollView
-            ref={scrollRef}
-            style={styles.scroll}
-            contentContainerStyle={[styles.content, { paddingBottom: step === 1 ? insets.bottom + 24 : insets.bottom + 160 }]}
-            scrollEnabled={step !== 1}
-            keyboardShouldPersistTaps="handled"
-          >
 
-            {/* ── STEP 1: Mode ─────────────────────────────────── */}
-            {step === 1 && (
-              <>
-                <Text style={styles.stepHint}>How would you like to plan your trip?</Text>
-                {MODES.map(m => {
-                  const active = mode === m.key;
-                  const accent = m.color || colors.primary;
-                  return (
-                    <TouchableOpacity
-                      key={m.key}
-                      style={[styles.modeCard, active && { borderColor: accent, backgroundColor: accent + '12' }]}
-                      onPress={() => setMode(m.key)}
-                      activeOpacity={0.75}
-                    >
-                      <View style={[styles.modeIconWrap, active && { backgroundColor: accent + '22' }]}>
-                        <Text style={styles.modeIcon}>{m.icon}</Text>
-                      </View>
-                      <View style={styles.modeTextBlock}>
-                        <Text style={[styles.modeLabel, active && { color: accent }]}>{m.label}</Text>
-                        <Text style={styles.modeDesc}>{m.desc}</Text>
-                      </View>
-                      <View style={[styles.modeRadio, active && { borderColor: accent }]}>
-                        {active && <View style={[styles.modeRadioDot, { backgroundColor: accent }]} />}
-                      </View>
+          {/* ── Generating overlay ───────────────────── */}
+          {generating ? (
+            <View style={s.generating}>
+              <Text style={s.genIcon}>🤖</Text>
+              <Text style={s.genTitle}>AI is Building Your Itinerary</Text>
+              <Text style={s.genSub}>Analysing destinations, pacing for your travelers, estimating costs...</Text>
+              <ActivityIndicator color={colors.ai} size="large" style={{ marginTop: 24 }} />
+            </View>
+          ) : (
+            <ScrollView
+              style={s.scroll}
+              contentContainerStyle={s.content}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+
+              {/* ══ STEP 1: Details ════════════════════════════ */}
+              {step === 1 && (
+                <>
+                  <Text style={s.stepHint}>Tell us about your trip</Text>
+                  <View style={s.formGroup}>
+                    <Text style={s.label}>Trip Name *</Text>
+                    <TextInput
+                      style={s.input}
+                      value={name}
+                      onChangeText={setName}
+                      placeholder="e.g. Bali Family Adventure"
+                      placeholderTextColor={colors.muted}
+                      autoCapitalize="words"
+                    />
+                  </View>
+                  <LocationSearchField
+                    label="Destination *"
+                    value={destination}
+                    onSelect={setDestination}
+                    placeholder="e.g. Bali, Indonesia"
+                  />
+                  <View style={s.formGroup}>
+                    <Text style={s.label}>Travel Dates *</Text>
+                    <TouchableOpacity style={s.dateBtn} onPress={() => setShowDatePicker(true)}>
+                      <Text style={s.dateBtnIcon}>📅</Text>
+                      <Text style={[s.dateBtnText, (!startDate && !endDate) && s.datePlaceholder]}>
+                        {startDate && endDate
+                          ? `${startDate}  →  ${endDate}  (${days} day${days !== 1 ? 's' : ''})`
+                          : 'Select start & end dates'}
+                      </Text>
                     </TouchableOpacity>
-                  );
-                })}
-              </>
-            )}
+                  </View>
+                  <DateRangePicker
+                    visible={showDatePicker}
+                    startDate={startDate}
+                    endDate={endDate}
+                    onConfirm={(start, end) => { setStartDate(start); setEndDate(end); }}
+                    onClose={() => setShowDatePicker(false)}
+                  />
+                </>
+              )}
 
-            {/* ── STEP 2: Details + Dates ───────────────────────── */}
-            {step === 2 && (
-              <>
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Trip Name</Text>
-                  <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g. Bali Family Adventure" placeholderTextColor={colors.muted} />
-                </View>
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Destination</Text>
-                  <TextInput style={styles.input} value={destination} onChangeText={setDestination} placeholder="e.g. Bali, Indonesia" placeholderTextColor={colors.muted} />
-                </View>
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Travel Dates</Text>
-                  <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)}>
-                    <Text style={styles.dateBtnIcon}>📅</Text>
-                    <Text style={[styles.dateBtnText, (!startDate && !endDate) && styles.datePlaceholder]}>
-                      {startDate && endDate ? `${startDate}  →  ${endDate}` : startDate || 'Select dates'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <DateRangePicker
-                  visible={showDatePicker}
-                  startDate={startDate}
-                  endDate={endDate}
-                  onConfirm={(start, end) => { setStartDate(start); setEndDate(end); }}
-                  onClose={() => setShowDatePicker(false)}
+              {/* ══ STEP 2: Travelers ══════════════════════════ */}
+              {step === 2 && (
+                <TravelerStep
+                  travelers={travelers}
+                  groups={groups}
+                  tripFamilies={tripFamilies}
+                  setTripFamilies={setTripFamilies}
                 />
+              )}
 
-                {/* AI Login Gate */}
-                {mode === 'ai' && !account.loggedIn && (
-                  <View style={styles.aiGate}>
-                    <Text style={styles.aiGateIcon}>🤖</Text>
-                    <Text style={styles.aiGateTitle}>AI Planner requires an account</Text>
-                    <Text style={styles.aiGateSub}>Sign up free and get 100 credits instantly.</Text>
-                    <TouchableOpacity style={styles.aiGateBtn} onPress={() => { handleClose(); onNeedAuth(); }}>
-                      <Text style={styles.aiGateBtnText}>🚀 Sign Up — 100 Free Credits</Text>
-                    </TouchableOpacity>
+              {/* ══ STEP 3: Plan Trip ══════════════════════════ */}
+              {step === 3 && (
+                <>
+                  <Text style={s.stepHint}>How would you like to plan this trip?</Text>
+
+                  {/* Trip summary pill */}
+                  <View style={s.summaryPill}>
+                    <Text style={s.summaryText}>
+                      📍 {destination}  ·  🗓 {days} day{days !== 1 ? 's' : ''}
+                      {tripFamilies.length > 0 ? `  ·  👨‍👩‍👧 ${tripFamilies.length} group${tripFamilies.length !== 1 ? 's' : ''} · ${totalTravelers} traveler${totalTravelers !== 1 ? 's' : ''}` : ''}
+                    </Text>
                   </View>
-                )}
 
-                {/* Credit estimate (Step 2 preview — travelers not set yet so shows base+days) */}
-                <CreditEstCard />
-              </>
-            )}
-
-            {/* ── STEP 3: Travelers ────────────────────────────── */}
-            {step === 3 && (
-              <>
-                <Text style={styles.stepHint}>Add families and travelers. Select type and any special needs for each person.</Text>
-
-                {familyForms.map((fam, fi) => {
-                  const namedCount = fam.members.filter(m => m.name.trim()).length;
-                  const memberSummary = namedCount > 0
-                    ? fam.members.filter(m => m.name.trim()).map(m => m.name.trim()).join(', ')
-                    : `${fam.members.length} member${fam.members.length !== 1 ? 's' : ''}`;
-
-                  return (
-                    <View key={fi} style={styles.familyForm}>
-                      {/* Family header row */}
-                      <View style={styles.familyFormHeader}>
-                        <TouchableOpacity onPress={() => toggleFamilyCollapse(fi)} style={styles.collapseBtn}>
-                          <Text style={styles.collapseIcon}>{fam.collapsed ? '▸' : '▾'}</Text>
-                        </TouchableOpacity>
-                        <TextInput
-                          style={[styles.input, styles.familyNameInput]}
-                          value={fam.name}
-                          onChangeText={v => updateFamilyName(fi, v)}
-                          placeholder="Family name"
-                          placeholderTextColor={colors.muted}
-                        />
-                        {familyForms.length > 1 && (
-                          <TouchableOpacity onPress={() => setFamilyForms(prev => prev.filter((_, i) => i !== fi))}>
-                            <Text style={styles.removeFamText}>✕</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-
-                      {/* Collapsed summary */}
-                      {fam.collapsed && (
-                        <TouchableOpacity onPress={() => toggleFamilyCollapse(fi)} style={styles.collapsedSummary}>
-                          <Text style={styles.collapsedSummaryText}>👥 {memberSummary}</Text>
-                          <Text style={styles.expandHint}>Tap to expand</Text>
-                        </TouchableOpacity>
-                      )}
-
-                      {/* Member cards */}
-                      {!fam.collapsed && (
-                        <>
-                          {fam.members.map((m, mi) => (
-                            <View key={mi} style={styles.memberCard}>
-                              {/* Name + Age row */}
-                              <View style={styles.memberInputRow}>
-                                <TextInput
-                                  style={[styles.input, { flex: 2 }]}
-                                  value={m.name}
-                                  onChangeText={v => updateMember(fi, mi, 'name', v)}
-                                  placeholder="Full name"
-                                  placeholderTextColor={colors.muted}
-                                  autoCapitalize="words"
-                                />
-                                <TextInput
-                                  style={[styles.input, { width: 64 }]}
-                                  value={m.age}
-                                  onChangeText={v => updateMember(fi, mi, 'age', v)}
-                                  placeholder="Age"
-                                  placeholderTextColor={colors.muted}
-                                  keyboardType="numeric"
-                                />
-                                {fam.members.length > 1 && (
-                                  <TouchableOpacity onPress={() => removeMember(fi, mi)}>
-                                    <Text style={styles.removeText}>✕</Text>
-                                  </TouchableOpacity>
-                                )}
-                              </View>
-
-                              {/* Adult / Child toggle */}
-                              <View style={styles.typeRow}>
-                                <Text style={styles.typeLabel}>Type</Text>
-                                <View style={styles.typeToggle}>
-                                  {[
-                                    { key: 'adult', label: '👤 Adult' },
-                                    { key: 'child', label: '👧 Child' },
-                                  ].map(t => (
-                                    <TouchableOpacity
-                                      key={t.key}
-                                      style={[styles.typeBtn, m.type === t.key && styles.typeBtnActive]}
-                                      onPress={() => updateMember(fi, mi, 'type', t.key)}
-                                    >
-                                      <Text style={[styles.typeBtnText, m.type === t.key && styles.typeBtnTextActive]}>
-                                        {t.label}
-                                      </Text>
-                                    </TouchableOpacity>
-                                  ))}
-                                </View>
-                              </View>
-
-                              {/* Special needs chips */}
-                              <Text style={styles.needsLabel}>Special Needs / Accessibility</Text>
-                              <View style={styles.needsGrid}>
-                                {NEEDS_OPTIONS.map(need => {
-                                  const sel = m.needs?.includes(need);
-                                  return (
-                                    <TouchableOpacity
-                                      key={need}
-                                      style={[styles.needChip, sel && styles.needChipActive]}
-                                      onPress={() => toggleMemberNeed(fi, mi, need)}
-                                    >
-                                      <Text style={[styles.needChipText, sel && styles.needChipTextActive]}>
-                                        {need}
-                                      </Text>
-                                    </TouchableOpacity>
-                                  );
-                                })}
-                              </View>
-                            </View>
-                          ))}
-
-                          <TouchableOpacity style={styles.addMemberBtn} onPress={() => addMember(fi)}>
-                            <Text style={styles.addMemberText}>+ Add Person</Text>
-                          </TouchableOpacity>
-                        </>
-                      )}
-                    </View>
-                  );
-                })}
-
-                <TouchableOpacity style={styles.addFamBtn} onPress={addFamilyForm}>
-                  <Text style={styles.addFamBtnText}>+ Add Another Family</Text>
-                </TouchableOpacity>
-
-                {/* Credit estimate + buy panel */}
-                {mode === 'ai' && (
-                  <View style={styles.creditStep3Wrap}>
-                    <CreditEstCard />
-                    {!creditEst && (
-                      <View style={styles.creditPlaceholder}>
-                        <Text style={styles.creditPlaceholderText}>
-                          💳 Credit cost will appear once dates are set
-                        </Text>
-                      </View>
-                    )}
-
-                    {/* Buy credits panel — shown when insufficient */}
-                    {showCreditBuy && creditEst && account.credits < creditEst.total && (
-                      <View style={styles.buyPanel}>
-                        <Text style={styles.buyTitle}>Top up to unlock your AI itinerary</Text>
-                        <Text style={styles.buySubtitle}>
-                          You need {creditEst.total - account.credits} more credits to generate this trip
-                        </Text>
-
-                        {CREDIT_PACKS.map(pack => {
-                          const coversShortfall = account.credits + pack.credits >= creditEst.total;
-                          return (
-                            <TouchableOpacity
-                              key={pack.credits}
-                              style={[styles.packRow, pack.best && styles.packRowBest]}
-                              onPress={() => {
-                                addCredits(pack.credits);
-                                showToast(`${pack.credits} credits added!`, '💳');
-                                if (coversShortfall) setShowCreditBuy(false);
-                              }}
-                              activeOpacity={0.8}
-                            >
-                              <View style={styles.packLeft}>
-                                {pack.best && (
-                                  <View style={styles.bestBadge}>
-                                    <Text style={styles.bestBadgeText}>⭐ Best Value</Text>
-                                  </View>
-                                )}
-                                <Text style={[styles.packCredits, pack.best && styles.packCreditsBest]}>
-                                  {pack.credits} credits
-                                </Text>
-                                <Text style={styles.packCovers}>
-                                  {coversShortfall ? '✓ Covers this trip' : `${account.credits + pack.credits} total`}
-                                </Text>
-                              </View>
-                              <View style={[styles.packPriceBtn, pack.best && styles.packPriceBtnBest]}>
-                                <Text style={[styles.packPrice, pack.best && styles.packPriceBest]}>{pack.price}</Text>
-                              </View>
-                            </TouchableOpacity>
-                          );
-                        })}
-
-                        <View style={styles.buyDivider}>
-                          <View style={styles.buyDividerLine} />
-                          <Text style={styles.buyDividerText}>or</Text>
-                          <View style={styles.buyDividerLine} />
+                  {MODES.map(m => {
+                    const active = mode === m.key;
+                    return (
+                      <TouchableOpacity
+                        key={m.key}
+                        style={[s.modeCard, active && { borderColor: m.color, backgroundColor: m.color + '12' }]}
+                        onPress={() => setMode(m.key)}
+                        activeOpacity={0.75}
+                      >
+                        <View style={[s.modeIconWrap, active && { backgroundColor: m.color + '22' }]}>
+                          <Text style={s.modeIcon}>{m.icon}</Text>
                         </View>
+                        <View style={s.modeTextBlock}>
+                          <Text style={[s.modeLabel, active && { color: m.color }]}>{m.label}</Text>
+                          <Text style={s.modeDesc}>{m.desc}</Text>
+                        </View>
+                        <View style={[s.modeRadio, active && { borderColor: m.color }]}>
+                          {active && <View style={[s.modeRadioDot, { backgroundColor: m.color }]} />}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
 
-                        <TouchableOpacity
-                          style={styles.saveDraftBtn}
-                          onPress={() => {
-                            const trip = createTrip({ name, destination, startDate, endDate, mode: 'manual', familyForms });
-                            reset();
-                            showToast('Trip saved as draft — switch to AI anytime 📝', '✅');
-                            onCreated(trip);
-                          }}
-                        >
-                          <Text style={styles.saveDraftText}>Save as Draft (Manual mode)</Text>
-                          <Text style={styles.saveDraftSub}>You can switch to AI planning later from the trip menu</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                )}
-              </>
-            )}
-          </ScrollView>
-        )}
+                  {/* AI gate — not logged in */}
+                  {mode === 'ai' && !account.loggedIn && (
+                    <View style={s.aiGate}>
+                      <Text style={s.aiGateIcon}>🤖</Text>
+                      <Text style={s.aiGateTitle}>AI Planner requires an account</Text>
+                      <Text style={s.aiGateSub}>Sign up free — includes 1 AI trip plan + 3 AI trip reviews.</Text>
+                      <TouchableOpacity style={s.aiGateBtn} onPress={() => { handleClose(); onNeedAuth(); }}>
+                        <Text style={s.aiGateBtnText}>Create Free Account</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
 
-        {/* Footer */}
-        {!generating && (
-          <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-            {step < 3 ? (
-              <TouchableOpacity style={styles.primaryBtn} onPress={nextStep}>
-                <Text style={styles.primaryBtnText}>Next →</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.primaryBtn, { backgroundColor: colors.green }]}
-                onPress={handleCreate}
-              >
-                <Text style={styles.primaryBtnText}>🚀 Create Trip</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-      </View>
+                  {/* AI gate — quota exhausted */}
+                  {mode === 'ai' && account.loggedIn && !canUseAIPlanner && (
+                    <View style={[s.aiGate, { borderColor: '#e17055' }]}>
+                      <Text style={s.aiGateIcon}>🔒</Text>
+                      <Text style={s.aiGateTitle}>Free AI Plan Used</Text>
+                      <Text style={s.aiGateSub}>Upgrade to Pro for unlimited AI planning.</Text>
+                      <TouchableOpacity
+                        style={[s.aiGateBtn, { backgroundColor: colors.ai }]}
+                        onPress={() => { upgradeToPro(); showToast('Upgraded to Pro! 🎉', '✅'); }}
+                      >
+                        <Text style={s.aiGateBtnText}>Upgrade to Pro — {PRO_MONTHLY_PRICE}/mo</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setMode('manual')} style={{ marginTop: 10 }}>
+                        <Text style={{ ...typography.smallBold, color: colors.muted }}>Continue with Manual →</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {/* AI quota info */}
+                  {mode === 'ai' && account.loggedIn && canUseAIPlanner && (
+                    <View style={s.quotaInfo}>
+                      <Text style={s.quotaText}>
+                        {isPro ? '✅ Pro — unlimited AI plans' : '🎁 1 free AI plan remaining'}
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
+          )}
+
+          {/* ── Footer ───────────────────────────────── */}
+          {!generating && (
+            <View style={[s.footer, { paddingBottom: insets.bottom + 16 }]}>
+              {step < 3 ? (
+                <TouchableOpacity style={s.primaryBtn} onPress={nextStep}>
+                  <Text style={s.primaryBtnText}>
+                    {step === 2 && tripFamilies.length > 0
+                      ? `Next — ${tripFamilies.length} group${tripFamilies.length !== 1 ? 's' : ''} added →`
+                      : step === 2 ? 'Skip for now →' : 'Next →'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    s.primaryBtn,
+                    !mode && { backgroundColor: colors.border },
+                    mode === 'ai' && { backgroundColor: colors.ai },
+                    mode === 'manual' && { backgroundColor: colors.green },
+                    mode === 'expert' && { backgroundColor: colors.expert },
+                  ]}
+                  onPress={handleCreate}
+                  disabled={!mode}
+                >
+                  <Text style={s.primaryBtnText}>
+                    {mode === 'ai' ? '🤖 Generate AI Itinerary'
+                      : mode === 'expert' ? '🧳 Request Expert Plan'
+                      : '🗺️ Create Trip'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+// ── Main modal styles ─────────────────────────────────────────────
+const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   header: { flexDirection: 'row', alignItems: 'center', padding: spacing.xxl, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerSide: { flex: 1 },
+  headerBtn: { flex: 1 },
   backText: { ...typography.bodyBold, color: colors.primary },
   headerTitle: { flex: 2, ...typography.h4, color: colors.text, textAlign: 'center' },
 
-  steps: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  steps: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg },
   stepItem: { flex: 3, alignItems: 'center' },
   stepDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
-  stepDone: { backgroundColor: colors.green, borderColor: colors.green },
+  stepDone:   { backgroundColor: colors.green,   borderColor: colors.green },
   stepActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  stepNum: { fontSize: 13, fontWeight: '700', color: colors.muted },
-  stepLine: { flex: 1, height: 2, backgroundColor: colors.border, marginHorizontal: 4, marginTop: 13 },
-  stepLabel: { fontSize: 10, fontWeight: '600', color: colors.muted, marginTop: 5, textTransform: 'uppercase', letterSpacing: 0.2, textAlign: 'center' },
+  stepNum:    { fontSize: 13, fontWeight: '700', color: colors.muted },
+  stepLine:   { flex: 1, height: 2, backgroundColor: colors.border, marginHorizontal: 4, marginTop: 13 },
+  stepLabel:  { fontSize: 10, fontWeight: '600', color: colors.muted, marginTop: 5, textTransform: 'uppercase', letterSpacing: 0.2, textAlign: 'center' },
   stepLabelActive: { color: colors.primary },
-  stepLabelDone: { color: colors.green },
+  stepLabelDone:   { color: colors.green },
 
   scroll: { flex: 1 },
-  content: { padding: spacing.xxl },
+  content: { padding: spacing.xxl, paddingBottom: 80 },
   stepHint: { ...typography.small, color: colors.muted, marginBottom: spacing.lg, lineHeight: 18 },
 
-  // Mode cards
+  formGroup: { marginBottom: spacing.lg },
+  label: { fontSize: 12, fontWeight: '700', color: colors.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
+  input: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: 13, paddingVertical: 11, fontSize: 14, color: colors.text, backgroundColor: colors.surface },
+  dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: 13, paddingVertical: 11, backgroundColor: colors.surface },
+  dateBtnIcon: { fontSize: 16 },
+  dateBtnText: { ...typography.small, color: colors.text, fontWeight: '600', flex: 1 },
+  datePlaceholder: { color: colors.muted, fontWeight: '400' },
+
+  summaryPill: { backgroundColor: colors.surface2, borderRadius: radius.full, paddingHorizontal: spacing.lg, paddingVertical: 8, alignSelf: 'flex-start', marginBottom: spacing.lg, borderWidth: 1, borderColor: colors.border },
+  summaryText: { ...typography.small, color: colors.text, fontWeight: '600' },
+
   modeCard: { borderWidth: 2, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 14 },
   modeIconWrap: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface2 },
   modeIcon: { fontSize: 26 },
   modeTextBlock: { flex: 1 },
   modeLabel: { ...typography.bodyBold, color: colors.text },
-  modeDesc: { ...typography.small, color: colors.muted, marginTop: 2 },
+  modeDesc: { ...typography.small, color: colors.muted, marginTop: 2, lineHeight: 16 },
   modeRadio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   modeRadioDot: { width: 10, height: 10, borderRadius: 5 },
 
-  // Form
-  formGroup: { marginBottom: spacing.lg },
-  label: { fontSize: 12, fontWeight: '700', color: colors.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
-  input: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: 13, paddingVertical: 11, fontSize: 14, color: colors.text, backgroundColor: colors.surface },
-  dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: 13, paddingVertical: 11, backgroundColor: colors.surface },
-  dateBtnIcon: { fontSize: 16 },
-  dateBtnText: { ...typography.small, color: colors.text, fontWeight: '600' },
-  datePlaceholder: { color: colors.muted, fontWeight: '400' },
-
-  // AI gate
   aiGate: { backgroundColor: colors.aiLight, borderWidth: 2, borderColor: colors.ai, borderRadius: radius.lg, padding: spacing.xl, alignItems: 'center', marginTop: spacing.md },
-  aiGateIcon: { fontSize: 40, marginBottom: 10 },
-  aiGateTitle: { ...typography.bodyBold, color: colors.text, marginBottom: 6 },
-  aiGateSub: { ...typography.small, color: colors.muted, textAlign: 'center', marginBottom: 14 },
-  aiGateBtn: { backgroundColor: colors.ai, borderRadius: radius.md, paddingHorizontal: 18, paddingVertical: 11 },
+  aiGateIcon: { fontSize: 36, marginBottom: 8 },
+  aiGateTitle: { ...typography.bodyBold, color: colors.text, marginBottom: 4 },
+  aiGateSub: { ...typography.small, color: colors.muted, textAlign: 'center', marginBottom: 14, lineHeight: 18 },
+  aiGateBtn: { backgroundColor: colors.primary, borderRadius: radius.md, paddingHorizontal: 20, paddingVertical: 11 },
   aiGateBtnText: { color: '#fff', fontWeight: '700' },
 
-  // Credit estimator
-  estimator: { borderWidth: 2, borderRadius: radius.lg, padding: spacing.lg, marginTop: spacing.md },
-  estHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  estTitle: { ...typography.bodyBold, color: colors.text },
-  estTotal: { fontSize: 22, fontWeight: '900' },
-  estBalance: { ...typography.tiny, color: colors.muted, marginBottom: spacing.md },
-  estItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: colors.border },
-  estItemLabel: { ...typography.small, color: colors.muted },
-  estItemCr: { ...typography.smallBold, color: colors.text },
-  estWarn: { ...typography.smallBold, color: colors.red, marginTop: spacing.sm, textAlign: 'center' },
-  creditStep3Wrap: { marginTop: spacing.md },
-  creditPlaceholder: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, alignItems: 'center', borderStyle: 'dashed' },
-  creditPlaceholderText: { ...typography.small, color: colors.muted },
-
-  // Family form
-  familyForm: { backgroundColor: colors.surface2, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
-  familyFormHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: spacing.sm },
-  familyNameInput: { flex: 1, marginBottom: 0 },
-  collapseBtn: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
-  collapseIcon: { fontSize: 14, color: colors.muted, fontWeight: '700' },
-  collapsedSummary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 },
-  collapsedSummaryText: { ...typography.small, color: colors.muted },
-  expandHint: { ...typography.tiny, color: colors.primary },
-
-  // Member card
-  memberCard: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, padding: spacing.md, marginBottom: spacing.sm },
-  memberInputRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: spacing.sm },
-  removeText: { color: colors.muted, fontSize: 16, padding: 4 },
-  removeFamText: { color: colors.muted, fontSize: 18, padding: 4 },
-
-  // Adult / Child toggle
-  typeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: spacing.sm },
-  typeLabel: { fontSize: 11, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4, width: 36 },
-  typeToggle: { flexDirection: 'row', gap: 6 },
-  typeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface2 },
-  typeBtnActive: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
-  typeBtnText: { fontSize: 12, fontWeight: '600', color: colors.muted },
-  typeBtnTextActive: { color: colors.primary },
-
-  // Needs chips
-  needsLabel: { fontSize: 11, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 },
-  needsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  needChip: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface2 },
-  needChipActive: { backgroundColor: colors.greenLight, borderColor: colors.green },
-  needChipText: { fontSize: 11, fontWeight: '600', color: colors.muted },
-  needChipTextActive: { color: colors.green },
-
-  addMemberBtn: { marginTop: spacing.sm },
-  addMemberText: { ...typography.smallBold, color: colors.muted, paddingVertical: 4 },
-  addFamBtn: { borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.md, paddingVertical: 12, alignItems: 'center', marginBottom: spacing.sm },
-  addFamBtnText: { ...typography.bodyBold, color: colors.primary },
-
-  // Buy credits panel
-  buyPanel: { marginTop: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.border, overflow: 'hidden' },
-  buyTitle: { ...typography.bodyBold, color: colors.text, padding: spacing.lg, paddingBottom: 4 },
-  buySubtitle: { ...typography.small, color: colors.muted, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
-
-  packRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface },
-  packRowBest: { backgroundColor: colors.primaryLight + '18' },
-  packLeft: { flex: 1 },
-  bestBadge: { alignSelf: 'flex-start', backgroundColor: colors.yellow + '33', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2, marginBottom: 4 },
-  bestBadgeText: { fontSize: 10, fontWeight: '700', color: colors.yellow },
-  packCredits: { ...typography.bodyBold, color: colors.text },
-  packCreditsBest: { color: colors.primary },
-  packCovers: { ...typography.tiny, color: colors.green, marginTop: 2 },
-  packPriceBtn: { backgroundColor: colors.surface2, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: colors.border },
-  packPriceBtnBest: { backgroundColor: colors.primary, borderColor: colors.primary },
-  packPrice: { ...typography.bodyBold, color: colors.text },
-  packPriceBest: { color: '#fff' },
-
-  buyDivider: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  buyDividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  buyDividerText: { ...typography.small, color: colors.muted },
-
-  saveDraftBtn: { padding: spacing.lg, alignItems: 'center' },
-  saveDraftText: { ...typography.bodyBold, color: colors.primary },
-  saveDraftSub: { ...typography.tiny, color: colors.muted, marginTop: 4, textAlign: 'center' },
-
-  footer: { padding: spacing.xxl, borderTopWidth: 1, borderTopColor: colors.border },
-  primaryBtn: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 14, alignItems: 'center' },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  quotaInfo: { backgroundColor: colors.greenLight, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.green },
+  quotaText: { ...typography.small, color: colors.green, fontWeight: '600', textAlign: 'center' },
 
   generating: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl },
-  genIcon: { fontSize: 56, marginBottom: 16 },
+  genIcon:  { fontSize: 56, marginBottom: 16 },
   genTitle: { ...typography.h3, color: colors.text, textAlign: 'center', marginBottom: 8 },
-  genSub: { ...typography.body, color: colors.muted, textAlign: 'center' },
+  genSub:   { ...typography.body, color: colors.muted, textAlign: 'center', lineHeight: 22 },
+
+  footer: { padding: spacing.xxl, borderTopWidth: 1, borderTopColor: colors.border },
+  primaryBtn: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 15, alignItems: 'center' },
+  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+});
+
+// ── Step 2 styles ─────────────────────────────────────────────────
+const t = StyleSheet.create({
+  sectionHeader: { marginBottom: spacing.lg },
+  sectionTitle: { ...typography.h4, color: colors.text },
+  sectionSub: { ...typography.small, color: colors.muted, marginTop: 3, lineHeight: 17 },
+
+  // Empty state
+  emptyState: { alignItems: 'center', paddingVertical: 32, paddingHorizontal: spacing.xl },
+  emptyIcon: { fontSize: 40, marginBottom: 12 },
+  emptyTitle: { ...typography.bodyBold, color: colors.text, marginBottom: 6, textAlign: 'center' },
+  emptyBody: { ...typography.small, color: colors.muted, textAlign: 'center', lineHeight: 19 },
+
+  // Family card
+  familyCard: {
+    backgroundColor: '#fff', borderLeftWidth: 4, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.border,
+    marginBottom: spacing.md, overflow: 'hidden', ...shadow.sm,
+  },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md },
+  colorDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
+  familyName: { ...typography.bodyBold, color: colors.text, flex: 1 },
+  libraryBadge: { backgroundColor: colors.primaryLight, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 3 },
+  libraryBadgeText: { fontSize: 10, fontWeight: '700', color: colors.primary },
+  removeBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
+  removeBtnText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+
+  // Member chips
+  memberChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.surface2, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: colors.border },
+  chipAvatar: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  chipAvatarText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  chipName: { ...typography.caption, color: colors.text, fontWeight: '700' },
+  chipAge: { ...typography.tiny, color: colors.muted },
+  chipRemove: { color: colors.muted, fontSize: 9, marginLeft: 2, fontWeight: '700' },
+
+  // Add member button
+  addMemberBtn: { paddingHorizontal: spacing.md, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border },
+  addMemberText: { ...typography.smallBold, color: colors.primary },
+
+  // Member adder
+  memberAdder: { borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface2 },
+  tabToggle: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
+  tabBtn: { flex: 1, paddingVertical: 10, alignItems: 'center' },
+  tabBtnActive: { borderBottomWidth: 2, borderBottomColor: colors.primary, backgroundColor: '#fff' },
+  tabBtnText: { ...typography.caption, color: colors.muted, fontWeight: '700' },
+  tabBtnTextActive: { color: colors.primary },
+
+  // Library tab
+  emptyLib: { ...typography.small, color: colors.muted, padding: spacing.lg, textAlign: 'center', lineHeight: 18 },
+  libraryList: {},
+  libRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+  libRowDone: { opacity: 0.55 },
+  libAvatar: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  libAvatarText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  libName: { ...typography.bodyBold, color: colors.text },
+  libMeta: { ...typography.small, color: colors.muted, marginTop: 1 },
+  addTag: { ...typography.smallBold, color: colors.primary, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.full },
+  addedTag: { ...typography.tiny, color: colors.green, fontWeight: '700' },
+
+  // New person tab
+  newPersonForm: { padding: spacing.md },
+  newPersonRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  input: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: 11, paddingVertical: 10, fontSize: 14, color: colors.text, backgroundColor: '#fff' },
+  saveToggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: '#fff', borderRadius: radius.sm, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
+  saveToggleLabel: { ...typography.smallBold, color: colors.text },
+  saveToggleSub: { ...typography.tiny, color: colors.muted, marginTop: 2 },
+  addPersonBtn: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 11, alignItems: 'center' },
+  addPersonBtnText: { color: '#fff', fontWeight: '700' },
+
+  // Group picker panel
+  pickerPanel: { backgroundColor: '#fff', borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.border, marginBottom: spacing.md, overflow: 'hidden', ...shadow.sm },
+  pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface2 },
+  pickerTitle: { ...typography.bodyBold, color: colors.text },
+  pickerClose: { color: colors.muted, fontSize: 16, fontWeight: '700', padding: 4 },
+  groupPickerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  groupPickerName: { ...typography.bodyBold, color: colors.text },
+  groupPickerMembers: { ...typography.small, color: colors.muted, marginTop: 1 },
+  groupPickerBtn: { backgroundColor: colors.primary, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 8 },
+  groupPickerBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+
+  // New family form
+  newFamilyForm: { backgroundColor: colors.surface2, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1.5, borderColor: colors.border, borderStyle: 'dashed', marginBottom: spacing.md },
+  newFamilyTitle: { ...typography.smallBold, color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: spacing.sm },
+  newFamilyRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
+  createBtn: { backgroundColor: colors.primary, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 11 },
+  createBtnText: { color: '#fff', fontWeight: '700' },
+  cancelText: { ...typography.small, color: colors.muted, paddingHorizontal: 6 },
+
+  // CTAs
+  ctaRow: { flexDirection: 'row', borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.lg, overflow: 'hidden', marginTop: spacing.md },
+  ctaBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14 },
+  ctaDivider: { width: 1.5, backgroundColor: colors.primary },
+  ctaIcon: { fontSize: 16 },
+  ctaLabel: { ...typography.bodyBold, color: colors.primary },
 });

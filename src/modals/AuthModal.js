@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import useStore from '../store';
 import { colors, spacing, radius, typography } from '../theme';
 import { FormField, InfoBanner } from '../components/ui';
+import { useKeyboardOffset } from '../utils/useKeyboardOffset';
 
 const TAB_OPTIONS = [
   { key: 'signup', label: 'Create Account' },
@@ -11,6 +12,7 @@ const TAB_OPTIONS = [
 
 export default function AuthModal({ visible, onClose, defaultTab = 'signup' }) {
   const { signUp, signIn } = useStore();
+  const kbOffset = useKeyboardOffset();
 
   const [tab, setTab] = useState(defaultTab);
   const [name, setName] = useState('');
@@ -42,8 +44,7 @@ export default function AuthModal({ visible, onClose, defaultTab = 'signup' }) {
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingBottom: kbOffset }]}>
 
           {/* Header */}
           <View style={styles.header}>
@@ -71,8 +72,8 @@ export default function AuthModal({ visible, onClose, defaultTab = 'signup' }) {
             {tab === 'signup' && (
               <InfoBanner
                 icon="🎁"
-                title="100 free credits on sign-up"
-                subtitle="Use credits to generate AI travel plans"
+                title="Free account includes"
+                subtitle="1 AI trip plan · 3 AI trip reviews · Traveler library · Group management"
                 color="#9b6e00"
                 bgColor={colors.yellowLight}
               />
@@ -93,7 +94,7 @@ export default function AuthModal({ visible, onClose, defaultTab = 'signup' }) {
             >
               {loading
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.submitBtnText}>{tab === 'signup' ? 'Create Account & Get 100 Credits' : 'Sign In'}</Text>
+                : <Text style={styles.submitBtnText}>{tab === 'signup' ? 'Create Free Account' : 'Sign In'}</Text>
               }
             </TouchableOpacity>
 
@@ -106,7 +107,6 @@ export default function AuthModal({ visible, onClose, defaultTab = 'signup' }) {
             <Text style={styles.footer}>By continuing you agree to Voyara's Terms of Service and Privacy Policy.</Text>
           </ScrollView>
         </View>
-      </KeyboardAvoidingView>
     </Modal>
   );
 }

@@ -96,6 +96,39 @@ export const familyPalette = [
   '#e84393', '#e67e22', '#2d3436', '#fdcb6e',
 ];
 
+/**
+ * effectiveMember(member, travelers)
+ *
+ * Returns the "merged" view of a trip member:
+ *   trip override ?? traveler global default ?? []
+ *
+ * Rules:
+ * - name, age: trip member wins (may have been overridden per-trip)
+ * - needs: trip member array wins if non-empty, else fall back to traveler
+ * - dietary, pacePreference, interests, notes: traveler global is the source of truth
+ *   unless a trip-level override exists (stored as _dietary, _pace, etc.)
+ */
+export function effectiveMember(member, travelers = []) {
+  const tv = member.travelerId
+    ? travelers.find(t => t.id === member.travelerId) || null
+    : null;
+
+  return {
+    ...member,
+    // needs: prefer the trip-level array if it has entries, else fall back to traveler
+    needs: (member.needs && member.needs.length > 0)
+      ? member.needs
+      : (tv?.needs || []),
+    // traveler-level fields available for AI analysis
+    dietary:        tv?.dietary        || [],
+    pacePreference: tv?.pacePreference || 'moderate',
+    interests:      tv?.interests      || [],
+    notes:          tv?.notes          || '',
+    // expose the linked traveler for direct access
+    traveler: tv,
+  };
+}
+
 // Credit estimation formula
 // adults: count of adult travelers, children: count of child travelers, needsCount: travelers with special needs
 export function calcCreditEstimate(days, adults, children, needsCount) {

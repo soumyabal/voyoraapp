@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, Alert,
+  StyleSheet, Alert,
 } from 'react-native';
 import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography } from '../theme';
-import { FormField, ModalHeader, DateRangePicker } from '../components/ui';
+import { FormField, ModalHeader, DateRangePicker, LocationSearchField } from '../components/ui';
 import { fmt } from '../utils/helpers';
+import { useKeyboardOffset } from '../utils/useKeyboardOffset';
 
 export default function EditTripModal({ visible, trip, onClose }) {
   const { updateTrip, duplicateTrip } = useStore();
+  const kbOffset = useKeyboardOffset();
 
   const [name, setName] = useState('');
   const [destination, setDestination] = useState('');
@@ -53,8 +55,8 @@ export default function EditTripModal({ visible, trip, onClose }) {
 
     if (isDestructive) {
       Alert.alert(
-        '⚠️ This will break your itinerary',
-        'Changing the date range or destination does not update your existing itinerary days or Splitwise expenses — your plan will go out of sync.\n\nWe recommend duplicating the trip and editing the copy so the original stays safe.',
+        '⚠️ This will reset your trip',
+        'Changing the date range or destination will reset your trip. Duplicate it instead to keep the original safe.',
         [
           {
             text: 'Duplicate Trip Instead',
@@ -85,8 +87,7 @@ export default function EditTripModal({ visible, trip, onClose }) {
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingBottom: kbOffset }]}>
           <ModalHeader
             title="Edit Trip"
             closeLabel="Cancel"
@@ -105,10 +106,10 @@ export default function EditTripModal({ visible, trip, onClose }) {
               placeholder="e.g. Bali Family Adventure"
               autoFocus
             />
-            <FormField
+            <LocationSearchField
               label="Destination *"
               value={destination}
-              onChangeText={setDestination}
+              onSelect={setDestination}
               placeholder="e.g. Bali, Indonesia"
             />
 
@@ -128,14 +129,13 @@ export default function EditTripModal({ visible, trip, onClose }) {
                 <Text style={styles.noteIcon}>{isDestructive ? '⚠️' : 'ℹ️'}</Text>
                 <Text style={[styles.noteText, isDestructive && styles.warnText]}>
                   {isDestructive
-                    ? 'Changing the date range or destination will not update your existing itinerary days or Splitwise entries. Duplicate the trip instead to keep the original safe.'
+                    ? 'Changing the date range or destination will reset the trip. Duplicate it instead.'
                     : 'Editing dates won\'t change existing itinerary days. Add or remove activities manually.'}
                 </Text>
               </View>
             )}
           </ScrollView>
         </View>
-      </KeyboardAvoidingView>
 
       <DateRangePicker
         visible={showDatePicker}

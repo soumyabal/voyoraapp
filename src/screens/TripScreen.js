@@ -10,21 +10,24 @@ import TravelersScreen from './TravelersScreen';
 import SplitwiseScreen from './SplitwiseScreen';
 import EditTripModal from '../modals/EditTripModal';
 import ChangeModeModal from '../modals/ChangeModeModal';
+import AIPlannerModal from '../modals/AIPlannerModal';
 import { colors, spacing, typography, radius } from '../theme';
 import { fmt, getAllMembers } from '../utils/helpers';
 
+// AI tab removed — plan is triggered directly from header / People screen
 const TABS = [
-  { key: 'itinerary', label: '📅 Itinerary' },
-  { key: 'travelers', label: '👨‍👩‍👧‍👦 Travelers' },
-  { key: 'splitwise', label: '💸 Splitwise' },
+  { key: 'itinerary', label: '📅 Plan' },
+  { key: 'travelers', label: '👥 People' },
+  { key: 'splitwise', label: '💸 Split' },
 ];
 
 export default function TripScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { getCurrentTrip, deleteTrip, duplicateTrip, setCurrentTrip } = useStore();
-  const [activeTab, setActiveTab] = useState('itinerary');
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showModeModal, setShowModeModal] = useState(false);
+  const { getCurrentTrip, deleteTrip, duplicateTrip, setCurrentTrip, travelers } = useStore();
+  const [activeTab, setActiveTab]           = useState('itinerary');
+  const [showEditModal, setShowEditModal]   = useState(false);
+  const [showModeModal, setShowModeModal]   = useState(false);
+  const [showPlanner, setShowPlanner]       = useState(false);
   const trip = getCurrentTrip();
 
   if (!trip) {
@@ -38,7 +41,8 @@ export default function TripScreen({ navigation }) {
     );
   }
 
-  const isExpert = trip.mode === 'expert';
+  const isAIMode = trip.mode === 'ai';
+  const hasActivities = trip.days?.some(d => d.activities.length > 0);
   const hasAccessible = trip.families.some(f => f.members.some(m => m.needs.length > 0));
   const modeLabel = trip.mode === 'ai' ? '🤖 AI Planned' : trip.mode === 'expert' ? '🧳 Expert' : '✍️ Manual';
 
@@ -53,61 +57,32 @@ export default function TripScreen({ navigation }) {
       '',
       'Planned with Voyara 🗺️',
     ].join('\n');
-
-    try {
-      await Share.share({ message: text, title: trip.name });
-    } catch (_) {}
+    try { await Share.share({ message: text, title: trip.name }); } catch (_) {}
   };
 
   const handleDuplicate = () => {
-    Alert.alert(
-      'Duplicate Trip',
-      `Create a copy of "${trip.name}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Duplicate',
-          onPress: () => {
-            duplicateTrip(trip.id);
-            Alert.alert('Done', 'Trip duplicated and added to your list.');
-          },
-        },
-      ],
-    );
+    Alert.alert('Duplicate Trip', `Create a copy of "${trip.name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Duplicate', onPress: () => { duplicateTrip(trip.id); Alert.alert('Done', 'Trip duplicated and added to your list.'); } },
+    ]);
   };
 
   const handleDelete = () => {
-    Alert.alert(
-      'Delete Trip',
-      `Are you sure you want to delete "${trip.name}"? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            deleteTrip(trip.id);
-            setCurrentTrip(null);
-            navigation.goBack();
-          },
-        },
-      ],
-    );
+    Alert.alert('Delete Trip', `Are you sure you want to delete "${trip.name}"? This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => { deleteTrip(trip.id); setCurrentTrip(null); navigation.goBack(); } },
+    ]);
   };
 
   const handleMenu = () => {
-    Alert.alert(
-      trip.name,
-      'What would you like to do?',
-      [
-        { text: '✏️  Edit Trip', onPress: () => setShowEditModal(true) },
-        { text: '🔄  Switch Planning Mode', onPress: () => setShowModeModal(true) },
-        { text: '📋  Duplicate', onPress: handleDuplicate },
-        { text: '📤  Share', onPress: handleShare },
-        { text: '🗑️  Delete Trip', onPress: handleDelete, style: 'destructive' },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    );
+    Alert.alert(trip.name, 'What would you like to do?', [
+      { text: '✏️  Edit Trip',              onPress: () => setShowEditModal(true) },
+      { text: '🔄  Switch Planning Mode',   onPress: () => setShowModeModal(true) },
+      { text: '📋  Duplicate',              onPress: handleDuplicate },
+      { text: '📤  Share',                  onPress: handleShare },
+      { text: '🗑️  Delete Trip',            onPress: handleDelete, style: 'destructive' },
+      { text: 'Cancel',                     style: 'cancel' },
+    ]);
   };
 
   return (
@@ -124,6 +99,7 @@ export default function TripScreen({ navigation }) {
             <Text style={styles.menuText}>⋮</Text>
           </TouchableOpacity>
         </View>
+
         <View style={styles.tripInfo}>
           <Text style={styles.emoji}>{trip.emoji}</Text>
           <View style={{ flex: 1 }}>
@@ -137,6 +113,19 @@ export default function TripScreen({ navigation }) {
                 <View style={[styles.tag, { backgroundColor: '#fff8e6' }]}>
                   <Text style={[styles.tagText, { color: '#9b6e00' }]}>♿ Needs</Text>
                 </View>
+              )}
+
+              {/* Plan with AI / Update Plan button — AI mode trips only */}
+              {isAIMode && (
+                <TouchableOpacity
+                  style={[styles.planBtn, hasActivities && styles.planBtnUpdate]}
+                  onPress={() => setShowPlanner(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.planBtnText}>
+                    {hasActivities ? '↺ Update Plan' : '✨ Plan with AI'}
+                  </Text>
+                </TouchableOpacity>
               )}
             </View>
           </View>
@@ -158,13 +147,30 @@ export default function TripScreen({ navigation }) {
 
       {/* Tab Content */}
       <View style={{ flex: 1 }}>
-        {activeTab === 'itinerary' && <ItineraryScreen trip={trip} switchTab={setActiveTab} />}
-        {activeTab === 'travelers' && <TravelersScreen trip={trip} />}
+        {activeTab === 'itinerary' && (
+          <ItineraryScreen
+            trip={trip}
+            switchTab={setActiveTab}
+            onPlanWithAI={isAIMode ? () => setShowPlanner(true) : undefined}
+          />
+        )}
+        {activeTab === 'travelers' && (
+          <TravelersScreen
+            trip={trip}
+            onUpdatePlan={isAIMode ? () => setShowPlanner(true) : undefined}
+          />
+        )}
         {activeTab === 'splitwise' && <SplitwiseScreen trip={trip} />}
       </View>
 
       <EditTripModal visible={showEditModal} trip={trip} onClose={() => setShowEditModal(false)} />
       <ChangeModeModal visible={showModeModal} trip={trip} onClose={() => setShowModeModal(false)} />
+      <AIPlannerModal
+        visible={showPlanner}
+        trip={trip}
+        travelers={travelers}
+        onClose={() => setShowPlanner(false)}
+      />
     </View>
   );
 }
@@ -196,16 +202,24 @@ const styles = StyleSheet.create({
   emoji: { fontSize: 32, marginTop: 2 },
   tripName: { ...typography.h3, color: colors.text, flex: 1 },
   tripMeta: { ...typography.caption, color: colors.muted, marginTop: 2 },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm, alignItems: 'center' },
   tag: { borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 },
   tagText: { ...typography.caption, fontWeight: '700', fontSize: 11 },
+
+  // Plan with AI / Update Plan button (inline with tags)
+  planBtn: {
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    backgroundColor: colors.ai,
+  },
+  planBtnUpdate: { backgroundColor: colors.primary },
+  planBtnText: { ...typography.caption, color: '#fff', fontWeight: '800', fontSize: 11 },
 
   // ── Tab bar ──────────────────────────────────────────────────────
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    marginTop: spacing.md,
   },
   tab: {
     flex: 1,
@@ -215,6 +229,6 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabActive: { borderBottomColor: colors.primary },
-  tabText: { ...typography.caption, color: colors.muted, fontWeight: '600' },
+  tabText: { ...typography.caption, color: colors.muted, fontWeight: '600', fontSize: 11 },
   tabTextActive: { color: colors.primary, fontWeight: '800' },
 });

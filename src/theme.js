@@ -35,6 +35,7 @@ export const radius = {
   sm: 8,
   md: 12,
   lg: 16,
+  xl: 24,
   full: 999,
 };
 
@@ -49,6 +50,7 @@ export const typography = {
   smallBold: { fontSize: 12, fontWeight: '600' },
   tiny: { fontSize: 11, fontWeight: '400' },
   tinyBold: { fontSize: 11, fontWeight: '600' },
+  caption: { fontSize: 11, fontWeight: '400' },
 };
 
 export const shadow = {

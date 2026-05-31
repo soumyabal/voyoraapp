@@ -7,3 +7,4 @@ export { default as FamilyRow } from './FamilyRow';
 export { default as EmptyState } from './EmptyState';
 export { default as InfoBanner } from './InfoBanner';
 export { default as Badge } from './Badge';
+export { default as LocationSearchField } from './LocationSearchField';

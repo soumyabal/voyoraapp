@@ -193,6 +193,50 @@ const useStore = create(
         }),
       })),
 
+      // Move an activity from one day to another, preserving all its data.
+      // Also keeps Splitwise expense link intact (activityId stays the same).
+      moveActivity: (tripId, fromDay, toDay, actId) => set(s => ({
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+          const activity = t.days[fromDay]?.activities.find(a => a.id === actId);
+          if (!activity || fromDay === toDay) return t;
+          return {
+            ...t,
+            days: t.days.map((d, i) => {
+              if (i === fromDay) return { ...d, activities: d.activities.filter(a => a.id !== actId) };
+              if (i === toDay)   return { ...d, activities: [...d.activities, activity] };
+              return d;
+            }),
+            // Update the linked expense name to reflect the new day label
+            expenses: t.expenses.map(e =>
+              e.activityId !== actId ? e : {
+                ...e,
+                name: e.name.replace(/\(Day \d+\)/, `(${t.days[toDay]?.label || `Day ${toDay + 1}`})`),
+              }
+            ),
+          };
+        }),
+      })),
+
+      // Move an activity up or down within its day (direction: -1 = up, +1 = down)
+      reorderActivity: (tripId, dayIndex, actId, direction) => set(s => ({
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+          return {
+            ...t,
+            days: t.days.map((d, i) => {
+              if (i !== dayIndex) return d;
+              const acts = [...d.activities];
+              const idx  = acts.findIndex(a => a.id === actId);
+              const next = idx + direction;
+              if (next < 0 || next >= acts.length) return d;
+              [acts[idx], acts[next]] = [acts[next], acts[idx]];
+              return { ...d, activities: acts };
+            }),
+          };
+        }),
+      })),
+
       deleteActivity: (tripId, actId) => set(s => ({
         trips: s.trips.map(t => {
           if (t.id !== tripId) return t;
@@ -380,6 +424,31 @@ const useStore = create(
 
       // Uneven / custom split — stores per-participant amounts keyed by memberId or famId.
       // Set unevenSplit:false to revert to even splitting.
+      // Toggle a settlement transfer as paid/unpaid.
+      // Key: `${fromId}→${toId}` — stable per trip since settlements are deterministic.
+      toggleSettlementPaid: (tripId, key) => set(s => ({
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+          const settled = new Set(t.settledTransfers || []);
+          if (settled.has(key)) settled.delete(key); else settled.add(key);
+          return { ...t, settledTransfers: [...settled] };
+        }),
+      })),
+
+      // Move a member to index 0 of their family so they become the family head.
+      // The head carries the family's full balance share in "By Group" split mode.
+      setFamilyHead: (tripId, famId, memberId) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          families: t.families.map(f => {
+            if (f.id !== famId) return f;
+            const rest = f.members.filter(m => m.id !== memberId);
+            const head = f.members.find(m => m.id === memberId);
+            return head ? { ...f, members: [head, ...rest] } : f;
+          }),
+        }),
+      })),
+
       updateExpenseCustomShares: (tripId, expId, customShares, unevenSplit) => set(s => ({
         trips: s.trips.map(t => t.id !== tripId ? t : {
           ...t,

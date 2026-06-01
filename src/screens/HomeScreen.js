@@ -30,13 +30,14 @@ function TravelersTab() {
   const {
     travelers, groups,
     createTraveler, deleteTravelerFromLibrary,
-    createGroup, deleteGroup,
+    createGroup, updateGroup, deleteGroup,
     addTravelerToGroup, removeTravelerFromGroup,
   } = useStore();
 
   const [showAddProfile, setShowAddProfile] = useState(false);
   const [editTraveler, setEditTraveler]     = useState(null);
   const [showNewGroup, setShowNewGroup]     = useState(false);
+  const [editGroup, setEditGroup]           = useState(null); // group object to edit
 
   const confirmDeleteTraveler = (tv) => {
     Alert.alert(
@@ -109,8 +110,13 @@ function TravelersTab() {
         ) : (
           travelers.map(tv => {
             const tags = [...(tv.dietary || []), ...(tv.needs || [])];
+            const openActions = () => Alert.alert(tv.name, undefined, [
+              { text: '✏️ Edit', onPress: () => { setEditTraveler(tv); setShowAddProfile(true); } },
+              { text: '🗑️ Remove', style: 'destructive', onPress: () => confirmDeleteTraveler(tv) },
+              { text: 'Cancel', style: 'cancel' },
+            ]);
             return (
-              <View key={tv.id} style={tt.travelerCard}>
+              <TouchableOpacity key={tv.id} style={tt.travelerCard} onPress={openActions} activeOpacity={0.75}>
                 <View style={tt.travelerRow}>
                   <View style={[tt.avatar, { backgroundColor: avatarColor(tv.name) }]}>
                     <Text style={tt.avatarText}>{tv.emoji || tv.name[0]}</Text>
@@ -121,20 +127,7 @@ function TravelersTab() {
                       {tv.age ? `${tv.age}yo · ` : ''}{PACE_LABELS[tv.pacePreference] || '🚶 Moderate'}
                     </Text>
                   </View>
-                  <TouchableOpacity
-                    onPress={() => { setEditTraveler(tv); setShowAddProfile(true); }}
-                    style={tt.actionBtn}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text>✏️</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => confirmDeleteTraveler(tv)}
-                    style={tt.actionBtn}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text>🗑</Text>
-                  </TouchableOpacity>
+                  <Text style={tt.travelerMore}>⋯</Text>
                 </View>
                 {tags.length > 0 && (
                   <View style={tt.tagRow}>
@@ -148,7 +141,7 @@ function TravelersTab() {
                 {(tv.interests || []).length > 0 && (
                   <Text style={tt.interests}>Loves: {tv.interests.join(' · ')}</Text>
                 )}
-              </View>
+              </TouchableOpacity>
             );
           })
         )}
@@ -184,9 +177,18 @@ function TravelersTab() {
                   <View style={{ flex: 1 }}>
                     <Text style={tt.groupName}>{g.name}</Text>
                     <Text style={tt.groupSub}>
-                      {groupTravelers.map(tv => tv.name.split(' ')[0]).join(', ') || 'No members'}
+                      {groupTravelers.length > 0
+                        ? `${groupTravelers.length} member${groupTravelers.length !== 1 ? 's' : ''} · ${groupTravelers.map(tv => tv.name.split(' ')[0]).join(', ')}`
+                        : 'No members yet'}
                     </Text>
                   </View>
+                  <TouchableOpacity
+                    onPress={() => setEditGroup(g)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={tt.actionBtn}
+                  >
+                    <Text>✏️</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => confirmDeleteGroup(g)}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -195,26 +197,28 @@ function TravelersTab() {
                     <Text>🗑</Text>
                   </TouchableOpacity>
                 </View>
-                <View style={tt.groupMembers}>
-                  {groupTravelers.map(tv => (
-                    <View key={tv.id} style={tt.groupMemberChip}>
-                      <Text style={tt.groupMemberEmoji}>{tv.emoji || '👤'}</Text>
-                      <Text style={tt.groupMemberName}>{tv.name.split(' ')[0]}</Text>
-                      <TouchableOpacity onPress={() => confirmRemoveFromGroup(g, tv)}>
-                        <Text style={tt.groupMemberRemove}>✕</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                  {travelers.filter(tv => !(g.travelerIds || []).includes(tv.id)).map(tv => (
-                    <TouchableOpacity
-                      key={tv.id}
-                      style={tt.groupAddChip}
-                      onPress={() => addTravelerToGroup(g.id, tv.id)}
-                    >
-                      <Text style={tt.groupAddChipText}>+ {tv.name.split(' ')[0]}</Text>
+
+                {/* Member chips — tap to see name, no remove inline */}
+                {groupTravelers.length > 0 && (
+                  <View style={tt.groupMembers}>
+                    {groupTravelers.map(tv => (
+                      <View key={tv.id} style={tt.groupMemberChip}>
+                        <Text style={tt.groupMemberEmoji}>{tv.emoji || '👤'}</Text>
+                        <Text style={tt.groupMemberName}>{tv.name.split(' ')[0]}</Text>
+                      </View>
+                    ))}
+                    <TouchableOpacity style={tt.groupEditChip} onPress={() => setEditGroup(g)}>
+                      <Text style={tt.groupEditChipText}>✏️ Edit</Text>
                     </TouchableOpacity>
-                  ))}
-                </View>
+                  </View>
+                )}
+
+                {/* Empty group prompt */}
+                {groupTravelers.length === 0 && (
+                  <TouchableOpacity style={tt.groupEmptyPrompt} onPress={() => setEditGroup(g)}>
+                    <Text style={tt.groupEmptyPromptText}>+ Add members</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             );
           })
@@ -231,6 +235,13 @@ function TravelersTab() {
         travelers={travelers}
         onCreate={createGroup}
         onClose={() => setShowNewGroup(false)}
+      />
+      <EditGroupModal
+        visible={!!editGroup}
+        group={editGroup}
+        travelers={travelers}
+        onSave={(name, travelerIds) => updateGroup(editGroup.id, { name, travelerIds })}
+        onClose={() => setEditGroup(null)}
       />
     </View>
   );
@@ -315,6 +326,92 @@ function NewGroupModal({ visible, travelers, onCreate, onClose }) {
   );
 }
 
+// ─── Edit Group Modal ─────────────────────────────────────────────
+function EditGroupModal({ visible, group, travelers, onSave, onClose }) {
+  const [name, setName]       = useState('');
+  const [selected, setSelected] = useState(new Set());
+
+  React.useEffect(() => {
+    if (visible && group) {
+      setName(group.name || '');
+      setSelected(new Set(group.travelerIds || []));
+    }
+  }, [visible, group]);
+
+  const toggle = (id) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const canSave = name.trim().length > 0;
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={{ flex: 1, backgroundColor: colors.bg }}>
+          <View style={ng.header}>
+            <TouchableOpacity onPress={onClose}><Text style={ng.cancel}>Cancel</Text></TouchableOpacity>
+            <Text style={ng.title}>Edit Group</Text>
+            <TouchableOpacity onPress={() => { if (canSave) { onSave(name.trim(), [...selected]); onClose(); } }} disabled={!canSave}>
+              <Text style={[ng.create, !canSave && { opacity: 0.35 }]}>Save</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: spacing.xxl, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
+            {/* Group name */}
+            <View style={{ marginBottom: spacing.xl }}>
+              <Text style={ng.label}>Group Name *</Text>
+              <TextInput
+                style={ng.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="e.g. Sharma Family"
+                autoFocus
+                returnKeyType="next"
+              />
+            </View>
+
+            {/* Traveler selection */}
+            {travelers.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 32 }}>
+                <Text style={{ color: colors.muted, fontSize: 13 }}>No travelers in your library yet.</Text>
+                <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>Add travelers first, then add them to groups.</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={ng.label}>Members ({selected.size} selected)</Text>
+                {travelers.map(tv => {
+                  const isMember = selected.has(tv.id);
+                  return (
+                    <TouchableOpacity
+                      key={tv.id}
+                      style={[ng.memberRow, isMember && ng.memberRowSelected]}
+                      onPress={() => toggle(tv.id)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[ng.avatar, { backgroundColor: avatarColor(tv.name) }]}>
+                        <Text style={ng.avatarText}>{tv.emoji || tv.name[0]}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={ng.memberName}>{tv.name}</Text>
+                        {tv.age ? <Text style={ng.memberMeta}>{tv.age}yo</Text> : null}
+                      </View>
+                      <View style={[ng.checkbox, isMember && ng.checkboxSelected]}>
+                        {isMember && <Text style={ng.checkmark}>✓</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 // ─── Main HomeScreen ──────────────────────────────────────────────
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -322,7 +419,6 @@ export default function HomeScreen({ navigation }) {
   const [activeTab, setActiveTab]       = useState('trips');
   const [showNewTrip, setShowNewTrip]   = useState(false);
   const [showAuth, setShowAuth]         = useState(false);
-  const [showTestBanner, setShowTestBanner] = useState(true);
 
   const openTrip = (tripId) => {
     setCurrentTrip(tripId);
@@ -382,23 +478,6 @@ export default function HomeScreen({ navigation }) {
             contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24 }]}
             showsVerticalScrollIndicator={false}
           >
-            {showTestBanner && (
-              <InfoBanner
-                icon="🧪"
-                title="Testing Mode"
-                subtitle="This is a test build. Data may be reset at any time."
-                color={colors.yellow}
-                bgColor={colors.yellowLight}
-                style={{ marginBottom: spacing.lg }}
-              >
-                <TouchableOpacity
-                  onPress={() => setShowTestBanner(false)}
-                  style={{ alignSelf: 'flex-end', marginTop: spacing.sm }}
-                >
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.muted }}>Dismiss ✕</Text>
-                </TouchableOpacity>
-              </InfoBanner>
-            )}
 
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Your Trips</Text>
@@ -596,6 +675,7 @@ const tt = StyleSheet.create({
   avatarText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   travelerName: { ...typography.bodyBold, color: colors.text },
   travelerMeta: { ...typography.small, color: colors.muted, marginTop: 1 },
+  travelerMore: { fontSize: 18, color: colors.muted, paddingLeft: spacing.sm },
   actionBtn: {
     width: 30, height: 30, borderRadius: 8,
     backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center',
@@ -633,11 +713,15 @@ const tt = StyleSheet.create({
   groupMemberEmoji: { fontSize: 13 },
   groupMemberName: { ...typography.caption, color: colors.text, fontWeight: '700' },
   groupMemberRemove: { ...typography.caption, color: colors.muted, fontSize: 10, marginLeft: 2 },
-  groupAddChip: {
+  groupEditChip: {
     borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.full,
-    borderStyle: 'dashed', paddingHorizontal: spacing.sm, paddingVertical: 5,
+    borderStyle: 'dashed', paddingHorizontal: spacing.md, paddingVertical: 5,
   },
-  groupAddChipText: { ...typography.caption, color: colors.primary, fontWeight: '700' },
+  groupEditChipText: { ...typography.caption, color: colors.primary, fontWeight: '700' },
+  groupEmptyPrompt: {
+    paddingHorizontal: spacing.md, paddingBottom: spacing.md,
+  },
+  groupEmptyPromptText: { ...typography.smallBold, color: colors.primary },
 });
 
 // ── New Group Modal styles ────────────────────────────────────────

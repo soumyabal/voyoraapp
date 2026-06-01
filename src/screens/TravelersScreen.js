@@ -124,7 +124,7 @@ function EditTravelerModal({ visible, initial, onSave, onClose }) {
 
 // ── Main screen ───────────────────────────────────────────────────
 export default function TravelersScreen({ trip, onUpdatePlan }) {
-  const { travelers, deleteTraveler, setMemberOverride, updateFamily, deleteFamily } = useStore();
+  const { travelers, deleteTraveler, setMemberOverride, updateFamily, deleteFamily, setFamilyHead } = useStore();
 
   const [showSelect, setShowSelect]           = useState(false);
   const [showAddTraveler, setShowAddTraveler] = useState(false);
@@ -164,6 +164,33 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
           text: 'Remove', style: 'destructive',
           onPress: () => { deleteTraveler(trip.id, fam.id, member.id); markChanged(); },
         },
+      ],
+    );
+  };
+
+  const openMemberActions = (fam, member, idx) => {
+    const isHead = idx === 0;
+    Alert.alert(
+      member.name,
+      fam.name,
+      [
+        ...(!isHead ? [{
+          text: '👑 Make Family Head',
+          onPress: () => setFamilyHead(trip.id, fam.id, member.id),
+        }] : []),
+        {
+          text: '✏️ Edit',
+          onPress: () => setEditMember({
+            famId: fam.id, memberId: member.id,
+            name: member.name, age: member.age, needs: member.needs || [],
+          }),
+        },
+        {
+          text: '🗑️ Remove',
+          style: 'destructive',
+          onPress: () => confirmDeleteMember(fam, member),
+        },
+        { text: 'Cancel', style: 'cancel' },
       ],
     );
   };
@@ -295,9 +322,11 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
                       const eff = effectiveMember(member, travelers);
                       const overridden = hasOverride(member);
                       return (
-                        <View
+                        <TouchableOpacity
                           key={member.id}
                           style={[styles.memberRow, idx === fam.members.length - 1 && styles.memberRowLast]}
+                          onPress={() => openMemberActions(fam, member, idx)}
+                          activeOpacity={0.7}
                         >
                           <View style={[styles.avatar, { backgroundColor: avatarColor(member.name) }]}>
                             <Text style={styles.avatarText}>{member.name[0]}</Text>
@@ -306,6 +335,11 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
                           <View style={styles.memberInfo}>
                             <View style={styles.memberNameRow}>
                               <Text style={styles.memberName}>{member.name}</Text>
+                              {idx === 0 && (
+                                <View style={styles.headBadge}>
+                                  <Text style={styles.headBadgeText}>👑 head</Text>
+                                </View>
+                              )}
                               {overridden && (
                                 <View style={styles.overrideBadge}>
                                   <Text style={styles.overrideBadgeText}>trip override</Text>
@@ -324,21 +358,8 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
                             )}
                           </View>
 
-                          <View style={styles.memberActions}>
-                            <TouchableOpacity
-                              onPress={() => setEditMember({ famId: fam.id, memberId: member.id, name: member.name, age: member.age, needs: member.needs || [] })}
-                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                            >
-                              <Text style={styles.memberActionIcon}>✏️</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() => confirmDeleteMember(fam, member)}
-                              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                            >
-                              <Text style={styles.memberActionIcon}>🗑️</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
+                          <Text style={styles.memberMore}>⋯</Text>
+                        </TouchableOpacity>
                       );
                     })}
                   </View>
@@ -474,14 +495,15 @@ const styles = StyleSheet.create({
   memberInfo: { flex: 1 },
   memberNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   memberName: { ...typography.bodyBold, color: colors.text },
+  headBadge: { backgroundColor: '#fef9c3', borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1, borderWidth: 1, borderColor: '#fde047' },
+  headBadgeText: { fontSize: 9, color: '#713f12', fontWeight: '700' },
   overrideBadge: { backgroundColor: '#fff3cd', borderRadius: radius.sm, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1, borderColor: '#ffc107' },
   overrideBadgeText: { fontSize: 9, color: '#856404', fontWeight: '700' },
   memberMeta: { ...typography.small, color: colors.muted, marginTop: 1 },
   needsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   needTag: { backgroundColor: colors.greenLight, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 3 },
   needText: { ...typography.tinyBold, color: colors.green },
-  memberActions: { flexDirection: 'row', gap: 4, paddingTop: 2 },
-  memberActionIcon: { fontSize: 14, padding: 4 },
+  memberMore: { fontSize: 18, color: colors.muted, paddingLeft: spacing.sm, alignSelf: 'center' },
 
   emptyMembers: { padding: spacing.lg, alignItems: 'center', gap: 6 },
   emptyMembersText: { ...typography.small, color: colors.muted },

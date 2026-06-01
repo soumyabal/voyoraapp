@@ -11,10 +11,10 @@
  *   - Notes + Reminder at the bottom
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal, View, Text, ScrollView, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, Dimensions,
+  StyleSheet, KeyboardAvoidingView, Platform, Dimensions, FlatList,
 } from 'react-native';
 import useStore from '../store';
 import { colors, spacing, radius, typography, shadow } from '../theme';
@@ -39,6 +39,121 @@ const TILES = [
 
 function tileKey(t) { return `${t.type}:${t.subtype || ''}` ; }
 
+// ─── Outlook-style time picker ────────────────────────────────────────────────
+const SLOT_H = 44;
+const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
+  const h = Math.floor(i / 2);
+  const m = i % 2 === 0 ? '00' : '30';
+  return `${String(h).padStart(2, '0')}:${m}`;
+});
+
+function TimePickerInput({ value, onChange }) {
+  const [open, setOpen]   = useState(false);
+  const [draft, setDraft] = useState(value || '09:00');
+  const listRef           = useRef(null);
+
+  useEffect(() => { setDraft(value || '09:00'); }, [value]);
+
+  // Auto-insert colon inside the picker input: "0930" → "09:30"
+  const handleDraftChange = (raw) => {
+    const digits = raw.replace(/\D/g, '').slice(0, 4);
+    setDraft(digits.length <= 2 ? digits : digits.slice(0, 2) + ':' + digits.slice(2));
+  };
+
+  // Clamp to valid HH:MM and commit
+  const commitDraft = (d = draft) => {
+    const [hStr, mStr] = d.split(':');
+    const h = Math.min(23, Math.max(0, parseInt(hStr) || 0));
+    const m = Math.min(59, Math.max(0, parseInt(mStr) || 0));
+    const formatted = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    setDraft(formatted);
+    onChange(formatted);
+    return formatted;
+  };
+
+  const handleOpen = () => {
+    setOpen(true);
+    setDraft(value || '09:00');
+    const idx = TIME_SLOTS.indexOf(value);
+    setTimeout(() => {
+      listRef.current?.scrollToOffset({
+        offset: Math.max(0, (idx >= 0 ? idx : 18) - 2) * SLOT_H,
+        animated: false,
+      });
+    }, 60);
+  };
+
+  const handleSelect = (slot) => { onChange(slot); setDraft(slot); setOpen(false); };
+  const handleDone   = () => { commitDraft(); setOpen(false); };
+
+  return (
+    <>
+      {/* ── Display row — entire row tappable ── */}
+      <TouchableOpacity style={tp.row} onPress={handleOpen} activeOpacity={0.75}>
+        <Text style={tp.clock}>🕐</Text>
+        <Text style={[tp.displayText, !value && { color: colors.muted }]}>
+          {value || '09:00'}
+        </Text>
+        <Text style={tp.chevron}>▾</Text>
+      </TouchableOpacity>
+
+      {/* ── Slot picker ── */}
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <TouchableOpacity style={tp.overlay} activeOpacity={1} onPress={handleDone}>
+          <View style={tp.card} onStartShouldSetResponder={() => true}>
+
+            {/* Custom time input at top of picker */}
+            <View style={tp.cardHeader}>
+              <Text style={tp.cardTitle}>Time</Text>
+              <View style={tp.customRow}>
+                <TextInput
+                  style={tp.customInput}
+                  value={draft}
+                  onChangeText={handleDraftChange}
+                  onBlur={() => commitDraft()}
+                  keyboardType="number-pad"
+                  maxLength={5}
+                  placeholder="HH:MM"
+                  placeholderTextColor={colors.muted}
+                  selectTextOnFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleDone}
+                />
+                <TouchableOpacity onPress={handleDone} style={tp.doneBtn}>
+                  <Text style={tp.cardDone}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Slot list */}
+            <FlatList
+              ref={listRef}
+              data={TIME_SLOTS}
+              keyExtractor={item => item}
+              getItemLayout={(_, index) => ({ length: SLOT_H, offset: SLOT_H * index, index })}
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: SLOT_H * 6.5 }}
+              renderItem={({ item }) => {
+                const sel = item === value;
+                return (
+                  <TouchableOpacity
+                    style={[tp.slot, sel && tp.slotSel]}
+                    onPress={() => handleSelect(item)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[tp.slotText, sel && tp.slotSelText]}>{item}</Text>
+                    {sel && <Text style={tp.slotCheck}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
+  );
+}
+
 function findTile(type, subtype) {
   return TILES.find(t => t.type === type && t.subtype === (subtype || null))
       || TILES.find(t => t.type === type)
@@ -58,6 +173,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
   const [time, setTime]           = useState(defaultTime || '09:00');
   const [detail, setDetail]       = useState('');
 
+
   // Cost
   const [costMode, setCostMode]   = useState('per_person'); // 'per_person' | 'per_family'
   const [costInput, setCostInput] = useState('');
@@ -65,6 +181,9 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
   // Notes + Reminder
   const [memo, setMemo]           = useState('');
   const [reminder, setReminder]   = useState('');
+
+  // Secondary fields (Details, Notes, Reminder) collapsed by default
+  const [showMore, setShowMore]   = useState(false);
 
   // Seed fields on open
   useEffect(() => {
@@ -78,6 +197,8 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setCostInput(editActivity.costAmount > 0 ? String(editActivity.costAmount) : '');
       setMemo(editActivity.memo || '');
       setReminder(editActivity.reminder || '');
+      // Auto-expand if the activity already has secondary content
+      setShowMore(!!(editActivity.detail || editActivity.memo || editActivity.reminder));
     } else {
       setTile(TILES[6]);
       setName('');
@@ -87,6 +208,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setCostInput('');
       setMemo('');
       setReminder('');
+      setShowMore(false);
     }
   }, [visible, editActivity, defaultTime]);
 
@@ -198,33 +320,9 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
             <View style={s.inlineRow}>
               <View style={{ flex: 1 }}>
                 <Text style={s.sectionLabel}>TIME</Text>
-                <View style={s.timeInputWrap}>
-                  <Text style={s.timeIcon}>🕐</Text>
-                  <TextInput
-                    style={s.timeInput}
-                    value={time}
-                    onChangeText={setTime}
-                    placeholder="09:00"
-                    placeholderTextColor={colors.muted}
-                    keyboardType="numbers-and-punctuation"
-                    maxLength={5}
-                  />
-                </View>
+                <TimePickerInput value={time} onChange={setTime} />
               </View>
             </View>
-
-            {/* ── Details ── */}
-            <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>DETAILS <Text style={s.optional}>(optional)</Text></Text>
-            <TextInput
-              style={s.detailInput}
-              value={detail}
-              onChangeText={setDetail}
-              placeholder="Booking ref, meeting point, what to expect…"
-              placeholderTextColor={colors.muted}
-              multiline
-              numberOfLines={2}
-              textAlignVertical="top"
-            />
 
             {/* ── Cost ── */}
             <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>COST</Text>
@@ -293,32 +391,63 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               </View>
             )}
 
-            {/* ── Notes / Memo ── */}
-            <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>NOTES <Text style={s.optional}>(personal)</Text></Text>
-            <TextInput
-              style={s.detailInput}
-              value={memo}
-              onChangeText={setMemo}
-              placeholder="Pack sunscreen, book tickets in advance, wear comfortable shoes…"
-              placeholderTextColor={colors.muted}
-              multiline
-              numberOfLines={2}
-              textAlignVertical="top"
-            />
+            {/* ── More / Less toggle ── */}
+            <TouchableOpacity
+              style={s.moreToggle}
+              onPress={() => setShowMore(v => !v)}
+              activeOpacity={0.7}
+            >
+              <View style={s.moreLine} />
+              <Text style={s.moreToggleText}>
+                {showMore ? '− Less' : `+ More${detail || memo || reminder ? ' ·  filled' : ''}`}
+              </Text>
+              <View style={s.moreLine} />
+            </TouchableOpacity>
 
-            {/* ── Reminder ── */}
-            <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>REMINDER <Text style={s.optional}>(optional)</Text></Text>
-            <View style={s.reminderWrap}>
-              <Text style={s.reminderIcon}>🔔</Text>
-              <TextInput
-                style={s.reminderInput}
-                value={reminder}
-                onChangeText={setReminder}
-                placeholder="e.g. Book 2 weeks ahead · Check passport · Pack adapter"
-                placeholderTextColor={colors.muted}
-                returnKeyType="done"
-              />
-            </View>
+            {/* ── Secondary fields (collapsed by default) ── */}
+            {showMore && (
+              <>
+                {/* Details */}
+                <Text style={[s.sectionLabel, { marginTop: spacing.sm }]}>DETAILS <Text style={s.optional}>(optional)</Text></Text>
+                <TextInput
+                  style={s.detailInput}
+                  value={detail}
+                  onChangeText={setDetail}
+                  placeholder="Booking ref, meeting point, what to expect…"
+                  placeholderTextColor={colors.muted}
+                  multiline
+                  numberOfLines={2}
+                  textAlignVertical="top"
+                />
+
+                {/* Notes */}
+                <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>NOTES <Text style={s.optional}>(personal)</Text></Text>
+                <TextInput
+                  style={s.detailInput}
+                  value={memo}
+                  onChangeText={setMemo}
+                  placeholder="Pack sunscreen, book tickets in advance…"
+                  placeholderTextColor={colors.muted}
+                  multiline
+                  numberOfLines={2}
+                  textAlignVertical="top"
+                />
+
+                {/* Reminder */}
+                <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>REMINDER <Text style={s.optional}>(optional)</Text></Text>
+                <View style={s.reminderWrap}>
+                  <Text style={s.reminderIcon}>🔔</Text>
+                  <TextInput
+                    style={s.reminderInput}
+                    value={reminder}
+                    onChangeText={setReminder}
+                    placeholder="Book 2 weeks ahead · Check passport…"
+                    placeholderTextColor={colors.muted}
+                    returnKeyType="done"
+                  />
+                </View>
+              </>
+            )}
 
             <View style={{ height: 24 }} />
           </ScrollView>
@@ -327,6 +456,59 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
     </Modal>
   );
 }
+
+// ─── TimePickerInput styles ───────────────────────────────────────────────────
+const tp = StyleSheet.create({
+  // ── Display row (entire row = tap target) ──
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: '#fff', borderRadius: radius.lg,
+    borderWidth: 1.5, borderColor: colors.border,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    ...shadow.sm,
+  },
+  clock:       { fontSize: 16 },
+  displayText: { flex: 1, fontSize: 16, fontWeight: '600', color: colors.text },
+  chevron:     { fontSize: 14, color: colors.muted, fontWeight: '700' },
+
+  // ── Picker overlay + card ──
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl,
+    overflow: 'hidden', ...shadow.sm,
+  },
+
+  // Picker header: title + custom HH:MM input + Done
+  cardHeader: {
+    paddingHorizontal: spacing.xxl, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+    backgroundColor: colors.surface2, gap: spacing.sm,
+  },
+  cardTitle: { fontSize: 10, fontWeight: '800', color: colors.muted, textTransform: 'uppercase', letterSpacing: 1 },
+  customRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  customInput: {
+    flex: 1, borderWidth: 1.5, borderColor: colors.primary,
+    borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    fontSize: 18, fontWeight: '700', color: colors.primary,
+  },
+  doneBtn:  { paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },
+  cardDone: { fontSize: 14, fontWeight: '800', color: colors.primary },
+
+  // ── Slot rows ──
+  slot: {
+    height: SLOT_H, flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: spacing.xxl,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  slotSel:     { backgroundColor: colors.primaryLight },
+  slotText:    { flex: 1, fontSize: 15, color: colors.text, fontWeight: '500' },
+  slotSelText: { color: colors.primary, fontWeight: '800' },
+  slotCheck:   { fontSize: 15, color: colors.primary, fontWeight: '800' },
+});
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
@@ -448,6 +630,14 @@ const s = StyleSheet.create({
     borderColor: '#a5d6a7',
   },
   syncNoteText: { fontSize: 12, color: '#2e7d32', fontWeight: '600' },
+
+  // More / Less toggle
+  moreToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    marginTop: spacing.xl, marginBottom: spacing.xs,
+  },
+  moreLine:       { flex: 1, height: 1, backgroundColor: colors.border },
+  moreToggleText: { fontSize: 11, fontWeight: '800', color: colors.muted, letterSpacing: 0.3 },
 
   // Reminder
   reminderWrap: {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal, FlatList } from 'react-native';
 import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
@@ -234,10 +234,11 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush }) {
 }
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
-  const { currentDay, setCurrentDay, deleteActivity, pushItineraryToSplitwise, markActivityStatus } = useStore();
+  const { currentDay, setCurrentDay, deleteActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity } = useStore();
   const [showAddActivity, setShowAddActivity] = useState(false);
   const [editActivity,    setEditActivity]    = useState(null);
   const [defaultSlotTime, setDefaultSlotTime] = useState('09:00');
+  const [movingAct,       setMovingAct]       = useState(null); // activity pending a day move
 
   const day = trip.days[currentDay] || trip.days[0];
 
@@ -336,12 +337,32 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
             </View>
           ) : (
             // Has activities — group by slot
-            DAY_SLOTS.map(slot => {
-              const slotActs = [...day.activities]
-                .filter(a => getSlotKey(a.time) === slot.key)
-                .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+            // Find the index of the last slot that has activities (trailing empties collapse)
+            (() => {
+              const slotActsMap = DAY_SLOTS.map(slot => ({
+                slot,
+                acts: [...day.activities]
+                  .filter(a => getSlotKey(a.time) === slot.key)
+                  .sort((a, b) => (a.time || '').localeCompare(b.time || '')),
+              }));
+              const lastFilledIdx = slotActsMap.reduce((best, { acts }, i) => acts.length > 0 ? i : best, -1);
+              return slotActsMap.map(({ slot, acts }, slotIdx) => {
+              const slotActs     = acts;
               const doneCount    = slotActs.filter(a => a.status === 'done').length;
               const skippedCount = slotActs.filter(a => a.status === 'skipped').length;
+              // Trailing empty slot — render compact add button instead of full card
+              if (slotActs.length === 0 && slotIdx > lastFilledIdx) {
+                return (
+                  <TouchableOpacity
+                    key={slot.key}
+                    style={styles.slotCompact}
+                    onPress={() => openAddInSlot(slot.defaultTime)}
+                    activeOpacity={0.6}
+                  >
+                    <Text style={styles.slotCompactText}>{slot.emoji} + Add {slot.label}</Text>
+                  </TouchableOpacity>
+                );
+              }
 
               return (
                 <View key={slot.key} style={styles.slotSection}>
@@ -382,12 +403,14 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
                         onEdit={() => openEdit(act)}
                         onDelete={() => confirmDelete(act)}
                         onToggleStatus={() => cycleStatus(act)}
+                        onMoveRequest={() => setMovingAct(act)}
                       />
                     ))
                   )}
                 </View>
               );
-            })
+            });
+            })()
           )}
         </View>
       </ScrollView>
@@ -400,15 +423,65 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
         defaultTime={defaultSlotTime}
         onClose={closeModal}
       />
+
+      {/* ── Day picker — move activity to another day ── */}
+      <Modal
+        visible={!!movingAct}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMovingAct(null)}
+      >
+        <TouchableOpacity style={styles.dayPickerOverlay} activeOpacity={1} onPress={() => setMovingAct(null)}>
+          <View style={styles.dayPickerSheet} onStartShouldSetResponder={() => true}>
+            <View style={styles.dayPickerHandle} />
+            <Text style={styles.dayPickerTitle}>Move "{movingAct?.name}" to…</Text>
+            <FlatList
+              data={trip.days}
+              keyExtractor={(_, i) => String(i)}
+              style={{ maxHeight: 340 }}
+              renderItem={({ item: d, index: i }) => {
+                const isCurrent = i === currentDay;
+                return (
+                  <TouchableOpacity
+                    style={[styles.dayPickerRow, isCurrent && styles.dayPickerRowCurrent]}
+                    onPress={() => {
+                      if (!isCurrent) {
+                        moveActivity(trip.id, currentDay, i, movingAct.id);
+                        setMovingAct(null);
+                      }
+                    }}
+                    activeOpacity={isCurrent ? 1 : 0.7}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.dayPickerLabel, isCurrent && styles.dayPickerLabelCurrent]}>
+                        {d.label}
+                      </Text>
+                      <Text style={styles.dayPickerDate}>{fmt(d.date)}</Text>
+                    </View>
+                    {isCurrent
+                      ? <Text style={styles.dayPickerCurrent}>current day</Text>
+                      : <Text style={styles.dayPickerArrow}>→</Text>
+                    }
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
 
-function ActivityCard({ activity: act, trip, onEdit, onDelete, onToggleStatus }) {
+function ActivityCard({ activity: act, trip, onEdit, onDelete, onToggleStatus, onMoveRequest }) {
   const status   = act.status ?? null;   // null | 'done' | 'skipped'
   const isDone   = status === 'done';
   const isSkipped= status === 'skipped';
   const dimmed   = isDone || isSkipped;
+
+  // Secondary content is collapsed by default; auto-expand if content exists on first render
+  const hasSecondary = !!(act.detail || act.memo || act.reminder || act.note || act.address || act.url);
+  const [cardExpanded, setCardExpanded] = useState(false);
 
   const famChips = act.costPerPerson > 0 ? trip.families.map(fam => ({
     ...fam, cost: fam.members.length * act.costPerPerson,
@@ -418,9 +491,11 @@ function ActivityCard({ activity: act, trip, onEdit, onDelete, onToggleStatus })
   const handleMapPress  = () => { if (act.mapUrl) Linking.openURL(act.mapUrl); };
   const handleUrlPress  = () => { if (act.url)    Linking.openURL(act.url); };
   const actIcon         = getActivityIcon(act.type, act.subtype);
-  const isPerFamily     = act.costMode === 'per_family';
-  const displayCostAmt  = isPerFamily ? act.costAmount : act.costPerPerson;
-  const displayCostLbl  = isPerFamily ? '/family' : '/person';
+  const isPerFamily = act.costMode === 'per_family';
+  const isTotal     = act.costMode === 'total';
+  // Badge shows the amount the user actually typed, not the derived costPerPerson
+  const displayCostAmt = isPerFamily || isTotal ? act.costAmount : act.costPerPerson;
+  const displayCostLbl = isPerFamily ? '/fam' : isTotal ? ' total' : '/p';
 
   return (
     <View style={[
@@ -473,37 +548,14 @@ function ActivityCard({ activity: act, trip, onEdit, onDelete, onToggleStatus })
           )}
         </View>
 
-        {!!act.detail && !isSkipped && <Text style={styles.actDetail}>{act.detail}</Text>}
-
-        {!!act.note && !isNote && !isSkipped && (
-          <View style={styles.aiTipRow}>
-            <Text style={styles.aiTipIcon}>💡</Text>
-            <Text style={styles.aiTipText}>{act.note}</Text>
-          </View>
-        )}
-
-        {!!act.memo && !isSkipped && (
-          <View style={styles.memoRow}>
-            <Text style={styles.memoIcon}>📌</Text>
-            <Text style={styles.memoText}>{act.memo}</Text>
-          </View>
-        )}
-        {!!act.reminder && !isSkipped && (
-          <View style={styles.reminderRow}>
-            <Text style={styles.reminderIcon}>🔔</Text>
-            <Text style={styles.reminderText}>{act.reminder}</Text>
-          </View>
-        )}
-
-        {!dimmed && (
+        {/* Always-visible: cost badge */}
+        {!dimmed && displayCostAmt > 0 && (
           <View style={styles.actTags}>
-            {displayCostAmt > 0 && (
-              <View style={[styles.costBadge, isPerFamily && { backgroundColor: '#f0eeff', borderColor: '#c4b5fd' }]}>
-                <Text style={[styles.costBadgeText, isPerFamily && { color: '#7c3aed' }]}>
-                  ~${displayCostAmt}{displayCostLbl}
-                </Text>
-              </View>
-            )}
+            <View style={[styles.costBadge, isPerFamily && { backgroundColor: '#f0eeff', borderColor: '#c4b5fd' }, isTotal && { backgroundColor: '#dcfce7', borderColor: '#a7f3d0' }]}>
+              <Text style={[styles.costBadgeText, isPerFamily && { color: '#7c3aed' }, isTotal && { color: '#065f46' }]}>
+                ~${displayCostAmt}{displayCostLbl}
+              </Text>
+            </View>
             {!!act.access && (
               <View style={[styles.costBadge, { backgroundColor: colors.greenLight, borderColor: '#b2dfdb' }]}>
                 <Text style={[styles.costBadgeText, { color: colors.green }]}>♿ {act.access}</Text>
@@ -512,42 +564,91 @@ function ActivityCard({ activity: act, trip, onEdit, onDelete, onToggleStatus })
           </View>
         )}
 
-        {!!act.address && !isSkipped && (
-          <TouchableOpacity style={styles.locationRow} onPress={handleMapPress} activeOpacity={0.7}>
-            <Text style={styles.locationIcon}>📍</Text>
-            <Text style={styles.locationText} numberOfLines={1}>{act.address}</Text>
-            {!!act.mapUrl && <Text style={styles.locationArrow}>›</Text>}
+        {/* Fold toggle — only shown when secondary content exists */}
+        {hasSecondary && !isSkipped && (
+          <TouchableOpacity
+            style={styles.cardFoldBtn}
+            onPress={() => setCardExpanded(e => !e)}
+            activeOpacity={0.6}
+          >
+            <Text style={styles.cardFoldText}>{cardExpanded ? '▴ less' : '▾ details'}</Text>
           </TouchableOpacity>
         )}
 
-        {!!act.url && !dimmed && (
-          <TouchableOpacity style={styles.urlRow} onPress={handleUrlPress} activeOpacity={0.7}>
-            <Text style={styles.urlIcon}>🌐</Text>
-            <Text style={styles.urlText} numberOfLines={1}>
-              {act.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-            </Text>
-            <Text style={styles.locationArrow}>›</Text>
-          </TouchableOpacity>
-        )}
+        {/* Secondary content — shown when expanded */}
+        {cardExpanded && !isSkipped && (
+          <>
+            {!!act.detail && <Text style={styles.actDetail}>{act.detail}</Text>}
 
-        {famChips.length > 0 && !dimmed && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.famChips}>
-              {famChips.map(fam => (
-                <View key={fam.id} style={styles.famChip}>
-                  <View style={[styles.famChipDot, { backgroundColor: fam.color }]} />
-                  <Text style={styles.famChipText}>{fam.name.split(' ')[0]}: {fmtM(fam.cost)}</Text>
-                </View>
-              ))}
-            </View>
-          </ScrollView>
+            {!!act.note && !isNote && (
+              <View style={styles.aiTipRow}>
+                <Text style={styles.aiTipIcon}>💡</Text>
+                <Text style={styles.aiTipText}>{act.note}</Text>
+              </View>
+            )}
+
+            {!!act.memo && (
+              <View style={styles.memoRow}>
+                <Text style={styles.memoIcon}>📌</Text>
+                <Text style={styles.memoText}>{act.memo}</Text>
+              </View>
+            )}
+
+            {!!act.reminder && (
+              <View style={styles.reminderRow}>
+                <Text style={styles.reminderIcon}>🔔</Text>
+                <Text style={styles.reminderText}>{act.reminder}</Text>
+              </View>
+            )}
+
+            {!!act.address && (
+              <TouchableOpacity style={styles.locationRow} onPress={handleMapPress} activeOpacity={0.7}>
+                <Text style={styles.locationIcon}>📍</Text>
+                <Text style={styles.locationText} numberOfLines={1}>{act.address}</Text>
+                {!!act.mapUrl && <Text style={styles.locationArrow}>›</Text>}
+              </TouchableOpacity>
+            )}
+
+            {!!act.url && (
+              <TouchableOpacity style={styles.urlRow} onPress={handleUrlPress} activeOpacity={0.7}>
+                <Text style={styles.urlIcon}>🌐</Text>
+                <Text style={styles.urlText} numberOfLines={1}>
+                  {act.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                </Text>
+                <Text style={styles.locationArrow}>›</Text>
+              </TouchableOpacity>
+            )}
+
+            {famChips.length > 0 && !dimmed && (
+              <>
+                {isTotal && (
+                  <Text style={styles.famChipsTotalHint}>
+                    💰 ${act.costAmount} shared — each family's share:
+                  </Text>
+                )}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.famChips}>
+                    {famChips.map(fam => (
+                      <View key={fam.id} style={styles.famChip}>
+                        <View style={[styles.famChipDot, { backgroundColor: fam.color }]} />
+                        <Text style={styles.famChipText}>{fam.name.split(' ')[0]}: {fmtM(fam.cost)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              </>
+            )}
+          </>
         )}
       </View>
 
-      {/* ── Edit / Delete ── */}
+      {/* ── Edit / Move / Delete ── */}
       <View style={styles.actActions}>
         <TouchableOpacity style={styles.actActionBtn} onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={styles.editBtnText}>✏️</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actActionBtn} onPress={onMoveRequest} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.moveBtnText}>📅</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actActionBtn} onPress={onDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={styles.delBtnText}>🗑</Text>
@@ -703,6 +804,12 @@ const styles = StyleSheet.create({
   slotSkipText:    { ...typography.caption, color: colors.muted, fontWeight: '700', fontSize: 11 },
   slotAddBtn:      { backgroundColor: colors.primaryLight, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   slotAddBtnText:  { ...typography.caption, color: colors.primary, fontWeight: '800', fontSize: 11 },
+  slotCompact: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: spacing.xxl, paddingVertical: spacing.sm,
+  },
+  slotCompactText: { ...typography.caption, color: colors.muted, fontSize: 12 },
+
   slotEmpty: {
     marginHorizontal: spacing.xxl,
     marginBottom: spacing.sm,
@@ -803,6 +910,8 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   ratingText: { fontSize: 10, fontWeight: '700', color: '#e65100' },
+  cardFoldBtn:  { paddingTop: 4, paddingBottom: 2 },
+  cardFoldText: { fontSize: 10, fontWeight: '700', color: colors.primary, letterSpacing: 0.3 },
   actDetail:    { ...typography.caption, color: colors.muted, marginBottom: spacing.sm },
   memoRow:      { flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginBottom: 3 },
   memoIcon:     { fontSize: 11, marginTop: 1 },
@@ -851,6 +960,7 @@ const styles = StyleSheet.create({
     borderColor: '#f0d080',
   },
   costBadgeText: { ...typography.caption, color: '#9b6e00', fontWeight: '700', fontSize: 11 },
+  famChipsTotalHint: { fontSize: 10, color: colors.muted, fontStyle: 'italic', marginBottom: 3 },
   famChips: { flexDirection: 'row', marginTop: 2 },
   famChip: {
     flexDirection: 'row',
@@ -878,8 +988,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  actActionBtnDisabled: { opacity: 0.3 },
   editBtnText: { fontSize: 14 },
-  delBtnText: { fontSize: 14 },
+  moveBtnText: { fontSize: 14 },
+  delBtnText:  { fontSize: 14 },
+
+  // Day picker modal
+  dayPickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  dayPickerSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl,
+    paddingBottom: 36,
+  },
+  dayPickerHandle: {
+    width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border,
+    alignSelf: 'center', marginTop: 10, marginBottom: 8,
+  },
+  dayPickerTitle: {
+    fontSize: 13, fontWeight: '800', color: colors.text,
+    paddingHorizontal: spacing.xxl, paddingBottom: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  dayPickerRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: spacing.xxl, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  dayPickerRowCurrent: { backgroundColor: colors.surface2 },
+  dayPickerLabel:       { ...typography.bodyBold, color: colors.text },
+  dayPickerLabelCurrent:{ color: colors.muted },
+  dayPickerDate:        { ...typography.caption, color: colors.muted, marginTop: 2 },
+  dayPickerCurrent:     { fontSize: 11, color: colors.muted, fontStyle: 'italic' },
+  dayPickerArrow:       { fontSize: 18, color: colors.primary, fontWeight: '700' },
 });
 
 // ── Chart + CollapsibleHeader styles ─────────────────────────────

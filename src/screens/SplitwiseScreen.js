@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Switch, TextInput,
+  Switch, TextInput, Alert,
 } from 'react-native';
 import useStore from '../store';
 import AddExpenseModal from '../modals/AddExpenseModal';
@@ -20,8 +20,10 @@ export default function SplitwiseScreen({ trip }) {
     deleteExpense, toggleFamilySplit, toggleExpenseMember,
     updateExpensePayer, updateExpenseSplitMode, setTripSplitMode,
     toggleExpenseExcluded, updateExpenseAmount, updateExpenseCustomShares,
+    setFamilyHead, toggleSettlementPaid,
   } = useStore();
   const [showAddExpense, setShowAddExpense] = useState(false);
+  const [headTipDismissed, setHeadTipDismissed] = useState(false);
 
   const tripMode = trip.splitMode || 'individual';
   const itinExpenses = trip.expenses.filter(e => e.source === 'itinerary');
@@ -67,6 +69,21 @@ export default function SplitwiseScreen({ trip }) {
           </View>
           <Text style={styles.modeDesc}>{modeLabel}</Text>
         </View>
+
+        {/* ── Family head explainer — shown once when By Group is active ── */}
+        {tripMode === 'family' && !headTipDismissed && (
+          <View style={styles.headTip}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headTipTitle}>👑 How "By Group" works</Text>
+              <Text style={styles.headTipBody}>
+                Each family pays an equal share regardless of size. The family head (first member) carries the balance — others in the family show $0 owed. Change the head in the People tab or by tapping a member in Balances below.
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setHeadTipDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.headTipClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ── From Itinerary ── */}
         <View style={styles.sectionHeader}>
@@ -226,19 +243,42 @@ export default function SplitwiseScreen({ trip }) {
               .map(({ member, net }) => {
                 const fam = findMemberFamily(trip, member.id);
                 const isHead = tripMode === 'family' && fam?.members[0]?.id === member.id;
+                const canPromote = tripMode === 'family' && fam && !isHead;
+
+                const handlePromote = () => {
+                  Alert.alert(
+                    'Change Family Head',
+                    `Make ${member.name.split(' ')[0]} the head of ${fam.name}?\n\nThe head carries the family's full balance share in "By Group" mode.`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: '👑 Make Head', onPress: () => setFamilyHead(trip.id, fam.id, member.id) },
+                    ],
+                  );
+                };
+
                 return (
-                  <View key={member.id} style={styles.balanceRow}>
+                  <TouchableOpacity
+                    key={member.id}
+                    style={styles.balanceRow}
+                    onPress={canPromote ? handlePromote : undefined}
+                    activeOpacity={canPromote ? 0.6 : 1}
+                  >
                     <View style={[styles.memberAvatar, { backgroundColor: avatarColor(member.name) }]}>
                       <Text style={styles.memberAvatarText}>{member.name[0]}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.balanceName}>{member.name.split(' ')[0]}{isHead ? ' 👑' : ''}</Text>
+                      <Text style={styles.balanceName}>
+                        {member.name.split(' ')[0]}{isHead ? ' 👑' : ''}
+                      </Text>
                       {fam && <Text style={[styles.balanceFam, { color: fam.color }]}>{fam.name}</Text>}
+                      {canPromote && (
+                        <Text style={styles.promoteHint}>tap to make head</Text>
+                      )}
                     </View>
                     <Text style={[styles.balanceNet, { color: net > 0 ? colors.green : colors.red }]}>
                       {net > 0 ? '▲ gets back' : '▼ owes'} {fmtM(Math.abs(net))}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
 
@@ -247,27 +287,41 @@ export default function SplitwiseScreen({ trip }) {
               <Text style={styles.settledText}>All settled up! 🎉</Text>
             ) : (
               settlements.map((s, i) => {
-                const fromFam = findMemberFamily(trip, s.from.id);
-                const toFam = findMemberFamily(trip, s.to.id);
+                const fromFam  = findMemberFamily(trip, s.from.id);
+                const toFam    = findMemberFamily(trip, s.to.id);
+                const key      = `${s.from.id}→${s.to.id}`;
+                const isPaid   = (trip.settledTransfers || []).includes(key);
                 return (
-                  <View key={i} style={styles.settleItem}>
-                    <View style={[styles.memberAvatar, { backgroundColor: avatarColor(s.from.name) }]}>
+                  <TouchableOpacity
+                    key={i}
+                    style={[styles.settleItem, isPaid && styles.settleItemPaid]}
+                    onPress={() => toggleSettlementPaid(trip.id, key)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={[styles.memberAvatar, { backgroundColor: avatarColor(s.from.name), opacity: isPaid ? 0.5 : 1 }]}>
                       <Text style={styles.memberAvatarText}>{s.from.name[0]}</Text>
                     </View>
-                    <View>
-                      <Text style={styles.settleName}>{s.from.name.split(' ')[0]}</Text>
+                    <View style={{ opacity: isPaid ? 0.5 : 1 }}>
+                      <Text style={[styles.settleName, isPaid && styles.settleNamePaid]}>{s.from.name.split(' ')[0]}</Text>
                       {fromFam && <Text style={[styles.settleFam, { color: fromFam.color }]}>{fromFam.name}</Text>}
                     </View>
-                    <Text style={styles.settleArrow}>→</Text>
-                    <View style={[styles.memberAvatar, { backgroundColor: avatarColor(s.to.name) }]}>
+                    <Text style={[styles.settleArrow, isPaid && { opacity: 0.4 }]}>→</Text>
+                    <View style={[styles.memberAvatar, { backgroundColor: avatarColor(s.to.name), opacity: isPaid ? 0.5 : 1 }]}>
                       <Text style={styles.memberAvatarText}>{s.to.name[0]}</Text>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.settleName}>{s.to.name.split(' ')[0]}</Text>
+                    <View style={{ flex: 1, opacity: isPaid ? 0.5 : 1 }}>
+                      <Text style={[styles.settleName, isPaid && styles.settleNamePaid]}>{s.to.name.split(' ')[0]}</Text>
                       {toFam && <Text style={[styles.settleFam, { color: toFam.color }]}>{toFam.name}</Text>}
                     </View>
-                    <Text style={styles.settleAmt}>{fmtM(s.amount)}</Text>
-                  </View>
+                    <View style={styles.settleRightCol}>
+                      <Text style={[styles.settleAmt, isPaid && { color: colors.muted, textDecorationLine: 'line-through' }]}>
+                        {fmtM(s.amount)}
+                      </Text>
+                      <View style={[styles.settleCheck, isPaid && styles.settleCheckDone]}>
+                        {isPaid && <Text style={styles.settleCheckText}>✓</Text>}
+                      </View>
+                    </View>
+                  </TouchableOpacity>
                 );
               })
             )}
@@ -275,6 +329,28 @@ export default function SplitwiseScreen({ trip }) {
         )}
 
       </ScrollView>
+
+      {/* ── Sticky running total footer ── */}
+      {grandTotal > 0 && (
+        <View style={styles.stickyFooter}>
+          <View style={styles.stickyFooterLeft}>
+            <Text style={styles.stickyFooterLabel}>
+              {trip.expenses.filter(e => !e.excluded).length} expenses
+            </Text>
+            <Text style={styles.stickyFooterTotal}>{fmtM(grandTotal)}</Text>
+          </View>
+          <View style={styles.stickyFooterRight}>
+            <Text style={styles.stickyFooterLabel}>
+              {tripMode === 'family' ? 'per group' : 'per person'}
+            </Text>
+            <Text style={styles.stickyFooterShare}>
+              {tripMode === 'family'
+                ? fmtM(grandTotal / (trip.families.length || 1))
+                : fmtM(grandTotal / (trip.families.reduce((s, f) => s + f.members.length, 0) || 1))}
+            </Text>
+          </View>
+        </View>
+      )}
 
       <AddExpenseModal visible={showAddExpense} trip={trip} onClose={() => setShowAddExpense(false)} />
     </View>
@@ -439,7 +515,7 @@ function ExpenseCard({
               <Text style={[styles.splitLabel, { marginTop: 12 }]}>Split mode</Text>
               <View style={styles.overrideRow}>
                 {[
-                  { key: null,         label: 'Auto' },
+                  { key: null,         label: `Auto (${(trip.splitMode || 'individual') === 'family' ? 'Group' : 'Person'})` },
                   { key: 'individual', label: '👤 Person' },
                   { key: 'family',     label: '👨‍👩‍👧 Group' },
                 ].map(opt => (
@@ -700,7 +776,21 @@ function ExpenseCard({
 // ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
-  content: { padding: spacing.xxl, paddingBottom: 100 },
+  content: { padding: spacing.xxl, paddingBottom: 120 },
+
+  // Sticky footer
+  stickyFooter: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.text,
+    paddingHorizontal: spacing.xl, paddingVertical: spacing.md,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.15, shadowRadius: 4, elevation: 6,
+  },
+  stickyFooterLeft:  { flex: 1 },
+  stickyFooterRight: { alignItems: 'flex-end' },
+  stickyFooterLabel: { fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: 0.8 },
+  stickyFooterTotal: { fontSize: 20, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
+  stickyFooterShare: { fontSize: 15, fontWeight: '800', color: colors.green },
 
   // Mode toggle
   modeCard: {
@@ -714,6 +804,16 @@ const styles = StyleSheet.create({
   modeBtnText: { ...typography.smallBold, color: colors.muted },
   modeBtnTextActive: { color: '#fff' },
   modeDesc: { ...typography.tiny, color: colors.muted, lineHeight: 16 },
+
+  // Family head tip
+  headTip: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md,
+    backgroundColor: '#fefce8', borderWidth: 1, borderColor: '#fde68a',
+    borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.xl,
+  },
+  headTipTitle: { fontSize: 12, fontWeight: '800', color: '#78350f', marginBottom: 4 },
+  headTipBody:  { fontSize: 11, color: '#92400e', lineHeight: 16 },
+  headTipClose: { fontSize: 14, color: '#b45309', fontWeight: '700', paddingTop: 2 },
 
   // Section headers
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.md },
@@ -841,13 +941,24 @@ const styles = StyleSheet.create({
   balanceTitle: { ...typography.bodyBold, color: colors.text, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   balanceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   balanceName: { ...typography.smallBold, color: colors.text },
-  balanceFam: { fontSize: 10, fontWeight: '600' },
+  balanceFam:  { fontSize: 10, fontWeight: '600' },
+  promoteHint: { fontSize: 10, color: colors.primary, fontWeight: '600', marginTop: 1 },
   balanceNet: { ...typography.smallBold },
   settleTitle: { fontSize: 10, fontWeight: '800', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4, padding: spacing.md, paddingBottom: spacing.sm },
   settledText: { ...typography.body, color: colors.muted, padding: spacing.lg },
   settleItem: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: spacing.md, backgroundColor: colors.surface2, marginHorizontal: spacing.md, borderRadius: radius.sm, marginBottom: 6 },
-  settleName: { ...typography.smallBold, color: colors.text },
-  settleFam: { fontSize: 10, fontWeight: '600' },
-  settleArrow: { ...typography.small, color: colors.muted, paddingHorizontal: 4 },
-  settleAmt: { marginLeft: 'auto', ...typography.bodyBold, color: colors.green },
+  settleName:     { ...typography.smallBold, color: colors.text },
+  settleNamePaid: { textDecorationLine: 'line-through', color: colors.muted },
+  settleFam:      { fontSize: 10, fontWeight: '600' },
+  settleArrow:    { ...typography.small, color: colors.muted, paddingHorizontal: 4 },
+  settleAmt:      { ...typography.bodyBold, color: colors.green },
+  settleItemPaid: { backgroundColor: colors.surface2, borderColor: colors.border },
+  settleRightCol: { alignItems: 'flex-end', gap: 4 },
+  settleCheck: {
+    width: 20, height: 20, borderRadius: 10,
+    borderWidth: 1.5, borderColor: colors.border,
+    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+  },
+  settleCheckDone:  { backgroundColor: colors.green, borderColor: colors.green },
+  settleCheckText:  { fontSize: 11, color: '#fff', fontWeight: '900' },
 });

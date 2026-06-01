@@ -108,8 +108,10 @@ export default function TripScreen({ navigation }) {
         <View style={styles.tripInfo}>
           <Text style={styles.emoji}>{trip.emoji}</Text>
           <View style={{ flex: 1 }}>
-            <Text style={styles.tripName} numberOfLines={1}>{trip.name}</Text>
-            <Text style={styles.tripMeta}>📍 {trip.destination}  •  📅 {fmt(trip.startDate)} – {fmt(trip.endDate)}</Text>
+            <View style={styles.tripNameRow}>
+              <Text style={styles.tripName} numberOfLines={1}>{trip.name}</Text>
+            </View>
+            <Text style={styles.tripMeta}>📍 {trip.destination}  ·  {fmt(trip.startDate)} – {fmt(trip.endDate)}</Text>
             <View style={styles.tags}>
               <View style={[styles.tag, { backgroundColor: trip.mode === 'ai' ? colors.aiLight : trip.mode === 'expert' ? colors.expertLight : colors.primaryLight }]}>
                 <Text style={[styles.tagText, { color: trip.mode === 'ai' ? colors.ai : trip.mode === 'expert' ? colors.expert : colors.primary }]}>{modeLabel}</Text>
@@ -150,22 +152,24 @@ export default function TripScreen({ navigation }) {
         </View>
       </View>
 
-      {/* Tab Content */}
+      {/* Tab Content — all tabs stay mounted so scroll position is preserved */}
       <View style={{ flex: 1 }}>
-        {activeTab === 'itinerary' && (
+        <View style={{ flex: 1, display: activeTab === 'itinerary' ? 'flex' : 'none' }}>
           <ItineraryScreen
             trip={trip}
             switchTab={setActiveTab}
             onPlanWithAI={isAIMode ? () => setShowPlanner(true) : undefined}
           />
-        )}
-        {activeTab === 'travelers' && (
+        </View>
+        <View style={{ flex: 1, display: activeTab === 'travelers' ? 'flex' : 'none' }}>
           <TravelersScreen
             trip={trip}
             onUpdatePlan={isAIMode ? () => setShowPlanner(true) : undefined}
           />
-        )}
-        {activeTab === 'splitwise' && <SplitwiseScreen trip={trip} />}
+        </View>
+        <View style={{ flex: 1, display: activeTab === 'splitwise' ? 'flex' : 'none' }}>
+          <SplitwiseScreen trip={trip} />
+        </View>
       </View>
 
       <EditTripModal visible={showEditModal} trip={trip} onClose={() => setShowEditModal(false)} />
@@ -191,22 +195,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingHorizontal: spacing.xxl,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.sm,
   },
   headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
-  backBtn: { paddingVertical: spacing.sm },
+  backBtn: { paddingVertical: spacing.xs },
   backText: { ...typography.bodyBold, color: colors.primary },
-  menuBtn: { paddingVertical: spacing.sm },
+  menuBtn: { paddingVertical: spacing.xs },
   menuText: { fontSize: 22, color: colors.text, fontWeight: '700' },
-  tripInfo: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  emoji: { fontSize: 32, marginTop: 2 },
-  tripName: { ...typography.h3, color: colors.text, flex: 1 },
-  tripMeta: { ...typography.caption, color: colors.muted, marginTop: 2 },
+  tripInfo: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  emoji: { fontSize: 26 },
+  tripNameRow: { flexDirection: 'row', alignItems: 'center' },
+  tripName: { fontSize: 16, fontWeight: '700', color: colors.text, flex: 1 },
+  tripMeta: { fontSize: 11, color: colors.muted, marginTop: 1 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm, alignItems: 'center' },
   tag: { borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 },
   tagText: { ...typography.caption, fontWeight: '700', fontSize: 11 },

@@ -12,6 +12,7 @@ export default function AddExpenseModal({ visible, trip, onClose }) {
 
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
+  const [entryMode, setEntryMode] = useState('total'); // 'total' | 'per_person' | 'per_family'
   const [category, setCategory] = useState('🎯');
   const [paidById, setPaidById] = useState(allMembers[0]?.id || '');
   const [splitMode, setSplitMode] = useState(null); // null = inherit trip
@@ -27,7 +28,7 @@ export default function AddExpenseModal({ visible, trip, onClose }) {
   const effectiveMode = splitMode || tripMode;
 
   const reset = () => {
-    setName(''); setAmount(''); setCategory('🎯'); setSplitMode(null);
+    setName(''); setAmount(''); setEntryMode('total'); setCategory('🎯'); setSplitMode(null);
     setPaidById(allMembers[0]?.id || '');
     setParticipatingFamilyIds(trip.families.map(f => f.id));
     setParticipatingMemberIds(null);
@@ -103,7 +104,20 @@ export default function AddExpenseModal({ visible, trip, onClose }) {
     return partFamilies.flatMap(f => f.members);
   }, [effectiveMode, partFamilies, participatingMemberIds]);
 
-  const totalAmt = parseFloat(amount) || 0;
+  const parsedInput = parseFloat(amount) || 0;
+  // Convert entry mode input to a total amount
+  const totalAmt = parsedInput > 0
+    ? entryMode === 'per_person'
+      ? parsedInput * partMembers.length
+      : entryMode === 'per_family'
+        ? parsedInput * partFamilies.length
+        : parsedInput  // 'total' — entered directly
+    : 0;
+  const entryHint = parsedInput > 0 && entryMode !== 'total'
+    ? entryMode === 'per_person'
+      ? `${partMembers.length} people → $${totalAmt.toFixed(2)} total`
+      : `${partFamilies.length} group${partFamilies.length !== 1 ? 's' : ''} → $${totalAmt.toFixed(2)} total`
+    : null;
   const sharePerFamily = partFamilies.length > 0 && totalAmt > 0
     ? (totalAmt / partFamilies.length) : 0;
   const sharePerPerson = partMembers.length > 0 && totalAmt > 0
@@ -142,14 +156,37 @@ export default function AddExpenseModal({ visible, trip, onClose }) {
           <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
             <FormField label="Description *" value={name} onChangeText={setName} placeholder="e.g. Dinner at Jimbaran" autoFocus />
+            {/* Entry mode toggle */}
+            <View style={styles.entryModeRow}>
+              {[
+                { key: 'total',      label: '💰 Total' },
+                { key: 'per_person', label: '👤 /Person' },
+                { key: 'per_family', label: '👨‍👩‍👧 /Family' },
+              ].map(opt => (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[styles.entryModeBtn, entryMode === opt.key && styles.entryModeBtnActive]}
+                  onPress={() => setEntryMode(opt.key)}
+                >
+                  <Text style={[styles.entryModeBtnText, entryMode === opt.key && styles.entryModeBtnTextActive]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <FormField
-              label="Total Amount *"
+              label={entryMode === 'per_person' ? 'Amount per Person *' : entryMode === 'per_family' ? 'Amount per Family *' : 'Total Amount *'}
               value={amount}
               onChangeText={setAmount}
               placeholder="0.00"
               keyboardType="decimal-pad"
               inputStyle={styles.amountInput}
             />
+            {!!entryHint && (
+              <View style={styles.entryHint}>
+                <Text style={styles.entryHintText}>📊 {entryHint}</Text>
+              </View>
+            )}
 
             {/* Category */}
             <Text style={styles.sectionLabel}>CATEGORY</Text>
@@ -316,6 +353,13 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { padding: spacing.xxl, paddingBottom: 80 },
   amountInput: { fontSize: 22, fontWeight: '800', color: colors.primary },
+  entryModeRow: { flexDirection: 'row', gap: 8, marginBottom: spacing.sm },
+  entryModeBtn: { flex: 1, paddingVertical: spacing.sm, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center' },
+  entryModeBtnActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  entryModeBtnText: { fontSize: 11, fontWeight: '700', color: colors.muted },
+  entryModeBtnTextActive: { color: colors.primary, fontWeight: '800' },
+  entryHint: { backgroundColor: colors.yellowLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: '#f0d080' },
+  entryHintText: { fontSize: 12, color: '#9b6e00', fontWeight: '600' },
   sectionLabel: { fontSize: 10, fontWeight: '800', color: colors.muted, letterSpacing: 0.5, marginBottom: 8, textTransform: 'uppercase' },
 
   chipRow: { flexDirection: 'row', gap: 8 },

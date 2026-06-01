@@ -99,10 +99,11 @@ export const ACTIVITY_TYPES = [
 
 // Transport subtypes — stored in activity.subtype
 export const TRANSPORT_SUBTYPE_ICONS = {
-  flight: '✈️',
-  car:    '🚗',
-  train:  '🚂',
-  ship:   '🚢',
+  flight:  '✈️',
+  car:     '🚗',
+  train:   '🚂',
+  ship:    '🚢',
+  pitstop: '⛽',
 };
 
 /** Returns the best display icon for an activity, respecting transport subtypes. */

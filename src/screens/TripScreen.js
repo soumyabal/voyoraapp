@@ -11,6 +11,7 @@ import SplitwiseScreen from './SplitwiseScreen';
 import EditTripModal from '../modals/EditTripModal';
 import ChangeModeModal from '../modals/ChangeModeModal';
 import AgenticPlannerModal from '../modals/AgenticPlannerModal';
+import TripValidationModal from '../modals/TripValidationModal';
 import { colors, spacing, typography, radius } from '../theme';
 import { fmt, getAllMembers } from '../utils/helpers';
 import { exportTripAsPDF } from '../utils/exportPlan';
@@ -25,11 +26,13 @@ const TABS = [
 
 export default function TripScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { getCurrentTrip, deleteTrip, duplicateTrip, setCurrentTrip, travelers } = useStore();
-  const [activeTab, setActiveTab]           = useState('itinerary');
-  const [showEditModal, setShowEditModal]   = useState(false);
-  const [showModeModal, setShowModeModal]   = useState(false);
-  const [showPlanner, setShowPlanner]       = useState(false);
+  const { getCurrentTrip, deleteTrip, duplicateTrip, setCurrentTrip, setCurrentDay, ignoreWarning, clearIgnoredWarnings, travelers } = useStore();
+  const [activeTab, setActiveTab]               = useState('itinerary');
+  const [showEditModal, setShowEditModal]       = useState(false);
+  const [showModeModal, setShowModeModal]       = useState(false);
+  const [showPlanner, setShowPlanner]           = useState(false);
+  const [showValidation,    setShowValidation]    = useState(false);
+  const [highlightedActIds, setHighlightedActIds] = useState([]);
   const trip = getCurrentTrip();
 
   if (!trip) {
@@ -43,8 +46,21 @@ export default function TripScreen({ navigation }) {
     );
   }
 
+  const handleValidationNavigate = (warning) => {
+    // Switch to the itinerary tab
+    setActiveTab('itinerary');
+    // Jump to the relevant day (default day 0 for trip-level issues)
+    setCurrentDay(warning.dayIndex ?? 0);
+    // Highlight specific activity cards if the warning names them
+    if (warning.actIds?.length) {
+      setHighlightedActIds(warning.actIds);
+      setTimeout(() => setHighlightedActIds([]), 3000);
+    }
+  };
+
   const isAIMode = trip.mode === 'ai';
   const hasActivities = trip.days?.some(d => d.activities.length > 0);
+
   const hasAccessible = trip.families.some(f => f.members.some(m => m.needs.length > 0));
   const modeLabel = trip.mode === 'ai' ? '🤖 AI Planned' : trip.mode === 'expert' ? '🧳 Expert' : '✍️ Manual';
 
@@ -159,6 +175,8 @@ export default function TripScreen({ navigation }) {
             trip={trip}
             switchTab={setActiveTab}
             onPlanWithAI={isAIMode ? () => setShowPlanner(true) : undefined}
+            onCheckTrip={() => setShowValidation(true)}
+            highlightedActIds={highlightedActIds}
           />
         </View>
         <View style={{ flex: 1, display: activeTab === 'travelers' ? 'flex' : 'none' }}>
@@ -172,6 +190,14 @@ export default function TripScreen({ navigation }) {
         </View>
       </View>
 
+      <TripValidationModal
+        visible={showValidation}
+        trip={trip}
+        onClose={() => setShowValidation(false)}
+        onNavigate={handleValidationNavigate}
+        onIgnore={(key) => ignoreWarning(trip.id, key)}
+        onClearIgnored={() => clearIgnoredWarnings(trip.id)}
+      />
       <EditTripModal visible={showEditModal} trip={trip} onClose={() => setShowEditModal(false)} />
       <ChangeModeModal visible={showModeModal} trip={trip} onClose={() => setShowModeModal(false)} />
       <AgenticPlannerModal

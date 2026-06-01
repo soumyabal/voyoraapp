@@ -6,11 +6,15 @@
  *   👥 Travelers — global traveler library & saved groups
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  StatusBar, Alert, Modal, TextInput, KeyboardAvoidingView, Platform,
+  StatusBar, Alert, Modal, TextInput, KeyboardAvoidingView, Platform, Dimensions,
 } from 'react-native';
+
+const SCREEN_W      = Dimensions.get('window').width;
+const TRIP_ACTION_W = 144;  // 2 × 72px action buttons
+const TRIP_CARD_W   = SCREEN_W - 48; // SCREEN_W - 2×spacing.xxl
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import useStore from '../store';
@@ -412,10 +416,73 @@ function EditGroupModal({ visible, group, travelers, onSave, onClose }) {
   );
 }
 
+// ─── Swipeable trip card wrapper ─────────────────────────────────
+function SwipeableTripCard({ trip, onPress, onComplete, onDelete }) {
+  const scrollRef = useRef(null);
+  const close = () => scrollRef.current?.scrollTo({ x: 0, animated: true });
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Trip',
+      `Delete "${trip.name}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: close },
+        { text: 'Delete', style: 'destructive', onPress: () => { close(); onDelete(); } },
+      ],
+    );
+  };
+
+  return (
+    <ScrollView
+      ref={scrollRef}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      bounces={false}
+      snapToOffsets={[0, TRIP_ACTION_W]}
+      decelerationRate="fast"
+      scrollEventThrottle={32}
+      contentContainerStyle={sw.row}
+    >
+      {/* Card */}
+      <TripCard
+        trip={trip}
+        onPress={onPress}
+        style={{ width: TRIP_CARD_W }}
+      />
+
+      {/* Action buttons */}
+      <View style={sw.actions}>
+        <TouchableOpacity
+          style={[sw.action, { backgroundColor: trip.archived ? '#6b7280' : '#22c55e' }]}
+          onPress={() => { close(); onComplete(); }}
+        >
+          <Text style={sw.actionIcon}>{trip.archived ? '↩' : '✓'}</Text>
+          <Text style={sw.actionLabel}>{trip.archived ? 'Reopen' : 'Complete'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[sw.action, { backgroundColor: '#ef4444' }]}
+          onPress={handleDelete}
+        >
+          <Text style={sw.actionIcon}>🗑</Text>
+          <Text style={sw.actionLabel}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+}
+
+const sw = StyleSheet.create({
+  row:     { flexDirection: 'row' },
+  actions: { width: TRIP_ACTION_W, flexDirection: 'row', marginBottom: spacing.lg },
+  action:  { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 4 },
+  actionIcon:  { fontSize: 22, color: '#fff' },
+  actionLabel: { fontSize: 10, color: '#fff', fontWeight: '700', textAlign: 'center' },
+});
+
 // ─── Main HomeScreen ──────────────────────────────────────────────
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { trips, account, travelers, setCurrentTrip } = useStore();
+  const { trips, account, travelers, setCurrentTrip, deleteTrip, updateTrip } = useStore();
   const [activeTab, setActiveTab]       = useState('trips');
   const [showNewTrip, setShowNewTrip]   = useState(false);
   const [showAuth, setShowAuth]         = useState(false);
@@ -497,7 +564,13 @@ export default function HomeScreen({ navigation }) {
               </View>
             ) : (
               trips.map(trip => (
-                <TripCard key={trip.id} trip={trip} onPress={() => openTrip(trip.id)} />
+                <SwipeableTripCard
+                  key={trip.id}
+                  trip={trip}
+                  onPress={() => openTrip(trip.id)}
+                  onComplete={() => updateTrip(trip.id, { archived: !trip.archived })}
+                  onDelete={() => deleteTrip(trip.id)}
+                />
               ))
             )}
           </ScrollView>

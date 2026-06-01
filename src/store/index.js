@@ -132,6 +132,50 @@ const useStore = create(
         return trip;
       },
 
+      // ── IGNORED WARNINGS ────────────────────────────────────
+      // Key format: `${type}:${dayIndex ?? 'trip'}` — stable per warning type + day
+      ignoreWarning: (tripId, warningKey) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          ignoredWarnings: [...new Set([...(t.ignoredWarnings || []), warningKey])],
+        }),
+      })),
+      clearIgnoredWarnings: (tripId) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          ignoredWarnings: [],
+        }),
+      })),
+
+      // ── SLOT DRAG REORDER ───────────────────────────────────
+      // Called when DraggableFlatList drag ends within a slot.
+      // orderedIds = activity IDs in new visual order (within the slot).
+      // Reassigns the slot's sorted times to match the new order.
+      reorderSlotActivities: (tripId, dayIndex, orderedIds) => set(s => ({
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+          return {
+            ...t,
+            days: t.days.map((d, i) => {
+              if (i !== dayIndex) return d;
+              const actMap = Object.fromEntries(d.activities.map(a => [a.id, a]));
+              // Sorted times from the dragged slot (ascending)
+              const sortedTimes = orderedIds
+                .map(id => actMap[id]?.time)
+                .filter(Boolean)
+                .sort((a, b) => a.localeCompare(b));
+              // Assign times in new drag order → re-sort will display them correctly
+              const updatedActivities = d.activities.map(act => {
+                const newIdx = orderedIds.indexOf(act.id);
+                if (newIdx === -1) return act;
+                return { ...act, time: sortedTimes[newIdx] };
+              });
+              return { ...d, activities: updatedActivities };
+            }),
+          };
+        }),
+      })),
+
       // ── ACTIVITIES ──────────────────────────────────────────
       addActivity: (tripId, dayIndex, activity) => set(s => ({
         trips: s.trips.map(t => {
@@ -190,6 +234,17 @@ const useStore = create(
             });
           }
           return { ...t, days: newDays, expenses: newExpenses };
+        }),
+      })),
+
+      // Set activity completion status: 'done' | 'skipped' | null (clear)
+      markActivityStatus: (tripId, actId, status) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          days: t.days.map(d => ({
+            ...d,
+            activities: d.activities.map(a => a.id !== actId ? a : { ...a, status }),
+          })),
         }),
       })),
 

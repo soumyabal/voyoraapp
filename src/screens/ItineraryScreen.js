@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal, FlatList } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal } from 'react-native';
 import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
+import DiscoverModal from '../modals/DiscoverModal';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
 import { fmt, fmtM, getActivityIcon } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
+import { validateTrip, summariseWarnings } from '../utils/tripValidator';
 
-const SCREEN_W = Dimensions.get('window').width;
+const SCREEN_W       = Dimensions.get('window').width;
+const CARD_ACTIONS_W = 216;                        // 3 × 72px action buttons
+const CARD_W         = SCREEN_W - 48;              // SCREEN_W - 2 × spacing.xxl (24)
 
 // ── Day template: time slots ──────────────────────────────────────
 const DAY_SLOTS = [
@@ -233,12 +237,33 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush }) {
   );
 }
 
-export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
-  const { currentDay, setCurrentDay, deleteActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity } = useStore();
+export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
+  const { currentDay, setCurrentDay, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities } = useStore();
   const [showAddActivity, setShowAddActivity] = useState(false);
   const [editActivity,    setEditActivity]    = useState(null);
   const [defaultSlotTime, setDefaultSlotTime] = useState('09:00');
-  const [movingAct,       setMovingAct]       = useState(null); // activity pending a day move
+  const [showDiscover,    setShowDiscover]    = useState(false);
+  const [movingAct,       setMovingAct]       = useState(null);
+  const [reorderHint,    setReorderHint]    = useState(false);
+  const [collapsedSlots, setCollapsedSlots] = useState({});   // { [slotKey]: true }
+
+  const toggleSlot = (key) =>
+    setCollapsedSlots(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // Show a brief hint after any reorder, then auto-dismiss
+  const handleReorder = (actId, direction, slotActs) => {
+    // Swap TIME VALUES between the two adjacent activities in sorted slot order.
+    // (Swapping array positions doesn't work because rendering re-sorts by time.)
+    const idx = slotActs.findIndex(a => a.id === actId);
+    const swapIdx = idx + direction;
+    if (swapIdx < 0 || swapIdx >= slotActs.length) return;
+    const timeA = slotActs[idx].time;
+    const timeB = slotActs[swapIdx].time;
+    updateActivity(trip.id, actId, { time: timeB });
+    updateActivity(trip.id, slotActs[swapIdx].id, { time: timeA });
+    setReorderHint(true);
+    setTimeout(() => setReorderHint(false), 3000);
+  };
 
   const day = trip.days[currentDay] || trip.days[0];
 
@@ -252,6 +277,25 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
   const cycleStatus = (act) => {
     const next = !act.status ? 'done' : act.status === 'done' ? 'skipped' : null;
     markActivityStatus(trip.id, act.id, next);
+  };
+  // Direct-status setters for swipe actions (toggle off if already set)
+  const setDone    = (act) => markActivityStatus(trip.id, act.id, act.status === 'done'    ? null : 'done');
+  const setSkipped = (act) => markActivityStatus(trip.id, act.id, act.status === 'skipped' ? null : 'skipped');
+
+  // Long-press → move activity to a different time slot (same day)
+  const openSlotMove = (act) => {
+    const currentSlot = getSlotKey(act.time);
+    const options = DAY_SLOTS
+      .filter(sl => sl.key !== currentSlot)
+      .map(sl => ({
+        text: `${sl.emoji} ${sl.label} (${sl.defaultTime})`,
+        onPress: () => updateActivity(trip.id, act.id, { time: sl.defaultTime }),
+      }));
+    Alert.alert(
+      `Move "${act.name}"`,
+      `Currently in ${DAY_SLOTS.find(s => s.key === currentSlot)?.label || 'slot'}. Move to:`,
+      [...options, { text: 'Cancel', style: 'cancel' }],
+    );
   };
 
   const confirmDelete = (act) => {
@@ -299,9 +343,23 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
         {day && (
           <View style={styles.dayHeader}>
             <Text style={styles.dayTitle}>{day.label} — {fmt(day.date)}</Text>
-            <TouchableOpacity style={styles.addActBtn} onPress={openAdd}>
-              <Text style={styles.addActBtnText}>+ Activity</Text>
-            </TouchableOpacity>
+            <View style={styles.dayHeaderActions}>
+              <TouchableOpacity style={styles.discoverBtn} onPress={() => setShowDiscover(true)}>
+                <Text style={styles.discoverBtnText}>🔍 Discover</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.addActBtn} onPress={openAdd}>
+                <Text style={styles.addActBtnText}>+ Activity</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Reorder hint — shown briefly after ↑↓ tap */}
+        {reorderHint && (
+          <View style={styles.reorderHintBar}>
+            <Text style={styles.reorderHintText}>
+              ↕ Order changed — use Check Trip in the header to verify the schedule
+            </Text>
           </View>
         )}
 
@@ -364,29 +422,56 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
                 );
               }
 
+              const isCollapsed = !!collapsedSlots[slot.key];
               return (
                 <View key={slot.key} style={styles.slotSection}>
-                  {/* Slot header */}
-                  <View style={styles.slotHeader}>
-                    <Text style={styles.slotEmoji}>{slot.emoji}</Text>
-                    <Text style={styles.slotLabel}>{slot.label}</Text>
-                    <Text style={styles.slotHint}>{slot.hint}</Text>
-                    {slotActs.length > 0 && (doneCount > 0 || skippedCount > 0) && (
-                      <View style={styles.slotProgress}>
-                        {doneCount > 0    && <Text style={styles.slotDoneText}>✅ {doneCount}</Text>}
-                        {skippedCount > 0 && <Text style={styles.slotSkipText}>↩️ {skippedCount}</Text>}
-                      </View>
-                    )}
-                    <TouchableOpacity
-                      style={styles.slotAddBtn}
-                      onPress={() => openAddInSlot(slot.defaultTime)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <Text style={styles.slotAddBtnText}>+ Add</Text>
-                    </TouchableOpacity>
-                  </View>
+                  {/* Slot header — tap to collapse/expand */}
+                  <TouchableOpacity
+                    style={styles.slotHeader}
+                    onPress={() => toggleSlot(slot.key)}
+                    activeOpacity={0.7}
+                  >
+                    {/* Row 1: emoji · label · [+ Add pill] · chevron */}
+                    <View style={styles.slotHeaderRow}>
+                      <Text style={styles.slotEmoji}>{slot.emoji}</Text>
+                      <Text style={styles.slotLabel}>{slot.label}</Text>
+                      {!isCollapsed && (
+                        <TouchableOpacity
+                          style={styles.slotAddBtn}
+                          onPress={() => openAddInSlot(slot.defaultTime)}
+                          hitSlop={{ top: 10, bottom: 10, left: 8, right: 4 }}
+                        >
+                          <Text style={styles.slotAddBtnText}>+ Add</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
 
-                  {slotActs.length === 0 ? (
+                    {/* Row 2: muted meta — time hint · item count · status badges */}
+                    <View style={styles.slotMetaRow}>
+                      {isCollapsed ? (
+                        <>
+                          <Text style={styles.slotMetaText}>
+                            {slotActs.length} item{slotActs.length !== 1 ? 's' : ''}
+                          </Text>
+                          {doneCount > 0    && <Text style={styles.slotDoneText}>  ✅ {doneCount} done</Text>}
+                          {skippedCount > 0 && <Text style={styles.slotSkipText}>  ↩️ {skippedCount} skipped</Text>}
+                        </>
+                      ) : (
+                        <>
+                          <Text style={styles.slotMetaText}>{slot.hint}</Text>
+                          {slotActs.length > 0 && (
+                            <Text style={styles.slotMetaText}>
+                              {'  ·  '}{slotActs.length} item{slotActs.length !== 1 ? 's' : ''}
+                            </Text>
+                          )}
+                          {doneCount > 0    && <Text style={styles.slotDoneText}>  ✅ {doneCount}</Text>}
+                          {skippedCount > 0 && <Text style={styles.slotSkipText}>  ↩️ {skippedCount}</Text>}
+                        </>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+
+                  {!isCollapsed && slotActs.length === 0 ? (
                     <TouchableOpacity
                       style={styles.slotEmpty}
                       onPress={() => openAddInSlot(slot.defaultTime)}
@@ -394,19 +479,40 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
                     >
                       <Text style={styles.slotEmptyText}>Nothing planned for {slot.label.toLowerCase()} · tap to add</Text>
                     </TouchableOpacity>
-                  ) : (
-                    slotActs.map(act => (
-                      <ActivityCard
-                        key={act.id}
-                        activity={act}
-                        trip={trip}
-                        onEdit={() => openEdit(act)}
-                        onDelete={() => confirmDelete(act)}
-                        onToggleStatus={() => cycleStatus(act)}
-                        onMoveRequest={() => setMovingAct(act)}
-                      />
-                    ))
-                  )}
+                  ) : !isCollapsed ? (
+                    <FlatList
+                      data={slotActs}
+                      keyExtractor={(act) => act.id}
+                      scrollEnabled={false}
+                      renderItem={({ item: act, index }) => (
+                        <ActivityCard
+                          activity={act}
+                          trip={trip}
+                          isHighlighted={highlightedActIds.includes(act.id)}
+                          isFirst={index === 0}
+                          isLast={index === slotActs.length - 1}
+                          onMoveUp={() => {
+                            if (index === 0) return;
+                            const newOrder = [...slotActs];
+                            [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+                            reorderSlotActivities(trip.id, currentDay, newOrder.map(a => a.id));
+                          }}
+                          onMoveDown={() => {
+                            if (index === slotActs.length - 1) return;
+                            const newOrder = [...slotActs];
+                            [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+                            reorderSlotActivities(trip.id, currentDay, newOrder.map(a => a.id));
+                          }}
+                          onMarkDone={() => setDone(act)}
+                          onMarkSkipped={() => setSkipped(act)}
+                          onEdit={() => openEdit(act)}
+                          onDelete={() => confirmDelete(act)}
+                          onMoveRequest={() => setMovingAct(act)}
+                          onSlotMove={() => openSlotMove(act)}
+                        />
+                      )}
+                    />
+                  ) : null}
                 </View>
               );
             });
@@ -415,6 +521,43 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
         </View>
       </ScrollView>
 
+      {/* ── Check Trip FAB ── */}
+      {!!onCheckTrip && (() => {
+        const issues = validateTrip(trip);
+        const { errors, warnings, infos } = summariseWarnings(issues);
+        // Ignored warnings don't count toward the badge
+        const ignoredKeys = trip.ignoredWarnings || [];
+        const visible = issues.filter(w => !ignoredKeys.includes(`${w.type}:${w.dayIndex ?? 'trip'}`));
+        const total = visible.length;
+        const visErrors   = visible.filter(w => w.severity === 'error').length;
+        const visWarnings = visible.filter(w => w.severity === 'warning').length;
+        const visInfos    = visible.filter(w => w.severity === 'info').length;
+        // Color: red=conflicts, orange=warnings, blue=suggestions only, green=all clear
+        const fabColor = visErrors   > 0 ? colors.red
+                       : visWarnings > 0 ? '#d97706'
+                       : visInfos    > 0 ? '#3b82f6'
+                       : colors.green;
+        const fabIcon  = visErrors   > 0 ? '🚫'
+                       : visWarnings > 0 ? '⚠️'
+                       : visInfos    > 0 ? '💡'
+                       : '✅';
+        return (
+          <TouchableOpacity
+            style={[styles.checkFab, { backgroundColor: fabColor }]}
+            onPress={onCheckTrip}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.checkFabIcon}>{fabIcon}</Text>
+            <Text style={styles.checkFabText}>Check Trip</Text>
+            {total > 0 && (
+              <View style={styles.checkFabBadge}>
+                <Text style={styles.checkFabBadgeText}>{total}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        );
+      })()}
+
       <AddActivityModal
         visible={showAddActivity}
         trip={trip}
@@ -422,6 +565,14 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
         editActivity={editActivity}
         defaultTime={defaultSlotTime}
         onClose={closeModal}
+      />
+
+      <DiscoverModal
+        visible={showDiscover}
+        onClose={() => setShowDiscover(false)}
+        trip={trip}
+        dayIndex={currentDay}
+        defaultTime={defaultSlotTime}
       />
 
       {/* ── Day picker — move activity to another day ── */}
@@ -473,13 +624,12 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
   );
 }
 
-function ActivityCard({ activity: act, trip, onEdit, onDelete, onToggleStatus, onMoveRequest }) {
-  const status   = act.status ?? null;   // null | 'done' | 'skipped'
-  const isDone   = status === 'done';
-  const isSkipped= status === 'skipped';
-  const dimmed   = isDone || isSkipped;
+function ActivityCard({ activity: act, trip, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onMarkSkipped, onEdit, onDelete, onMoveRequest, onSlotMove }) {
+  const status    = act.status ?? null;
+  const isDone    = status === 'done';
+  const isSkipped = status === 'skipped';
+  const dimmed    = isDone || isSkipped;
 
-  // Secondary content is collapsed by default; auto-expand if content exists on first render
   const hasSecondary = !!(act.detail || act.memo || act.reminder || act.note || act.address || act.url);
   const [cardExpanded, setCardExpanded] = useState(false);
 
@@ -487,176 +637,453 @@ function ActivityCard({ activity: act, trip, onEdit, onDelete, onToggleStatus, o
     ...fam, cost: fam.members.length * act.costPerPerson,
   })) : [];
 
-  const isNote = act.type === 'note';
-  const handleMapPress  = () => { if (act.mapUrl) Linking.openURL(act.mapUrl); };
-  const handleUrlPress  = () => { if (act.url)    Linking.openURL(act.url); };
-  const actIcon         = getActivityIcon(act.type, act.subtype);
-  const isPerFamily = act.costMode === 'per_family';
-  const isTotal     = act.costMode === 'total';
-  // Badge shows the amount the user actually typed, not the derived costPerPerson
+  const isNote         = act.type === 'note';
+  const handleMapPress = () => { if (act.mapUrl) Linking.openURL(act.mapUrl); };
+  const handleUrlPress = () => { if (act.url)    Linking.openURL(act.url); };
+  const actIcon        = getActivityIcon(act.type, act.subtype);
+  const isPerFamily    = act.costMode === 'per_family';
+  const isTotal        = act.costMode === 'total';
   const displayCostAmt = isPerFamily || isTotal ? act.costAmount : act.costPerPerson;
   const displayCostLbl = isPerFamily ? '/fam' : isTotal ? ' total' : '/p';
 
+  // ── Swipe-to-action: horizontal ScrollView (no PanResponder conflict) ──
+  const swipeScrollRef = useRef(null);
+  const close = () => swipeScrollRef.current?.scrollTo({ x: 0, animated: true });
+
   return (
-    <View style={[
-      styles.actCard,
-      { borderLeftColor: activityColors[act.type] || colors.muted },
-      isNote    && styles.actCardNote,
-      isDone    && styles.actCardDone,
-      isSkipped && styles.actCardSkipped,
-    ]}>
-      {/* ── Checkbox ── */}
-      <TouchableOpacity
-        style={styles.checkboxCol}
-        onPress={onToggleStatus}
-        hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-        activeOpacity={0.7}
+    <View style={styles.actCardOuter}>
+      <ScrollView
+        ref={swipeScrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        bounces={false}
+        snapToOffsets={[0, CARD_ACTIONS_W]}
+        decelerationRate="fast"
+        scrollEventThrottle={32}
+        contentContainerStyle={styles.actCardScrollContent}
       >
-        <View style={[
-          styles.checkbox,
-          isDone    && styles.checkboxDone,
-          isSkipped && styles.checkboxSkipped,
-        ]}>
-          {isDone    && <Text style={styles.checkMark}>✓</Text>}
-          {isSkipped && <Text style={styles.checkMark}>✗</Text>}
-        </View>
-      </TouchableOpacity>
-
-      {/* ── Time + icon ── */}
-      <View style={[styles.actTimeCol, dimmed && { opacity: 0.45 }]}>
-        <Text style={styles.actTime}>{act.time}</Text>
-        <Text style={styles.actIcon}>{actIcon}</Text>
-      </View>
-
-      {/* ── Body ── */}
-      <View style={[styles.actBody, dimmed && { opacity: dimmed ? 0.55 : 1 }]}>
-        {/* Status badge */}
-        {isDone    && <View style={styles.statusBadgeDone}><Text style={styles.statusBadgeText}>✅ Done</Text></View>}
-        {isSkipped && <View style={styles.statusBadgeSkip}><Text style={[styles.statusBadgeText, { color: '#6b7280' }]}>↩️ Skipped</Text></View>}
-
-        <View style={styles.actNameRow}>
-          <Text style={[
-            styles.actName,
-            isNote    && styles.actNameNote,
-            isSkipped && styles.actNameSkipped,
-            isDone    && { color: colors.green },
-          ]} numberOfLines={2}>{act.name}</Text>
-          {!!act.rating && !dimmed && (
-            <View style={styles.ratingBadge}>
-              <Text style={styles.ratingText}>⭐ {act.rating}</Text>
-            </View>
+        {/* ── Card ── */}
+        <View
+          style={[
+            styles.actCard,
+            { borderLeftColor: activityColors[act.type] || colors.muted, width: CARD_W },
+            isNote        && styles.actCardNote,
+            isDone        && styles.actCardDone,
+            isSkipped     && styles.actCardSkipped,
+            isHighlighted && styles.actCardHighlighted,
+          ]}
+        >
+        {/* ── Time + icon (or big status emoji when done/skipped) ── */}
+        <View style={styles.actTimeCol}>
+          {dimmed ? (
+            <Text style={styles.actStatusEmoji}>{isDone ? '✅' : '❌'}</Text>
+          ) : (
+            <>
+              <Text style={styles.actTime}>{act.time}</Text>
+              <Text style={styles.actIcon}>{actIcon}</Text>
+            </>
           )}
         </View>
 
-        {/* Always-visible: cost badge */}
-        {!dimmed && displayCostAmt > 0 && (
-          <View style={styles.actTags}>
-            <View style={[styles.costBadge, isPerFamily && { backgroundColor: '#f0eeff', borderColor: '#c4b5fd' }, isTotal && { backgroundColor: '#dcfce7', borderColor: '#a7f3d0' }]}>
-              <Text style={[styles.costBadgeText, isPerFamily && { color: '#7c3aed' }, isTotal && { color: '#065f46' }]}>
-                ~${displayCostAmt}{displayCostLbl}
-              </Text>
-            </View>
-            {!!act.access && (
-              <View style={[styles.costBadge, { backgroundColor: colors.greenLight, borderColor: '#b2dfdb' }]}>
-                <Text style={[styles.costBadgeText, { color: colors.green }]}>♿ {act.access}</Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Fold toggle — only shown when secondary content exists */}
-        {hasSecondary && !isSkipped && (
+        {/* ── Body + inline actions ── */}
+        <View style={{ flex: 1 }}>
           <TouchableOpacity
-            style={styles.cardFoldBtn}
-            onPress={() => setCardExpanded(e => !e)}
-            activeOpacity={0.6}
+            style={styles.actBody}
+            onLongPress={onSlotMove}
+            delayLongPress={400}
+            activeOpacity={1}
           >
-            <Text style={styles.cardFoldText}>{cardExpanded ? '▴ less' : '▾ details'}</Text>
-          </TouchableOpacity>
-        )}
+            <View style={styles.actNameRow}>
+              <Text style={[
+                styles.actName,
+                isNote    && styles.actNameNote,
+                isDone    && styles.actNameDone,
+                isSkipped && styles.actNameSkipped,
+              ]} numberOfLines={2}>{act.name}</Text>
+              {!!act.rating && !dimmed && (
+                <View style={styles.ratingBadge}><Text style={styles.ratingText}>⭐ {act.rating}</Text></View>
+              )}
+            </View>
 
-        {/* Secondary content — shown when expanded */}
-        {cardExpanded && !isSkipped && (
-          <>
-            {!!act.detail && <Text style={styles.actDetail}>{act.detail}</Text>}
-
-            {!!act.note && !isNote && (
-              <View style={styles.aiTipRow}>
-                <Text style={styles.aiTipIcon}>💡</Text>
-                <Text style={styles.aiTipText}>{act.note}</Text>
-              </View>
+            {/* Time + cost subtitle shown only when done/skipped */}
+            {dimmed && (
+              <Text style={[styles.actDimmedSub, isDone ? styles.actDimmedSubDone : styles.actDimmedSubSkip]}>
+                {act.time}{displayCostAmt > 0 ? `  ·  ~$${displayCostAmt}${displayCostLbl}` : ''}
+              </Text>
             )}
 
-            {!!act.memo && (
-              <View style={styles.memoRow}>
-                <Text style={styles.memoIcon}>📌</Text>
-                <Text style={styles.memoText}>{act.memo}</Text>
-              </View>
-            )}
-
-            {!!act.reminder && (
-              <View style={styles.reminderRow}>
-                <Text style={styles.reminderIcon}>🔔</Text>
-                <Text style={styles.reminderText}>{act.reminder}</Text>
-              </View>
-            )}
-
-            {!!act.address && (
-              <TouchableOpacity style={styles.locationRow} onPress={handleMapPress} activeOpacity={0.7}>
-                <Text style={styles.locationIcon}>📍</Text>
-                <Text style={styles.locationText} numberOfLines={1}>{act.address}</Text>
-                {!!act.mapUrl && <Text style={styles.locationArrow}>›</Text>}
-              </TouchableOpacity>
-            )}
-
-            {!!act.url && (
-              <TouchableOpacity style={styles.urlRow} onPress={handleUrlPress} activeOpacity={0.7}>
-                <Text style={styles.urlIcon}>🌐</Text>
-                <Text style={styles.urlText} numberOfLines={1}>
-                  {act.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
-                </Text>
-                <Text style={styles.locationArrow}>›</Text>
-              </TouchableOpacity>
-            )}
-
-            {famChips.length > 0 && !dimmed && (
-              <>
-                {isTotal && (
-                  <Text style={styles.famChipsTotalHint}>
-                    💰 ${act.costAmount} shared — each family's share:
+            {!dimmed && displayCostAmt > 0 && (
+              <View style={styles.actTags}>
+                <View style={[styles.costBadge, isPerFamily && { backgroundColor: '#f0eeff', borderColor: '#c4b5fd' }, isTotal && { backgroundColor: '#dcfce7', borderColor: '#a7f3d0' }]}>
+                  <Text style={[styles.costBadgeText, isPerFamily && { color: '#7c3aed' }, isTotal && { color: '#065f46' }]}>
+                    ~${displayCostAmt}{displayCostLbl}
                   </Text>
-                )}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.famChips}>
-                    {famChips.map(fam => (
-                      <View key={fam.id} style={styles.famChip}>
-                        <View style={[styles.famChipDot, { backgroundColor: fam.color }]} />
-                        <Text style={styles.famChipText}>{fam.name.split(' ')[0]}: {fmtM(fam.cost)}</Text>
-                      </View>
-                    ))}
+                </View>
+                {!!act.access && (
+                  <View style={[styles.costBadge, { backgroundColor: colors.greenLight, borderColor: '#b2dfdb' }]}>
+                    <Text style={[styles.costBadgeText, { color: colors.green }]}>* {act.access}</Text>
                   </View>
-                </ScrollView>
+                )}
+              </View>
+            )}
+
+            {hasSecondary && !isSkipped && (
+              <TouchableOpacity style={styles.cardFoldBtn} onPress={() => setCardExpanded(e => !e)}
+                activeOpacity={0.6} onLongPress={onSlotMove} delayLongPress={400}>
+                <Text style={styles.cardFoldText}>{cardExpanded ? '▴ less' : '▾ details'}</Text>
+              </TouchableOpacity>
+            )}
+
+            {cardExpanded && !isSkipped && (
+              <>
+                {!!act.detail && <Text style={styles.actDetail}>{act.detail}</Text>}
+                {!!act.note && !isNote && (
+                  <View style={styles.aiTipRow}>
+                    <Text style={styles.aiTipIcon}>💡</Text>
+                    <Text style={styles.aiTipText}>{act.note}</Text>
+                  </View>
+                )}
+                {!!act.memo && (
+                  <View style={styles.memoRow}>
+                    <Text style={styles.memoIcon}>📌</Text>
+                    <Text style={styles.memoText}>{act.memo}</Text>
+                  </View>
+                )}
+                {!!act.reminder && (
+                  <View style={styles.reminderRow}>
+                    <Text style={styles.reminderIcon}>🔔</Text>
+                    <Text style={styles.reminderText}>{act.reminder}</Text>
+                  </View>
+                )}
+                {!!act.address && (
+                  <TouchableOpacity style={styles.locationRow} onPress={handleMapPress} activeOpacity={0.7}>
+                    <Text style={styles.locationIcon}>📍</Text>
+                    <Text style={styles.locationText} numberOfLines={1}>{act.address}</Text>
+                    {!!act.mapUrl && <Text style={styles.locationArrow}>›</Text>}
+                  </TouchableOpacity>
+                )}
+                {!!act.url && (
+                  <TouchableOpacity style={styles.urlRow} onPress={handleUrlPress} activeOpacity={0.7}>
+                    <Text style={styles.urlIcon}>🌐</Text>
+                    <Text style={styles.urlText} numberOfLines={1}>
+                      {act.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                    </Text>
+                    <Text style={styles.locationArrow}>›</Text>
+                  </TouchableOpacity>
+                )}
+                {famChips.length > 0 && !dimmed && (
+                  <>
+                    {isTotal && (
+                      <Text style={styles.famChipsTotalHint}>
+                        💰 ${act.costAmount} shared — each family's share:
+                      </Text>
+                    )}
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View style={styles.famChips}>
+                        {famChips.map(fam => (
+                          <View key={fam.id} style={styles.famChip}>
+                            <View style={[styles.famChipDot, { backgroundColor: fam.color }]} />
+                            <Text style={styles.famChipText}>{fam.name.split(' ')[0]}: {fmtM(fam.cost)}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </ScrollView>
+                  </>
+                )}
               </>
             )}
-          </>
-        )}
-      </View>
+          </TouchableOpacity>
 
-      {/* ── Edit / Move / Delete ── */}
-      <View style={styles.actActions}>
-        <TouchableOpacity style={styles.actActionBtn} onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={styles.editBtnText}>✏️</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actActionBtn} onPress={onMoveRequest} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={styles.moveBtnText}>📅</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actActionBtn} onPress={onDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={styles.delBtnText}>🗑</Text>
-        </TouchableOpacity>
-      </View>
+          {/* Bottom action row — edit & move only; delete is via swipe */}
+          <View style={styles.actInlineActions}>
+            <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
+              <Text style={styles.editBtnText}>✏️</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onMoveRequest} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
+              <Text style={styles.moveBtnText}>📅</Text>
+            </TouchableOpacity>
+            <Text style={styles.swipeHintText}>← swipe</Text>
+          </View>
+        </View>
+
+        {/* ── Reorder buttons (right side) ── */}
+        <View style={styles.reorderCol}>
+          <TouchableOpacity onPress={onMoveUp} disabled={isFirst}
+            hitSlop={{ top: 6, bottom: 4, left: 6, right: 6 }} activeOpacity={0.5}
+            style={[styles.reorderBtn, isFirst && styles.reorderBtnDisabled]}>
+            <Text style={styles.reorderBtnText}>▲</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onMoveDown} disabled={isLast}
+            hitSlop={{ top: 4, bottom: 6, left: 6, right: 6 }} activeOpacity={0.5}
+            style={[styles.reorderBtn, isLast && styles.reorderBtnDisabled]}>
+            <Text style={styles.reorderBtnText}>▼</Text>
+          </TouchableOpacity>
+        </View>
+        </View>{/* end actCard */}
+
+        {/* ── Action buttons (revealed when card scrolls left) ── */}
+        <View style={styles.actCardActions}>
+          <TouchableOpacity
+            style={[styles.actCardAction, { backgroundColor: '#22c55e' }]}
+            onPress={() => { close(); onMarkDone(); }}
+          >
+            <Text style={styles.actCardActionIcon}>✓</Text>
+            <Text style={styles.actCardActionLabel}>Done</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actCardAction, { backgroundColor: '#f97316' }]}
+            onPress={() => { close(); onMarkSkipped(); }}
+          >
+            <Text style={styles.actCardActionIcon}>✗</Text>
+            <Text style={styles.actCardActionLabel}>Did Not Do</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actCardAction, { backgroundColor: '#ef4444' }]}
+            onPress={() => { close(); onDelete(); }}
+          >
+            <Text style={styles.actCardActionIcon}>🗑</Text>
+            <Text style={styles.actCardActionLabel}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+
+      </ScrollView>
     </View>
   );
 }
+
+
+// ── Chart & StickyHeader styles ──────────────────────────────────
+const ch = StyleSheet.create({
+  // Sticky bar (always visible above ScrollView)
+  stickyBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1714',
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+  },
+  miniTripLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.5)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  miniTripAmt: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -0.5,
+  },
+  miniSep: {
+    width: 1,
+    height: 32,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  miniDayAmt: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.5,
+  },
+  miniPP: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.green,
+  },
+  infoBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoBtnText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '700',
+  },
+
+  // Detail sheet (slide-up modal)
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#1a1714',
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    padding: spacing.xxl,
+    paddingBottom: 48,
+    maxHeight: '80%',
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: spacing.lg,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  sheetClose: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.5)',
+    fontWeight: '700',
+    padding: spacing.xs,
+  },
+  sheetSummary: {
+    marginBottom: spacing.lg,
+  },
+  sheetTotalAmt: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -1,
+  },
+  sheetTotalSub: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 2,
+  },
+  sheetDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginVertical: spacing.lg,
+  },
+
+  // Family cost rows inside detail sheet
+  famRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  famCol: {
+    flex: 1,
+  },
+  famName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  famAmt: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.yellow,
+  },
+  famSub: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.4)',
+    marginTop: 1,
+  },
+
+  // Push to Splitwise button inside sheet
+  pushBtn: {
+    backgroundColor: colors.green,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginTop: spacing.lg,
+  },
+  pushBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  syncedBadge: {
+    backgroundColor: 'rgba(0,184,148,0.18)',
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,184,148,0.35)',
+    marginTop: spacing.lg,
+  },
+  syncedText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.green,
+  },
+
+  // Bar chart (TripExpenseChart)
+  wrap: {
+    marginHorizontal: spacing.xxl,
+    marginBottom: spacing.lg,
+  },
+  wrapCompact: {
+    marginBottom: spacing.md,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginBottom: spacing.md,
+  },
+  label: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.4)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  totalLine: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 2,
+  },
+  emptyHint: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.3)',
+    fontStyle: 'italic',
+  },
+  chartArea: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  barWrapper: {
+    alignItems: 'center',
+  },
+  barLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.green,
+    marginBottom: 2,
+  },
+  bar: {
+    // width and height set inline
+  },
+  dayLabels: {
+    flexDirection: 'row',
+    marginTop: spacing.xs,
+  },
+  dayLabelText: {
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.3)',
+    textAlign: 'center',
+  },
+  dayLabelActive: {
+    color: colors.green,
+    fontWeight: '700',
+  },
+});
+
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
@@ -727,7 +1154,16 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xl,
     paddingBottom: spacing.sm,
   },
-  dayTitle: { ...typography.h4, color: colors.text },
+  dayTitle: { ...typography.h4, color: colors.text, flex: 1, marginRight: spacing.sm },
+  dayHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  discoverBtn: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  discoverBtnText: { ...typography.caption, color: colors.primary, fontWeight: '700' },
   addActBtn: {
     backgroundColor: colors.primary,
     borderRadius: radius.lg,
@@ -735,6 +1171,36 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   addActBtnText: { ...typography.caption, color: '#fff', fontWeight: '800' },
+
+  // ── Check Trip FAB ───────────────────────────────────────────────
+  checkFab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: radius.full,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  checkFabIcon: { fontSize: 15 },
+  checkFabText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  checkFabBadge: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    borderRadius: radius.full,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkFabBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
   // ── Day cost strip ───────────────────────────────────────────────
   costStrip: {
@@ -788,28 +1254,59 @@ const styles = StyleSheet.create({
   emptyBtnText: { ...typography.bodyBold, color: colors.primary },
 
   // ── Slot sections ────────────────────────────────────────────────
+  // ── Slot sections ────────────────────────────────────────────────
   slotSection: { marginBottom: spacing.lg },
   slotHeader: {
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  slotHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xxl,
-    paddingVertical: spacing.sm,
-    gap: spacing.xs,
   },
-  slotEmoji:       { fontSize: 15 },
-  slotLabel:       { ...typography.bodyBold, color: colors.text, fontSize: 13 },
-  slotHint:        { ...typography.caption, color: colors.muted, fontSize: 11, flex: 1 },
-  slotProgress:    { flexDirection: 'row', gap: spacing.xs },
-  slotDoneText:    { ...typography.caption, color: colors.green, fontWeight: '700', fontSize: 11 },
-  slotSkipText:    { ...typography.caption, color: colors.muted, fontWeight: '700', fontSize: 11 },
-  slotAddBtn:      { backgroundColor: colors.primaryLight, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 3 },
-  slotAddBtnText:  { ...typography.caption, color: colors.primary, fontWeight: '800', fontSize: 11 },
-  slotCompact: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.xxl, paddingVertical: spacing.sm,
+  slotMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 22,   // align under label (past emoji width)
+    marginTop: 3,
+    flexWrap: 'wrap',
   },
-  slotCompactText: { ...typography.caption, color: colors.muted, fontSize: 12 },
+  slotEmoji:    { fontSize: 16, marginRight: spacing.xs },
+  slotLabel:    { ...typography.bodyBold, color: colors.text, fontSize: 14, flex: 1 },
+  slotMetaText: { fontSize: 11, color: colors.muted },
+  slotDoneText: { fontSize: 11, color: '#16a34a', fontWeight: '600' },
+  slotSkipText: { fontSize: 11, color: '#dc2626', fontWeight: '600' },
+  slotAddBtn: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    marginRight: spacing.sm,
+  },
+  slotAddBtnText: { fontSize: 12, color: colors.primary, fontWeight: '700' },
+  slotChevron:  { fontSize: 18, color: colors.muted, fontWeight: '600', paddingLeft: 4 },
+  slotCollapsedCount: { fontSize: 11, color: colors.primary, fontWeight: '700' },
 
+  // Reorder buttons (▲▼ on card right side)
+  reorderCol: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xs,
+    gap: 2,
+  },
+  reorderBtn: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  reorderBtnDisabled: {
+    opacity: 0.2,
+  },
+  reorderBtnText: {
+    fontSize: 10,
+    color: colors.textSecondary,
+  },
   slotEmpty: {
     marginHorizontal: spacing.xxl,
     marginBottom: spacing.sm,
@@ -817,320 +1314,266 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderStyle: 'dashed',
     borderRadius: radius.lg,
-    paddingVertical: spacing.md,
+    padding: spacing.lg,
     alignItems: 'center',
-    backgroundColor: '#fafafa',
   },
-  slotEmptyText: { ...typography.caption, color: colors.muted, fontSize: 12 },
-
-  // Empty day slot template (full empty day)
-  emptySlot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
+  slotEmptyText: { ...typography.caption, color: colors.muted },
+  slotCompact: {
     marginHorizontal: spacing.xxl,
     marginBottom: spacing.sm,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    alignItems: 'center',
+  },
+  slotCompactText: { ...typography.caption, color: colors.muted },
+  emptySlot: {
+    marginHorizontal: spacing.xxl,
+    marginBottom: spacing.sm,
     borderRadius: radius.lg,
-    padding: spacing.md,
     borderWidth: 1.5,
     borderColor: colors.border,
     borderStyle: 'dashed',
-    ...shadow.sm,
+    padding: spacing.xl,
+    alignItems: 'center',
+    gap: spacing.xs,
   },
-  emptySlotEmoji: { fontSize: 22 },
-  emptySlotLabel: { ...typography.bodyBold, color: colors.muted, fontSize: 13 },
-  emptySlotHint:  { ...typography.caption, color: '#c0c8d0', fontSize: 11, marginTop: 1 },
-  emptySlotPlus:  { fontSize: 22, color: colors.primary, fontWeight: '300' },
+  emptySlotEmoji: { fontSize: 24 },
+  emptySlotLabel: { ...typography.bodyBold, color: colors.muted },
+  emptySlotHint:  { ...typography.caption, color: colors.muted },
+  emptySlotPlus: {
+    marginTop: spacing.sm,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+  },
 
-  // ── Activity card ────────────────────────────────────────────────
-  actCard: {
-    backgroundColor: '#fff',
-    borderRadius: radius.lg,
-    borderLeftWidth: 4,
-    marginBottom: spacing.sm,
+  // ── Activity card ─────────────────────────────────────────────────
+  actCardOuter: {
     marginHorizontal: spacing.xxl,
-    flexDirection: 'row',
+    marginBottom: spacing.sm,
+    borderRadius: radius.lg,
     overflow: 'hidden',
-    ...shadow.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  actCardNote:    { backgroundColor: '#f9fafb' },
-  actCardDone:    { backgroundColor: '#f0fdf4', borderLeftColor: colors.green },
-  actCardSkipped: { backgroundColor: '#f9fafb', opacity: 0.75 },
+  actCardScrollContent: {
+    flexDirection: 'row',
+  },
+  actCardActions: {
+    width: CARD_ACTIONS_W,
+    flexDirection: 'row',
+  },
+  actCardAction: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 3,
+  },
+  actCardActionIcon: {
+    fontSize: 22,
+    color: '#fff',
+  },
+  actCardActionLabel: {
+    fontSize: 9,
+    color: '#fff',
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: 2,
+  },
+  swipeHintText: {
+    fontSize: 9,
+    color: colors.muted,
+  },
+  actCard: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderLeftWidth: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  actCardNote:    { backgroundColor: colors.yellowLight, borderColor: '#f0d080' },
+  actCardDone:    { backgroundColor: '#f0fdf4', borderLeftColor: '#22c55e', borderColor: '#bbf7d0' },
+  actCardSkipped: { backgroundColor: '#fef2f2', borderLeftColor: '#ef4444', borderColor: '#fecaca' },
+  actCardDragging: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 12,
+    borderColor: colors.primary,
+    borderWidth: 1.5,
+  },
+  actCardHighlighted: {
+    borderColor: colors.primary,
+    borderWidth: 2,
+    backgroundColor: colors.primaryLight,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
 
   // Checkbox
-  checkboxCol: {
-    width: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.md,
-  },
+  checkboxCol: { paddingTop: 2 },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 20, height: 20,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
   },
-  checkboxDone:    { backgroundColor: colors.green, borderColor: colors.green },
-  checkboxSkipped: { backgroundColor: '#9ca3af',    borderColor: '#9ca3af' },
-  checkMark:       { fontSize: 13, color: '#fff', fontWeight: '800', lineHeight: 16 },
+  checkboxDone:    { backgroundColor: colors.green,  borderColor: colors.green },
+  checkboxSkipped: { backgroundColor: colors.muted,  borderColor: colors.muted },
+  checkMark: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
-  // Status badges
-  statusBadgeDone: { backgroundColor: '#dcfce7', borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'flex-start', marginBottom: 4 },
-  statusBadgeSkip: { backgroundColor: '#f3f4f6', borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'flex-start', marginBottom: 4 },
-  statusBadgeText: { ...typography.caption, fontSize: 10, fontWeight: '700', color: colors.green },
-  actNameSkipped:  { textDecorationLine: 'line-through', color: colors.muted },
+  // Time column
+  actTimeCol:    { alignItems: 'center', justifyContent: 'center', minWidth: 44 },
+  actTime:       { ...typography.caption, color: colors.primary, fontWeight: '700' },
+  actIcon:       { fontSize: 18, marginTop: 3 },
+  actStatusEmoji:{ fontSize: 26 },
 
-  actTimeCol: {
-    width: 52,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
-    backgroundColor: 'rgba(0,0,0,0.02)',
-  },
-  actTime: { ...typography.caption, color: colors.muted, fontWeight: '700', fontSize: 11 },
-  actIcon: { fontSize: 16, marginTop: spacing.xs },
-  actBody: { flex: 1, padding: spacing.md },
-  actNameRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 2 },
-  actName: { ...typography.bodyBold, color: colors.text, flex: 1 },
-  actNameNote: { color: colors.muted, fontWeight: '500' },
-  ratingBadge: {
-    backgroundColor: '#fff3e0',
-    borderRadius: radius.sm,
+  // Dimmed subtitle (time + cost shown under name when done/skipped)
+  actDimmedSub:      { fontSize: 11, marginTop: 2, marginBottom: 2 },
+  actDimmedSubDone:  { color: '#16a34a' },
+  actDimmedSubSkip:  { color: '#dc2626' },
+
+  // Body
+  actBody:    {},  // flex:1 lives on the wrapper View now
+  actNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: 3 },
+  actName:    { ...typography.bodyBold, color: colors.text, flex: 1 },
+  actNameNote:    { color: colors.muted, fontStyle: 'italic' },
+  actNameDone:    { color: '#16a34a' },
+  actNameSkipped: { color: '#dc2626', textDecorationLine: 'line-through' },
+  actDetail:  { ...typography.caption, color: colors.muted, marginBottom: spacing.xs },
+  actTags:    { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
+
+  // Badges
+  costBadge: {
+    borderRadius: radius.full,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
+    backgroundColor: '#e0faf4',
     borderWidth: 1,
-    borderColor: '#ffe0b2',
-    marginLeft: spacing.sm,
-    flexShrink: 0,
+    borderColor: '#a0e6d4',
   },
-  ratingText: { fontSize: 10, fontWeight: '700', color: '#e65100' },
-  cardFoldBtn:  { paddingTop: 4, paddingBottom: 2 },
-  cardFoldText: { fontSize: 10, fontWeight: '700', color: colors.primary, letterSpacing: 0.3 },
-  actDetail:    { ...typography.caption, color: colors.muted, marginBottom: spacing.sm },
-  memoRow:      { flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginBottom: 3 },
-  memoIcon:     { fontSize: 11, marginTop: 1 },
-  memoText:     { ...typography.caption, color: colors.muted, flex: 1, fontSize: 11, lineHeight: 16 },
-  reminderRow:  { flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginBottom: 3 },
-  reminderIcon: { fontSize: 11, marginTop: 1 },
-  reminderText: { ...typography.caption, color: '#f97316', flex: 1, fontSize: 11, fontWeight: '600', lineHeight: 16 },
-  aiTipRow: {
+  costBadgeText: { fontSize: 11, fontWeight: '700', color: colors.green },
+  ratingBadge: {
+    backgroundColor: colors.yellowLight,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  ratingText: { fontSize: 11, color: '#9b6e00', fontWeight: '600' },
+
+  // Fold / expand
+  cardFoldBtn: { marginTop: spacing.xs },
+  cardFoldText: { ...typography.caption, color: colors.primary },
+
+  // Expanded secondary content
+  aiTipRow:    { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs, marginTop: spacing.xs },
+  aiTipIcon:   { fontSize: 13, marginTop: 1 },
+  aiTipText:   { ...typography.caption, color: colors.ai, flex: 1, fontStyle: 'italic' },
+  memoRow:     { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs, marginTop: spacing.xs },
+  memoIcon:    { fontSize: 13, marginTop: 1 },
+  memoText:    { ...typography.caption, color: colors.muted, flex: 1 },
+  reminderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs, marginTop: spacing.xs },
+  reminderIcon:{ fontSize: 13, marginTop: 1 },
+  reminderText:{ ...typography.caption, color: '#d97706', flex: 1 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
+  locationIcon:{ fontSize: 13 },
+  locationText:{ ...typography.caption, color: colors.primary, flex: 1 },
+  locationArrow:{ ...typography.caption, color: colors.primary, fontWeight: '700' },
+  urlRow:      { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
+  urlIcon:     { fontSize: 13 },
+  urlText:     { ...typography.caption, color: colors.primary, flex: 1 },
+
+  // Family chips
+  famChips:         { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
+  famChip:          { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.surface2, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  famChipDot:       { width: 6, height: 6, borderRadius: 3 },
+  famChipText:      { fontSize: 11, color: colors.muted },
+  famChipsTotalHint:{ ...typography.caption, color: colors.muted, marginTop: spacing.xs, fontStyle: 'italic' },
+
+  // Status badges (Done / Skipped)
+  statusBadgeDone: { backgroundColor: '#dcfce7', borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 2, marginBottom: spacing.xs, alignSelf: 'flex-start' },
+  statusBadgeSkip: { backgroundColor: '#fee2e2', borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 2, marginBottom: spacing.xs, alignSelf: 'flex-start' },
+  statusBadgeText: { fontSize: 11, fontWeight: '700' },
+
+  // Right column — ↑↓ only
+  actReorderCol: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingLeft: spacing.xs,
+  },
+  reorderBtnText: { fontSize: 15, color: colors.muted },
+
+  // Horizontal action row at bottom of card body — ✏️ 📅 🗑
+  actInlineActions: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#f0faf8',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: spacing.lg,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginTop: spacing.sm,
+  },
+  editBtnText: { fontSize: 15 },
+  moveBtnText: { fontSize: 15 },
+  delBtnText:  { fontSize: 15 },
+
+  // Kept for compatibility (no longer used)
+  actActions:          {},
+  actActionBtn:        {},
+  actActionBtnDisabled:{ opacity: 0.25 },
+
+  // Reorder hint bar
+  reorderHintBar: {
+    marginHorizontal: spacing.xxl,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.primaryLight,
     borderRadius: radius.sm,
     padding: spacing.sm,
-    marginBottom: spacing.sm,
-    gap: 5,
     borderWidth: 1,
-    borderColor: '#b2dfdb',
+    borderColor: colors.primary + '40',
   },
-  aiTipIcon: { fontSize: 11, marginTop: 1 },
-  aiTipText: { ...typography.caption, color: '#00796b', flex: 1, lineHeight: 16, fontSize: 11 },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-    marginBottom: 2,
-  },
-  locationIcon: { fontSize: 11 },
-  locationText: { ...typography.caption, color: colors.primary, flex: 1, fontSize: 11, textDecorationLine: 'underline' },
-  locationArrow: { ...typography.caption, color: colors.muted, fontSize: 14, fontWeight: '700' },
-  urlRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 4,
-  },
-  urlIcon: { fontSize: 11 },
-  urlText: { ...typography.caption, color: colors.primary, flex: 1, fontSize: 11, textDecorationLine: 'underline' },
-  actTags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xs },
-  costBadge: {
-    backgroundColor: colors.yellowLight,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: '#f0d080',
-  },
-  costBadgeText: { ...typography.caption, color: '#9b6e00', fontWeight: '700', fontSize: 11 },
-  famChipsTotalHint: { fontSize: 10, color: colors.muted, fontStyle: 'italic', marginBottom: 3 },
-  famChips: { flexDirection: 'row', marginTop: 2 },
-  famChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.bg,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    marginRight: spacing.xs,
-  },
-  famChipDot: { width: 6, height: 6, borderRadius: 3, marginRight: 3 },
-  famChipText: { ...typography.caption, color: colors.muted, fontSize: 10 },
-
-  // ── Edit / Delete actions ────────────────────────────────────────
-  actActions: {
-    justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
-    gap: spacing.sm,
-  },
-  actActionBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: colors.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actActionBtnDisabled: { opacity: 0.3 },
-  editBtnText: { fontSize: 14 },
-  moveBtnText: { fontSize: 14 },
-  delBtnText:  { fontSize: 14 },
+  reorderHintText: { ...typography.caption, color: colors.primary, textAlign: 'center' },
 
   // Day picker modal
   dayPickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   dayPickerSheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl,
-    paddingBottom: 36,
-  },
-  dayPickerHandle: {
-    width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border,
-    alignSelf: 'center', marginTop: 10, marginBottom: 8,
-  },
-  dayPickerTitle: {
-    fontSize: 13, fontWeight: '800', color: colors.text,
-    paddingHorizontal: spacing.xxl, paddingBottom: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  dayPickerRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.xxl, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  dayPickerRowCurrent: { backgroundColor: colors.surface2 },
-  dayPickerLabel:       { ...typography.bodyBold, color: colors.text },
-  dayPickerLabelCurrent:{ color: colors.muted },
-  dayPickerDate:        { ...typography.caption, color: colors.muted, marginTop: 2 },
-  dayPickerCurrent:     { fontSize: 11, color: colors.muted, fontStyle: 'italic' },
-  dayPickerArrow:       { fontSize: 18, color: colors.primary, fontWeight: '700' },
-});
-
-// ── Chart + CollapsibleHeader styles ─────────────────────────────
-const ch = StyleSheet.create({
-  // ── Standalone chart (legacy path, unused now) ──
-  wrap: {
-    marginHorizontal: spacing.xxl,
-    marginTop: spacing.xl,
-    backgroundColor: colors.text,
-    borderRadius: radius.xl,
-    padding: spacing.lg,
-  },
-  // ── Compact chart: no own background/margin — sits inside CollapsibleHeader ──
-  wrapCompact: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
-  },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: spacing.sm },
-  label: { ...typography.caption, color: 'rgba(255,255,255,0.45)', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' },
-  totalLine: { ...typography.bodyBold, color: '#fff', fontSize: 13, marginTop: 1 },
-  emptyHint: { ...typography.caption, color: 'rgba(255,255,255,0.3)', fontSize: 10 },
-  chartArea: { flexDirection: 'row', alignItems: 'flex-end' },
-  barWrapper: { alignItems: 'center', justifyContent: 'flex-end' },
-  bar: {},
-  barLabel: { ...typography.caption, color: '#fff', fontSize: 9, fontWeight: '700', position: 'absolute', top: -14 },
-  dayLabels: { flexDirection: 'row', marginTop: spacing.xs },
-  dayLabelText: { ...typography.caption, color: 'rgba(255,255,255,0.3)', fontSize: 9, textAlign: 'center' },
-  dayLabelActive: { color: colors.green, fontWeight: '700' },
-
-  // ── Option D: Sticky bar ─────────────────────────────────────
-  stickyBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.text,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: 10,
-    gap: spacing.md,
-    // shadow separates bar from scroll content
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 4,
-    elevation: 6,
-  },
-  miniTripLabel: {
-    fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.4)',
-    letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2,
-  },
-  miniTripAmt:  { fontSize: 20, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
-  miniSep:      { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.15)' },
-  miniDayAmt:   { fontSize: 15, fontWeight: '800', color: '#fff' },
-  miniPP:       { fontSize: 11, fontWeight: '600', color: colors.green },
-  infoBtn: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  infoBtnText: { fontSize: 16, color: 'rgba(255,255,255,0.6)' },
-
-  // ── Detail sheet (Modal) ──────────────────────────────────────
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  sheet: {
-    backgroundColor: colors.text,
+    backgroundColor: '#fff',
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
-    paddingBottom: 36,
+    padding: spacing.xxl,
+    paddingBottom: 40,
+    maxHeight: '70%',
   },
-  sheetHandle: {
-    width: 36, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignSelf: 'center', marginTop: 10, marginBottom: 4,
-  },
-  sheetHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl, paddingVertical: spacing.md,
-  },
-  sheetTitle: { fontSize: 14, fontWeight: '800', color: '#fff' },
-  sheetClose: { fontSize: 16, color: 'rgba(255,255,255,0.45)', fontWeight: '700' },
-  sheetSummary: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
-  sheetTotalAmt: { fontSize: 32, fontWeight: '900', color: '#fff', letterSpacing: -1 },
-  sheetTotalSub: { fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
-  sheetDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginHorizontal: spacing.xl, marginVertical: spacing.sm },
-
-  // Family row inside sheet
-  famRow: { flexDirection: 'row', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, gap: spacing.xl },
-  famCol: { alignItems: 'center' },
-  famName: { fontSize: 12, fontWeight: '800' },
-  famAmt:  { fontSize: 12, color: '#fff', fontWeight: '700', marginTop: 2 },
-  famSub:  { fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 1 },
-
-  // Push / synced inside sheet
-  pushBtn: {
-    marginHorizontal: spacing.xl, marginTop: spacing.md,
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
+  dayPickerHandle: { width: 36, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.lg },
+  dayPickerTitle:  { ...typography.h4, color: colors.text, marginBottom: spacing.lg },
+  dayPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: spacing.md,
-    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  pushBtnText: { fontSize: 14, fontWeight: '800', color: '#fff' },
-  syncedBadge: {
-    marginHorizontal: spacing.xl, marginTop: spacing.md,
-    backgroundColor: 'rgba(0,184,148,0.18)',
-    borderRadius: radius.lg,
-    paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(0,184,148,0.35)',
-  },
-  syncedText: { fontSize: 12, color: colors.green, fontWeight: '700' },
+  dayPickerRowCurrent: { opacity: 0.45 },
+  dayPickerLabel:        { ...typography.bodyBold, color: colors.text },
+  dayPickerLabelCurrent: { color: colors.primary },
+  dayPickerDate:   { ...typography.caption, color: colors.muted, marginTop: 2 },
+  dayPickerCurrent:{ ...typography.caption, color: colors.primary, fontWeight: '700' },
+  dayPickerArrow:  { fontSize: 18, color: colors.muted },
 });

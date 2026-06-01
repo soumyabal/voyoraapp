@@ -34,7 +34,7 @@ const TILES = [
   { type: 'stay',      subtype: null,     icon: '🏨', label: 'Stay',     color: '#8b5cf6' },
   { type: 'food',      subtype: null,     icon: '🍽️', label: 'Meal',     color: '#f97316' },
   { type: 'activity',  subtype: null,     icon: '🎯', label: 'Activity', color: '#10b981' },
-  { type: 'note',      subtype: null,     icon: '💬', label: 'Other',    color: '#6b7280' },
+  { type: 'transport', subtype: 'pitstop', icon: '⛽', label: 'Pit Stop', color: '#3b82f6' },
 ];
 
 function tileKey(t) { return `${t.type}:${t.subtype || ''}` ; }

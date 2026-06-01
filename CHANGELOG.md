@@ -5,6 +5,72 @@ Format: `[Date] · File(s) changed · What and why`
 
 ---
 
+## Session — 1 Jun 2026 (Part 4)
+
+### 🐛 Fix — Swipe gesture unreliable (PanResponder → horizontal ScrollView)
+
+**Root cause:** `PanResponder` inside an outer vertical `ScrollView` loses the gesture — the vertical scroller claims the touch before the card can detect horizontal movement, so the card either doesn't respond or snaps closed mid-swipe.
+
+**Fix:** `src/screens/ItineraryScreen.js`
+- Replaced `Animated` + `PanResponder` with a native **horizontal `ScrollView`** per card.
+- Layout: card (`width: CARD_W = SCREEN_W - 48`) + action buttons (`width: 216`) sit side-by-side in the scroll content. At offset 0 → card visible; at offset 216 → buttons revealed.
+- `snapToOffsets={[0, CARD_ACTIONS_W]}` + `decelerationRate="fast"` gives crisp snap-open/snap-close.
+- React Native handles nested vertical (outer) + horizontal (inner) scroll gestures natively — no conflict.
+- Removed `Animated`, `PanResponder`, `useCallback` from imports; removed `swipeX`, `isOpen`, `closeSwipe`, `openSwipe`, `panResponder` refs.
+- Action buttons are now in-flow (not absolutely positioned) inside the scroll content.
+
+---
+
+## Session — 1 Jun 2026 (Part 3)
+
+### ✨ Feature — Swipe-to-action cards (Robinhood-style)
+
+**ActivityCard: swipe left to reveal Done / Did Not Do / Delete**
+- `src/screens/ItineraryScreen.js`, `src/store/index.js`
+- Checkbox column removed. Each card is now wrapped in `actCardOuter` (overflow: hidden) with three absolute-positioned action buttons behind it.
+- **Swipe left** → card translates via `Animated.Value` + `PanResponder`, revealing three colored buttons:
+  - 🟢 **Done** — marks activity complete (green)
+  - 🟠 **Did Not Do** — marks as skipped (orange)
+  - 🔴 **Delete** — deletes with confirmation (red)
+- **Full swipe** (>55% of screen width) → auto-confirms Done, just like Robinhood's slide-to-confirm.
+- Partial swipe past 40% of action area snaps open; release before that snaps closed.
+- Status badge text updated: "↩️ Skipped" → "↩️ Did Not Do".
+- Bottom inline action row: trash icon removed (delete is swipe-only). "← swipe" hint added.
+- `store/index.js`: added missing `markActivityStatus(tripId, actId, status)` action (was destructured but never defined — `cycleStatus` was silently a no-op).
+- Tapping Done/Did Not Do when already set → clears status (toggle behaviour).
+
+---
+
+## Session — 1 Jun 2026 (Part 2)
+
+### ✨ Feature — ↑↓ reorder buttons on activity cards (time-aware)
+
+**Itinerary screen: replace drag-to-reorder with ↑/↓ tap buttons**
+- `src/screens/ItineraryScreen.js`
+- Each activity card now has ▲/▼ buttons in place of the old drag handle. ▲ is disabled (faded) when the card is first in its slot; ▼ when last.
+- Tapping ▲ or ▼ calls `reorderSlotActivities(tripId, dayIndex, newOrderIds)`. That action already redistributes the slot's sorted times to match the new visual order — so moving a 13:30 card above a 13:00 card gives the moved card 13:00 and the displaced card 13:30. Time order is always preserved.
+- `ActivityCard` props: replaced `isActive`/`onDrag` with `isFirst`/`isLast`/`onMoveUp`/`onMoveDown`.
+- Style: `dragHandle`/`dragHandleIcon` → `reorderCol`/`reorderBtn`/`reorderBtnDisabled`/`reorderBtnText`.
+
+---
+
+## Session — 1 Jun 2026
+
+### 🐛 Fix — NativeWorklets crash on startup
+
+**Root cause:** `react-native-reanimated` upgraded to v4.1.x (breaking change). `react-native-draggable-flatlist` v4.0.3 uses Reanimated v2/v3 worklet APIs (`NativeWorklets` host function) which no longer exist in v4, crashing the entire JS runtime on load.
+
+**Fix:** `src/screens/ItineraryScreen.js`
+- Removed `import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist'`
+- Added `FlatList` to the React Native import
+- Replaced `<DraggableFlatList>` with `<FlatList>` — removes drag-to-reorder; all other activity card behaviour unchanged
+- `ActivityCard`: drag handle now conditionally hidden (renders empty `View`) when `onDrag` is not passed — no layout shift
+- Removed `isActive`/`actCardDragging` style reference from `ActivityCard` (no longer set)
+
+**Trade-off:** drag-to-reorder activities is temporarily disabled. Can be re-enabled once `react-native-draggable-flatlist` ships Reanimated v4 support, or by implementing a gesture-based solution without Reanimated.
+
+---
+
 ## Session — 31 May 2026 (continued — Part 13)
 
 ### ✨ UX — Option D: Sticky Mini-Header + Slide-up Detail Sheet

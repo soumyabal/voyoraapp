@@ -1,11 +1,11 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { getAllMembers, fmt, fmtM, avatarColor } from '../utils/helpers';
 import { calcTripItineraryTotal } from '../utils/costs';
 
-export default function TripCard({ trip, onPress }) {
+export default function TripCard({ trip, onPress, style }) {
   const allMembers = getAllMembers(trip);
   const itinTotal = calcTripItineraryTotal(trip);
   const expTotal = trip.expenses.filter(e => e.source === 'manual').reduce((s, e) => s + e.amount, 0);
@@ -17,8 +17,8 @@ export default function TripCard({ trip, onPress }) {
   const modeColor = trip.mode === 'ai' ? colors.ai : trip.mode === 'expert' ? colors.expert : colors.primary;
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.85}>
-      <LinearGradient colors={trip.bgColors || ['#e17055', '#fdcb6e']} style={styles.header} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+    <TouchableOpacity style={[styles.card, trip.archived && styles.cardArchived, style]} onPress={onPress} activeOpacity={0.85}>
+      <LinearGradient colors={trip.bgColors || ['#e17055', '#fdcb6e']} style={[styles.header, trip.archived && { opacity: 0.5 }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         <Text style={styles.emoji}>{trip.emoji}</Text>
       </LinearGradient>
 
@@ -28,6 +28,11 @@ export default function TripCard({ trip, onPress }) {
         <Text style={styles.meta}>📅 {fmt(trip.startDate)} – {fmt(trip.endDate)} · {trip.days.length}d</Text>
 
         <View style={styles.tags}>
+          {trip.archived && (
+            <View style={[styles.tag, { backgroundColor: '#dcfce7' }]}>
+              <Text style={[styles.tagText, { color: '#15803d' }]}>✓ Completed</Text>
+            </View>
+          )}
           <View style={[styles.tag, { backgroundColor: modeColor + '20' }]}>
             <Text style={[styles.tagText, { color: modeColor }]}>{modeLabel}</Text>
           </View>
@@ -70,6 +75,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: spacing.lg,
     ...shadow.md,
+  },
+  cardArchived: {
+    borderColor: '#bbf7d0',
+    backgroundColor: '#f0fdf4',
   },
   header: {
     height: 120,

@@ -62,6 +62,7 @@ export const CATEGORY_OPTIONS = [
 
 export const NEEDS_OPTIONS = [
   '♿ Wheelchair',
+  '🛒 Stroller',
   '👁️ Visual Impairment',
   '👂 Hearing Impairment',
   '🍼 Infant (0-2)',
@@ -71,13 +72,47 @@ export const NEEDS_OPTIONS = [
   '💊 Medical Requirements',
 ];
 
+export const INTERESTS_OPTIONS = [
+  '🌳 Parks',
+  '🏖️ Beaches',
+  '🏛️ Culture & Museums',
+  '🍽️ Food & Dining',
+  '🛍️ Shopping',
+  '🎡 Theme Parks',
+  '🌿 Outdoors & Nature',
+  '🎭 Arts & Entertainment',
+  '⚽ Sports',
+  '📸 Photography',
+  '🌙 Nightlife',
+  '🧘 Wellness & Spa',
+  '🏊 Water Activities',
+  '🚴 Adventure',
+];
+
 export const ACTIVITY_TYPES = [
   { value: 'transport', label: '🚌 Transport' },
-  { value: 'stay', label: '🏨 Stay / Accommodation' },
-  { value: 'food', label: '🍽️ Food & Dining' },
-  { value: 'activity', label: '🎯 Activity / Sightseeing' },
-  { value: 'note', label: '📝 Note / Reminder' },
+  { value: 'stay',      label: '🏨 Stay / Accommodation' },
+  { value: 'food',      label: '🍽️ Food & Dining' },
+  { value: 'activity',  label: '🎯 Activity / Sightseeing' },
+  { value: 'note',      label: '📝 Note / Reminder' },
 ];
+
+// Transport subtypes — stored in activity.subtype
+export const TRANSPORT_SUBTYPE_ICONS = {
+  flight: '✈️',
+  car:    '🚗',
+  train:  '🚂',
+  ship:   '🚢',
+};
+
+/** Returns the best display icon for an activity, respecting transport subtypes. */
+export function getActivityIcon(type, subtype) {
+  if (type === 'transport' && subtype && TRANSPORT_SUBTYPE_ICONS[subtype]) {
+    return TRANSPORT_SUBTYPE_ICONS[subtype];
+  }
+  const BASE = { transport: '🚌', stay: '🏨', food: '🍽️', activity: '🎯', note: '📝' };
+  return BASE[type] || '📌';
+}
 
 // Trip background gradients
 export const TRIP_BG_COLORS = [

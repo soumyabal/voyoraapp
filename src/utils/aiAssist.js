@@ -285,71 +285,124 @@ export function analyzeItinerary(trip, travelers = []) {
   return suggestions.sort((a, b) => order[a.severity] - order[b.severity]);
 }
 
-// ─── Layer 2: AI context builder for Claude chat ──────────────────────────────
+// ─── Layer 2: Expert travel agent system prompt ───────────────────────────────
 
 /**
- * buildTripContext(trip, profiles)
- * Returns a system prompt string that gives Claude full trip awareness.
- * Send this as the system message, then stream user messages as conversation turns.
+ * buildTripContext(trip, travelers)
+ *
+ * Returns a system prompt that makes Claude behave like an experienced
+ * travel consultant — aware of the full group, destination, and itinerary.
+ * Handles natural language requests: multi-city routing, hotels, drive vs fly,
+ * family logistics, and proactive gap-spotting.
  */
 export function buildTripContext(trip, travelers = []) {
   const allMembers = trip.families.flatMap(f =>
     f.members.map(m => ({ ...effectiveMember(m, travelers), familyName: f.name }))
   );
 
-  const days = trip.days.length;
-  const start = trip.startDate;
-  const end = trip.endDate;
+  const numDays    = trip.days.length;
+  const kids       = allMembers.filter(m => m.age < 13);
+  const teens      = allMembers.filter(m => m.age >= 13 && m.age < 18);
+  const elders     = allMembers.filter(m => m.age >= 65);
+  const wheelchair = allMembers.filter(m => (m.needs || []).some(n => /wheelchair|mobility/i.test(n)));
+  const veggies    = allMembers.filter(m => (m.needs || []).some(n => /veg/i.test(n)));
+  const infants    = allMembers.filter(m => m.age < 3);
+  const strollers  = allMembers.filter(m => (m.needs || []).some(n => /stroller/i.test(n)));
 
-  // Format travelers with merged effective fields
+  const groupFlags = [
+    kids.length     > 0 ? `${kids.length} child${kids.length > 1 ? 'ren' : ''} (ages ${kids.map(k => k.age).join(', ')})` : null,
+    infants.length  > 0 ? `${infants.length} infant — nap schedule, stroller needed` : null,
+    strollers.length> 0 ? 'travelling with stroller — need accessible paths and lifts' : null,
+    teens.length    > 0 ? `${teens.length} teen${teens.length > 1 ? 's' : ''} — appreciate some independence and pop culture` : null,
+    elders.length   > 0 ? `${elders.length} elderly — relaxed pace, accessible venues, early dinners preferred` : null,
+    wheelchair.length>0 ? 'wheelchair user — every venue must be fully accessible, no steps' : null,
+    veggies.length  > 0 ? `${veggies.length} vegetarian — restaurants must have solid veggie/vegan options` : null,
+  ].filter(Boolean);
+
   const travelerLines = allMembers.map(m => {
     const parts = [`${m.name} (${m.age}yo, ${m.familyName})`];
-    if ((m.needs || []).length) parts.push(`needs: ${m.needs.join(', ')}`);
-    if ((m.dietary || []).length) parts.push(`dietary: ${m.dietary.join(', ')}`);
+    if ((m.needs     || []).length) parts.push(`needs: ${m.needs.join(', ')}`);
+    if ((m.dietary   || []).length) parts.push(`dietary: ${m.dietary.join(', ')}`);
     if ((m.interests || []).length) parts.push(`interests: ${m.interests.join(', ')}`);
     if (m.pacePreference && m.pacePreference !== 'moderate') parts.push(`pace: ${m.pacePreference}`);
     if (m.notes) parts.push(`note: ${m.notes}`);
-    return '- ' + parts.join(' | ');
+    return '  - ' + parts.join(' | ');
   }).join('\n');
 
-  // Format itinerary
   const itineraryLines = trip.days.map(day => {
-    if (day.activities.length === 0) return `${day.label} (${day.date}): [no activities planned]`;
+    if (day.activities.length === 0) return `  ${day.label} (${day.date}): [empty]`;
     const acts = [...day.activities]
       .sort((a, b) => a.time.localeCompare(b.time))
-      .map(a => `  ${a.time} ${a.name}${a.costPerPerson > 0 ? ` ($${a.costPerPerson}/person)` : ''}${a.access ? ` [♿ ${a.access}]` : ''}`)
-      .join('\n');
-    return `${day.label} (${day.date}):\n${acts}`;
+      .map(a => {
+        let line = `    ${a.time}  ${a.name}`;
+        if (a.costPerPerson > 0) line += ` ($${a.costPerPerson}/person)`;
+        if (a.address) line += `  — ${a.address}`;
+        return line;
+      }).join('\n');
+    return `  ${day.label} (${day.date}):\n${acts}`;
   }).join('\n\n');
 
   const totalBudget = allMembers.length > 0
     ? trip.days.flatMap(d => d.activities).reduce((s, a) => s + (a.costPerPerson || 0) * allMembers.length, 0)
     : 0;
 
-  return `You are an AI travel planning assistant embedded in the Voyara travel planning app.
+  return `You are Jordan, a senior travel consultant at Voyara with 15 years of experience planning family trips. You have deep knowledge of North American destinations, family logistics, hotels, restaurants, and transport options.
 
-## Trip: ${trip.name}
-- Destination: ${trip.destination}
-- Dates: ${start} to ${end} (${days} day${days !== 1 ? 's' : ''})
-- Planning mode: ${trip.mode}
-- Estimated total budget: $${totalBudget.toFixed(0)} across all travelers
+YOUR STYLE:
+- Warm and direct — like a knowledgeable friend, not a chatbot
+- Give 2–3 concrete options with honest trade-offs, not vague suggestions
+- Ask ONE clarifying question when a request is genuinely ambiguous — then give a real answer
+- Flag problems the family may not have thought of (traffic, nap times, booking lead times, seasonal closures)
+- Keep replies focused: 3–5 sentences for simple questions, short structured paragraphs for complex ones
+- Never say "you could consider" — say "I recommend" or "my suggestion is"
 
-## Travelers (${allMembers.length} people, ${trip.families.length} family group${trip.families.length !== 1 ? 's' : ''})
-${travelerLines || '- No travelers added yet'}
+HOW YOU THINK ABOUT TRAVEL:
+Multi-city logistics:
+  - LA ↔ San Diego: 2.5hr drive on I-5, or Pacific Surfliner train (3hrs, scenic). Flying not worth it.
+  - LA ↔ San Francisco: always fly (1.5hrs vs 5.5hr drive). Book 2–3 weeks ahead for good prices.
+  - Return trips (A→B→A) are normal — checkout hotel in B, drive/fly back to A, different neighbourhood or same hotel.
+  - Leave early to avoid freeway traffic. LA rush hour: avoid 7–9am and 4–7pm.
 
-## Current Itinerary
-${itineraryLines || 'No itinerary planned yet.'}
+Family logistics:
+  - Kids under 5: plan a midday rest after lunch. Avoid overpacking mornings.
+  - Toddlers with strollers: check venues have lifts/ramps. Beach → flat boardwalk areas only.
+  - Theme parks: arrive at rope drop (opening), skip passes save hours. Avoid peak weekends.
+  - Groups 6+: always reserve restaurants. Many popular spots don't take walk-ins for large groups.
+  - Elderly: accessible transport, rest breaks, early dinners (before 6:30pm beats the crowd).
 
-## Your role
-- Review this trip plan and suggest improvements when asked
-- Be aware of each traveler's special needs, dietary requirements, interests, and pace preference
-- Flag gaps in the itinerary (missing meals, empty evenings, no accommodation, no transport)
-- Suggest activities appropriate to the destination and the travelers' profiles
-- When a traveler has accessibility needs, always verify activities are suitable
-- Keep suggestions practical and actionable — the user can tap to add them to the itinerary
-- Be concise: lead with the key suggestion, then explain briefly
-- Do not repeat information the user already knows from the itinerary above
-- If the plan is good, say so — do not manufacture suggestions`;
+Hotels:
+  - Suggest neighbourhoods, not just star ratings. Downtown vs beachfront vs near attractions all have trade-offs.
+  - Families with toddlers: ask for connecting rooms or suites. Book directly with hotel for best flexibility.
+  - Budget tip: boutique hotels often better value than chain hotels in beach areas.
+
+Booking lead times:
+  - Alcatraz, popular theme parks, top restaurants: book 2–4 weeks ahead
+  - Amtrak Pacific Surfliner, domestic flights: 1–2 weeks
+  - Beach, parks, most activities: walk-in fine
+
+CURRENT TRIP:
+
+Trip: ${trip.name}
+Destination: ${trip.destination}
+Dates: ${trip.startDate} to ${trip.endDate} (${numDays} day${numDays !== 1 ? 's' : ''})
+Estimated spend: $${totalBudget.toFixed(0)} total across all travelers
+
+TRAVELERS — ${allMembers.length} people in ${trip.families.length} group${trip.families.length > 1 ? 's' : ''}:
+${travelerLines || '  (none added yet)'}
+
+FAMILY PROFILE:
+${groupFlags.length > 0 ? groupFlags.map(f => '  • ' + f).join('\n') : '  • No special considerations noted'}
+
+CURRENT ITINERARY:
+${itineraryLines || '  (no activities planned yet)'}
+
+YOUR RULES:
+1. When the user describes a routing change (add a city, drive somewhere, return trip), give a clear day-by-day outline.
+2. Always tailor advice to this specific group — don't give generic advice that ignores the kids or elderly traveler.
+3. If the plan looks good, say so. Don't manufacture problems.
+4. If you spot a real problem (e.g. 6 activities on day 2 with a toddler, missing dinner on day 3), flag it once clearly.
+5. For multi-city questions, mention real transit options, real times, and real costs.
+6. Be conversational — this is a chat, not a report.`;
 }
 
 // ─── Suggestion helpers ───────────────────────────────────────────────────────

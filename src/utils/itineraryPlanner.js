@@ -388,6 +388,47 @@ const LA_TRANSPORT = [
   },
 ];
 
+// ─── San Diego Places Database ────────────────────────────────────────────────
+
+const SD_ACTIVITIES = [
+  { id: 'sd_zoo', name: 'San Diego Zoo', detail: 'World-famous zoo with 3,700+ animals · Giant pandas, polar bears, koalas', access: 'Fully wheelchair accessible — tram & Skyfari aerial tram available', costPerPerson: 67, address: '2920 Zoo Dr, San Diego, CA 92101', url: 'https://sandiegozoo.org', mapUrl: 'https://maps.google.com/?q=San+Diego+Zoo', rating: '4.8 ⭐', note: 'Book online — saves queue time. Arrive at opening for the best animal activity.', kidFriendly: true, wheelchairOk: true, timeSlot: 'morning', tags: ['family', 'animals', 'kids'] },
+  { id: 'sd_balboa', name: 'Balboa Park', detail: '1,200-acre cultural park · 17 museums, Spanish colonial architecture, botanical gardens', access: 'Mostly accessible — some uneven paths between museums', costPerPerson: 0, address: '1549 El Prado, San Diego, CA 92101', url: 'https://balboapark.org', mapUrl: 'https://maps.google.com/?q=Balboa+Park+San+Diego', rating: '4.7 ⭐', note: 'Park entry is free — museums charge separately. Tuesday is free museum day for San Diego residents.', kidFriendly: true, wheelchairOk: true, timeSlot: 'morning', tags: ['culture', 'family', 'outdoors'] },
+  { id: 'sd_midway', name: 'USS Midway Museum', detail: 'America\'s longest-serving aircraft carrier · 29 restored aircraft, flight simulators', access: 'Elevator access to main deck; some areas inaccessible for wheelchairs', costPerPerson: 26, address: '910 N Harbor Dr, San Diego, CA 92101', url: 'https://midway.org', mapUrl: 'https://maps.google.com/?q=USS+Midway+Museum+San+Diego', rating: '4.8 ⭐', note: 'Kids love the flight simulators. Wear comfortable shoes — lots of walking on steel decks.', kidFriendly: true, wheelchairOk: false, timeSlot: 'morning', tags: ['history', 'family', 'culture'] },
+  { id: 'sd_lajolla', name: 'La Jolla Cove', detail: 'Stunning coastal bluffs · Sea caves, snorkelling, sea lions · One of San Diego\'s most photographed spots', access: 'Accessible viewing from blufftop paths; beach access via steps', costPerPerson: 0, address: '1100 Coast Blvd, La Jolla, CA 92037', url: '', mapUrl: 'https://maps.google.com/?q=La+Jolla+Cove+San+Diego', rating: '4.7 ⭐', note: 'Go early morning for sea lions lazing on the rocks. Snorkel gear rentals nearby.', kidFriendly: true, wheelchairOk: false, timeSlot: 'morning', tags: ['outdoors', 'beach', 'nature'] },
+  { id: 'sd_oldtown', name: 'Old Town San Diego', detail: 'California\'s birthplace · Historic adobe buildings, artisan shops, Mexican restaurants', access: 'Mostly flat and accessible throughout', costPerPerson: 0, address: '4002 Wallace St, San Diego, CA 92110', url: 'https://oldtownsandiego.org', mapUrl: 'https://maps.google.com/?q=Old+Town+San+Diego', rating: '4.4 ⭐', note: 'Free state historic park. Best Mexican food in San Diego is here — try Casa de Reyes.', kidFriendly: true, wheelchairOk: true, timeSlot: 'afternoon', tags: ['history', 'culture', 'food'] },
+  { id: 'sd_coronado', name: 'Coronado Beach', detail: 'Consistently ranked America\'s best beach · Wide sandy shores, views of the Hotel del Coronado', access: 'Accessible beach mats available at lifeguard stations', costPerPerson: 0, address: 'Ocean Blvd, Coronado, CA 92118', url: '', mapUrl: 'https://maps.google.com/?q=Coronado+Beach+San+Diego', rating: '4.8 ⭐', note: 'Take the Coronado Ferry ($6.25) from the Embarcadero for a scenic water crossing.', kidFriendly: true, wheelchairOk: true, timeSlot: 'afternoon', tags: ['beach', 'outdoors', 'family'] },
+];
+
+const SD_FOOD = [
+  { id: 'sd_guild', name: 'Guild Hall / Gaslamp Quarter', detail: 'San Diego\'s historic entertainment district · Dozens of restaurants, craft beer bars, rooftop dining', access: 'Flat streets, mostly accessible', costPerPerson: 38, address: 'Gaslamp Quarter, San Diego, CA 92101', mapUrl: 'https://maps.google.com/?q=Gaslamp+Quarter+San+Diego', rating: '4.3 ⭐', note: 'Great for group dinners — wide variety of cuisines. Reserve ahead on weekends.' },
+  { id: 'sd_puesto', name: 'Puesto at the Headquarters', detail: 'Award-winning Mexican street food · Gourmet tacos in historic San Diego Police Headquarters', access: 'Accessible outdoor courtyard seating', costPerPerson: 28, address: '789 W Harbor Dr, San Diego, CA 92101', url: 'https://eatpuesto.com', mapUrl: 'https://maps.google.com/?q=Puesto+San+Diego', rating: '4.5 ⭐', note: 'Excellent vegetarian and vegan taco options. The al pastor is a must-try.' },
+  { id: 'sd_market', name: 'Little Italy Food Hall', detail: 'Trendy neighbourhood market · Local vendors, craft food stalls, great for families', access: 'Fully accessible indoor food hall', costPerPerson: 20, address: '550 W Date St, San Diego, CA 92101', url: '', mapUrl: 'https://maps.google.com/?q=Little+Italy+Food+Hall+San+Diego', rating: '4.4 ⭐', note: 'Perfect for groups — everyone picks what they want. Great Saturday farmers market too.' },
+];
+
+const SD_STAY = [
+  { id: 'sd_arrive', name: 'Arrive San Diego', detail: 'Transfer from airport to downtown hotel · San Diego International Airport is 5 minutes from downtown', access: 'Accessible taxis and rideshare available curbside', costPerPerson: 20, address: 'San Diego International Airport, CA 92101', mapUrl: 'https://maps.google.com/?q=San+Diego+Airport', note: 'San Diego airport is one of the most convenient in the US — right next to downtown.' },
+];
+
+// ─── San Francisco Places Database ───────────────────────────────────────────
+
+const SFO_ACTIVITIES = [
+  { id: 'sfo_gg', name: 'Golden Gate Bridge', detail: 'Walk or bike across the iconic suspension bridge · 1.7 miles each way · Spectacular bay views', access: 'Accessible east walkway (west side has steps); accessible viewing areas at both ends', costPerPerson: 0, address: 'Golden Gate Bridge, San Francisco, CA 94129', url: 'https://goldengate.org', mapUrl: 'https://maps.google.com/?q=Golden+Gate+Bridge+San+Francisco', rating: '4.8 ⭐', note: 'Bring a jacket — the bridge is almost always foggy and windy. Best photos from Battery Spencer lookout.', kidFriendly: true, wheelchairOk: true, timeSlot: 'morning', tags: ['landmark', 'scenic', 'outdoors'] },
+  { id: 'sfo_alcatraz', name: 'Alcatraz Island', detail: 'Famous federal penitentiary on an island · Ferry + audio tour · One of San Francisco\'s top attractions', access: 'Ferry accessible; island terrain challenging for wheelchairs', costPerPerson: 45, address: 'Alcatraz Island, San Francisco, CA 94133', url: 'https://nps.gov/alca', mapUrl: 'https://maps.google.com/?q=Alcatraz+Island+San+Francisco', rating: '4.7 ⭐', note: 'Book weeks in advance — sells out fast especially on weekends. Night tours are especially atmospheric.', kidFriendly: true, wheelchairOk: false, timeSlot: 'morning', tags: ['history', 'landmark', 'culture'] },
+  { id: 'sfo_wharf', name: "Fisherman's Wharf", detail: 'Historic waterfront · Sea lions at Pier 39, Ghirardelli Square, fresh crab stalls, street performers', access: 'Fully accessible flat waterfront promenade', costPerPerson: 0, address: "Fisherman's Wharf, San Francisco, CA 94133", url: '', mapUrl: "https://maps.google.com/?q=Fisherman's+Wharf+San+Francisco", rating: '4.3 ⭐', note: 'Kids love the sea lions at Pier 39 — free to watch. Dungeness crab in season is unmissable.', kidFriendly: true, wheelchairOk: true, timeSlot: 'morning', tags: ['family', 'food', 'landmark'] },
+  { id: 'sfo_ggpark', name: 'Golden Gate Park', detail: '1,000+ acres · De Young Museum, Japanese Tea Garden, Botanical Garden, Conservatory of Flowers', access: 'Paved paths throughout; some garden areas have steps', costPerPerson: 0, address: '501 Stanyan St, San Francisco, CA 94117', url: 'https://goldengatepark.com', mapUrl: 'https://maps.google.com/?q=Golden+Gate+Park+San+Francisco', rating: '4.7 ⭐', note: 'Rent bikes or take the park shuttle. De Young Museum is world-class and kid-friendly.', kidFriendly: true, wheelchairOk: true, timeSlot: 'afternoon', tags: ['outdoors', 'family', 'culture'] },
+  { id: 'sfo_chinatown', name: 'San Francisco Chinatown', detail: 'The oldest and most densely populated Chinatown in North America · Dragon Gate, dim sum, herbalists', access: 'Some steep hills — Grant Ave main strip is manageable', costPerPerson: 0, address: 'Grant Ave, San Francisco, CA 94108', url: '', mapUrl: 'https://maps.google.com/?q=Chinatown+San+Francisco', rating: '4.4 ⭐', note: 'Start at Dragon Gate on Grant Ave and work your way up. The fortune cookie factory on Ross Alley is free.', kidFriendly: true, wheelchairOk: false, timeSlot: 'afternoon', tags: ['culture', 'food', 'history'] },
+  { id: 'sfo_cable', name: 'Cable Car Ride', detail: 'Ride the world\'s last manually operated cable car system · Powell-Hyde or Powell-Mason lines', access: 'Limited accessibility — consider the F-Market historic streetcar as an accessible alternative', costPerPerson: 8, address: 'Powell & Market St, San Francisco, CA 94102', url: 'https://sfmta.com', mapUrl: 'https://maps.google.com/?q=Powell+Street+Cable+Car+San+Francisco', rating: '4.6 ⭐', note: 'Board at the turntable on Powell & Market for a seat. Hold on tight on the hills — kids love it!', kidFriendly: true, wheelchairOk: false, timeSlot: 'afternoon', tags: ['landmark', 'family', 'culture'] },
+];
+
+const SFO_FOOD = [
+  { id: 'sfo_ferry', name: 'Ferry Building Marketplace', detail: 'Iconic marketplace on the Embarcadero · Artisan food vendors, local cheeses, farm-fresh produce', access: 'Fully accessible', costPerPerson: 22, address: '1 Ferry Building, San Francisco, CA 94111', url: 'https://ferrybuildingmarketplace.com', mapUrl: 'https://maps.google.com/?q=Ferry+Building+San+Francisco', rating: '4.6 ⭐', note: 'Saturday farmers market is outstanding. Hog Island Oyster Co inside is a local favourite.' },
+  { id: 'sfo_union', name: 'Union Square dining', detail: 'Dozens of restaurants in the heart of San Francisco · All cuisines, all budgets', access: 'Flat, fully accessible square', costPerPerson: 35, address: 'Union Square, San Francisco, CA 94108', mapUrl: 'https://maps.google.com/?q=Union+Square+San+Francisco', rating: '4.2 ⭐', note: 'Great base for dinner — Wayfare Tavern (Tyler Florence) and Bix are highly rated.' },
+];
+
+const SFO_STAY = [
+  { id: 'sfo_arrive', name: 'Arrive San Francisco', detail: 'BART from SFO Airport to downtown is the easiest option · ~30 min, $10', access: 'BART is fully accessible', costPerPerson: 10, address: 'San Francisco International Airport, CA 94128', mapUrl: 'https://maps.google.com/?q=San+Francisco+Airport', note: 'BART runs directly from the airport terminal to Union Square. No need for a taxi if travelling light.' },
+];
+
 // ─── Group Profiler ───────────────────────────────────────────────────────────
 
 export function profileGroup(trip, travelers = []) {
@@ -571,28 +612,147 @@ const LA_DAY_SEQUENCE = [
  *   const days = generateSmartItinerary(trip, travelers);
  *   if (days) applyDays(days); else fallbackToTemplates();
  */
+// ─── City day sequence builders (SD + SFO) ───────────────────────────────────
+
+function buildSDDay(dayIndex, profile, isFirst, isLast) {
+  const scale = c => Math.round(c * 1.0);
+
+  if (isFirst) return [
+    { ...SD_STAY[0],   id: uid(), type: 'transport', time: '11:00' },
+    { id: uid(), type: 'stay',     time: '13:30', name: 'Hotel check-in — Downtown San Diego', detail: 'Drop bags, freshen up. Gaslamp Quarter is right outside.', access: 'Accessible rooms on request', costPerPerson: 0, mapUrl: 'https://maps.google.com/?q=Downtown+San+Diego+Hotels' },
+    { id: uid(), type: 'food',     time: '14:30', name: 'Welcome lunch — Little Italy', detail: 'Explore San Diego\'s vibrant Little Italy neighbourhood', access: 'Flat, accessible streets', costPerPerson: scale(20), mapUrl: 'https://maps.google.com/?q=Little+Italy+San+Diego', note: 'Amici\'s East Coast Pizzeria and Bencotto are local favourites.' },
+    { id: uid(), type: 'activity', time: '17:00', name: 'Waterfront Embarcadero walk', detail: 'Stroll along San Diego Harbour, see the USS Midway from the outside', access: 'Flat, fully accessible waterfront path', costPerPerson: 0, mapUrl: 'https://maps.google.com/?q=Embarcadero+San+Diego', note: 'Great orientation walk to get your bearings — views of Coronado Bridge and the bay.' },
+    { id: uid(), type: 'food',     time: '19:30', name: 'Welcome dinner — Gaslamp Quarter', detail: profile.hasKids ? 'Family-friendly Gaslamp restaurants — Yard House or Tin Fish' : 'Gaslamp Quarter — great restaurants for groups', access: 'Accessible restaurants throughout', costPerPerson: scale(38), mapUrl: 'https://maps.google.com/?q=Gaslamp+Quarter+San+Diego' },
+  ];
+
+  if (isLast) return [
+    { id: uid(), type: 'food',     time: '08:00', name: 'Breakfast', detail: 'Hotel or nearby café before travel day', costPerPerson: scale(14), access: 'Accessible', mapUrl: '' },
+    { id: uid(), type: 'activity', time: '09:30', name: 'Old Town San Diego', detail: 'Last look at California\'s birthplace — artisan shops and Mexican culture', access: 'Mostly flat and accessible', costPerPerson: 0, ...SD_ACTIVITIES[4] },
+    { id: uid(), type: 'food',     time: '12:30', name: 'Farewell lunch — Old Town', detail: 'Best Mexican food in San Diego before you leave', access: 'Accessible entrance', costPerPerson: scale(22), mapUrl: 'https://maps.google.com/?q=Old+Town+Mexican+Cafe+San+Diego', note: 'Old Town Mexican Café or Casa de Reyes — both excellent.' },
+    { id: uid(), type: 'stay',     time: '14:00', name: 'Hotel checkout', detail: 'Check out and store luggage if needed', costPerPerson: 0, access: 'Accessible lobby', mapUrl: '' },
+  ];
+
+  const dayThemes = [
+    // Zoo day
+    [
+      { id: uid(), type: 'food',     time: '08:00', name: 'Breakfast', detail: 'Hotel breakfast or nearby café', costPerPerson: scale(14), access: 'Accessible', mapUrl: '' },
+      { ...SD_ACTIVITIES[0], id: uid(), type: 'activity', time: '09:00' },
+      { id: uid(), type: 'food',     time: '13:00', name: 'Lunch at the Zoo', detail: 'Albert\'s Restaurant or one of the Zoo\'s cafés', costPerPerson: scale(22), access: 'Accessible dining', mapUrl: 'https://maps.google.com/?q=San+Diego+Zoo', note: 'Bring snacks — zoo food can be pricey. Water bottles too.' },
+      { id: uid(), type: 'activity', time: '15:00', name: 'Balboa Park', detail: 'Explore the park museums and Spanish colonial gardens after the zoo', access: 'Mostly accessible', costPerPerson: 0, ...SD_ACTIVITIES[1] },
+      { ...SD_FOOD[0], id: uid(), type: 'food', time: '19:30' },
+    ],
+    // Beach + La Jolla day
+    [
+      { id: uid(), type: 'food',     time: '08:00', name: 'Breakfast', detail: 'Hotel breakfast or local café', costPerPerson: scale(14), access: 'Accessible', mapUrl: '' },
+      { ...SD_ACTIVITIES[3], id: uid(), type: 'activity', time: '09:30' },
+      { id: uid(), type: 'food',     time: '13:00', name: 'Lunch — La Jolla village', detail: 'Great cafés and restaurants in La Jolla village above the cove', costPerPerson: scale(25), access: 'Accessible options', mapUrl: 'https://maps.google.com/?q=La+Jolla+Village+San+Diego', note: 'George\'s at the Cove for ocean views or Eddie V\'s for seafood.' },
+      { ...SD_ACTIVITIES[5], id: uid(), type: 'activity', time: '15:00' },
+      { ...SD_FOOD[1], id: uid(), type: 'food', time: '19:30' },
+    ],
+    // USS Midway + Old Town day
+    [
+      { id: uid(), type: 'food',     time: '08:00', name: 'Breakfast', detail: 'Hotel breakfast', costPerPerson: scale(14), access: 'Accessible', mapUrl: '' },
+      { ...SD_ACTIVITIES[2], id: uid(), type: 'activity', time: '09:00' },
+      { ...SD_FOOD[2], id: uid(), type: 'food', time: '13:00' },
+      { ...SD_ACTIVITIES[4], id: uid(), type: 'activity', time: '15:00' },
+      { ...SD_FOOD[0], id: uid(), type: 'food', time: '19:30' },
+    ],
+  ];
+
+  return dayThemes[(dayIndex - 1) % dayThemes.length];
+}
+
+function buildSFODay(dayIndex, profile, isFirst, isLast) {
+  const scale = c => Math.round(c * 1.0);
+
+  if (isFirst) return [
+    { ...SFO_STAY[0],  id: uid(), type: 'transport', time: '11:00' },
+    { id: uid(), type: 'stay',     time: '13:00', name: 'Hotel check-in — San Francisco', detail: 'Union Square or Fisherman\'s Wharf area recommended for families', access: 'Accessible rooms on request', costPerPerson: 0, mapUrl: 'https://maps.google.com/?q=Union+Square+San+Francisco+Hotels' },
+    { ...SFO_ACTIVITIES[2], id: uid(), type: 'activity', time: '14:30' },
+    { id: uid(), type: 'activity', time: '17:00', name: 'Pier 39 sea lions', detail: 'Watch the resident sea lions on the docks — free and loved by kids', access: 'Flat, accessible boardwalk', costPerPerson: 0, mapUrl: 'https://maps.google.com/?q=Pier+39+San+Francisco', note: 'Over 1,000 California sea lions call this home. Best viewing from the K dock.' },
+    { ...SFO_FOOD[0], id: uid(), type: 'food', time: '19:30' },
+  ];
+
+  if (isLast) return [
+    { id: uid(), type: 'food',     time: '08:00', name: 'Breakfast', detail: 'Hotel or nearby café', costPerPerson: scale(14), access: 'Accessible', mapUrl: '' },
+    { ...SFO_ACTIVITIES[4], id: uid(), type: 'activity', time: '09:30' },
+    { id: uid(), type: 'food',     time: '12:30', name: 'Farewell dim sum — Chinatown', detail: 'Classic San Francisco send-off — Yank Sing or City View Restaurant', access: 'Accessible', costPerPerson: scale(25), mapUrl: 'https://maps.google.com/?q=Yank+Sing+San+Francisco', note: 'Order from the cart — just point at what looks good. Kids love it.' },
+    { id: uid(), type: 'stay',     time: '14:00', name: 'Hotel checkout', detail: 'Check out and head to airport', costPerPerson: 0, access: 'Accessible lobby', mapUrl: '' },
+    { id: uid(), type: 'transport', time: '15:30', name: 'BART to SFO Airport', detail: 'Take BART from Embarcadero or Powell to SFO · ~30 minutes, fully accessible', access: 'Fully accessible', costPerPerson: 10, mapUrl: 'https://maps.google.com/?q=SFO+Airport', note: 'Allow 2.5hrs before your flight. BART is the easiest option — no traffic stress.' },
+  ];
+
+  const dayThemes = [
+    // Golden Gate + GG Park
+    [
+      { id: uid(), type: 'food',     time: '08:00', name: 'Breakfast', detail: 'Hotel or local café', costPerPerson: scale(14), access: 'Accessible', mapUrl: '' },
+      { ...SFO_ACTIVITIES[0], id: uid(), type: 'activity', time: '09:30' },
+      { id: uid(), type: 'food',     time: '13:00', name: 'Lunch near Golden Gate', detail: 'Warming Hut Café at Crissy Field or Boudin Sourdough at the Fisherman\'s Wharf', access: 'Accessible', costPerPerson: scale(18), mapUrl: 'https://maps.google.com/?q=Warming+Hut+San+Francisco', note: 'Boudin sourdough bread bowls are a SF institution — great for kids.' },
+      { ...SFO_ACTIVITIES[3], id: uid(), type: 'activity', time: '14:30' },
+      { ...SFO_FOOD[1], id: uid(), type: 'food', time: '19:30' },
+    ],
+    // Alcatraz + cable car
+    [
+      { id: uid(), type: 'food',     time: '08:00', name: 'Breakfast', detail: 'Early start — Alcatraz ferry departs from Pier 33', costPerPerson: scale(14), access: 'Accessible', mapUrl: '' },
+      { ...SFO_ACTIVITIES[1], id: uid(), type: 'activity', time: '09:00' },
+      { id: uid(), type: 'food',     time: '13:00', name: 'Lunch — Fisherman\'s Wharf', detail: 'Fresh Dungeness crab, clam chowder, and sourdough near Pier 39', access: 'Flat waterfront, accessible', costPerPerson: scale(25), mapUrl: "https://maps.google.com/?q=Fisherman's+Wharf+San+Francisco" },
+      { ...SFO_ACTIVITIES[5], id: uid(), type: 'activity', time: '15:00' },
+      { ...SFO_FOOD[0], id: uid(), type: 'food', time: '19:30' },
+    ],
+    // Chinatown + Union Square
+    [
+      { id: uid(), type: 'food',     time: '08:30', name: 'Breakfast', detail: 'Hotel or nearby café', costPerPerson: scale(16), access: 'Accessible', mapUrl: '' },
+      { ...SFO_ACTIVITIES[4], id: uid(), type: 'activity', time: '10:00' },
+      { id: uid(), type: 'food',     time: '12:30', name: 'Dim sum lunch', detail: 'Authentic Cantonese dim sum in the heart of Chinatown', access: 'Accessible options available', costPerPerson: scale(22), mapUrl: 'https://maps.google.com/?q=Great+Eastern+Restaurant+San+Francisco', note: 'Great Eastern or Yank Sing — both excellent. Order lots and share.' },
+      { id: uid(), type: 'activity', time: '14:30', name: 'Union Square shopping', detail: 'San Francisco\'s premier shopping district — Macy\'s, Saks, boutiques, galleries', access: 'Flat, fully accessible', costPerPerson: 0, mapUrl: 'https://maps.google.com/?q=Union+Square+San+Francisco' },
+      { ...SFO_FOOD[1], id: uid(), type: 'food', time: '19:30' },
+    ],
+  ];
+
+  return dayThemes[(dayIndex - 1) % dayThemes.length];
+}
+
+// ─── Smart Itinerary Generator ────────────────────────────────────────────────
+
 export function generateSmartItinerary(trip, travelers = []) {
   const dest = (trip.destination || '').toLowerCase();
 
   // LA recognition
   const isLA = dest.includes('los angeles') || dest.includes('l.a.') || dest.includes(', la') || dest.startsWith('la,') || dest.includes('hollywood') || dest.includes('santa monica') || dest.includes('venice beach') || dest.includes('malibu');
 
-  if (!isLA) return null; // caller falls back to generic templates
+  // San Diego recognition
+  const isSD = dest.includes('san diego') || dest.startsWith('sd,') || dest.includes(', sd');
+
+  // San Francisco recognition
+  const isSFO = dest.includes('san francisco') || dest.includes('s.f.') || dest.startsWith('sf,') || dest.includes(', sf') || dest.includes('sfo') || dest.includes('bay area');
+
+  if (!isLA && !isSD && !isSFO) return null; // caller falls back to generic templates
 
   const profile = profileGroup(trip, travelers);
   const numDays = trip.days.length;
 
-  // Build day plans using LA templates, clamped to trip length
-  const plans = LA_DAY_SEQUENCE.slice(0, numDays);
-
-  // If trip is longer than our sequence, repeat middle days
-  while (plans.length < numDays) {
-    const mid = plans[Math.floor(plans.length / 2)];
-    plans.splice(plans.length - 1, 0, mid); // insert before last (departure)
+  if (isLA) {
+    const plans = LA_DAY_SEQUENCE.slice(0, numDays);
+    while (plans.length < numDays) {
+      const mid = plans[Math.floor(plans.length / 2)];
+      plans.splice(plans.length - 1, 0, mid);
+    }
+    return plans.map(builderFn => builderFn(profile));
   }
 
-  return plans.map(builderFn => builderFn(profile));
+  if (isSD) {
+    return Array.from({ length: numDays }, (_, i) =>
+      buildSDDay(i, profile, i === 0, i === numDays - 1)
+    );
+  }
+
+  if (isSFO) {
+    return Array.from({ length: numDays }, (_, i) =>
+      buildSFODay(i, profile, i === 0, i === numDays - 1)
+    );
+  }
+
+  return null;
 }
 
-// Export place data so sampleData can reference it
-export { LA_ACTIVITIES, LA_FOOD, LA_STAY, LA_TRANSPORT };
+// Export place data for cross-file use
+export { LA_ACTIVITIES, LA_FOOD, LA_STAY, LA_TRANSPORT, SD_ACTIVITIES, SFO_ACTIVITIES };

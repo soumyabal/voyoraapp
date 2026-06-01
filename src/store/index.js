@@ -92,7 +92,7 @@ const useStore = create(
         return { trips: [newTrip, ...s.trips] };
       }),
 
-      createTrip: ({ name, destination, startDate, endDate, mode, familyForms = [], skipDefaultFamily = false }) => {
+      createTrip: ({ name, destination, startDate, endDate, mode, pace = 'moderate', budget = 'mid-range', focus = [], familyForms = [], skipDefaultFamily = false }) => {
         const families = familyForms
           .filter(ff => ff.name || ff.members.some(m => m.name))
           .map((ff, fi) => ({
@@ -121,6 +121,7 @@ const useStore = create(
           name, destination,
           emoji: TRIP_EMOJIS[Math.floor(Math.random() * TRIP_EMOJIS.length)],
           startDate, endDate, mode,
+          pace, budget, focus,
           splitMode: 'individual', // 'individual' | 'family'
           bgColors: TRIP_BG_COLORS[Math.floor(Math.random() * TRIP_BG_COLORS.length)],
           itineraryPushed: false,
@@ -377,6 +378,19 @@ const useStore = create(
         }),
       })),
 
+      // Uneven / custom split — stores per-participant amounts keyed by memberId or famId.
+      // Set unevenSplit:false to revert to even splitting.
+      updateExpenseCustomShares: (tripId, expId, customShares, unevenSplit) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          expenses: t.expenses.map(e => e.id !== expId ? e : {
+            ...e,
+            unevenSplit: unevenSplit !== undefined ? unevenSplit : e.unevenSplit,
+            customShares: customShares !== undefined ? customShares : e.customShares,
+          }),
+        }),
+      })),
+
       pushItineraryToSplitwise: (tripId) => set(s => ({
         trips: s.trips.map(t => {
           if (t.id !== tripId) return t;
@@ -601,14 +615,75 @@ const useStore = create(
         return { chatHistory: next };
       }),
 
-      // Write a pre-built dayActivities array into the trip (called from AIPlannerModal)
-      applyPlannedActivities: (tripId, dayActivities) => set(s => ({
+      // Auto-save a draft plan while the user is reviewing it in AIPlannerModal.
+      // Survives modal close — cleared on Apply or explicit Discard.
+      // Mark an activity as done / skipped / clear (null).
+      // status: null | 'done' | 'skipped'
+      // Side-effect: skipped activities have their linked Splitwise expense excluded.
+      //              Un-skipping restores the expense (excluded → false).
+      markActivityStatus: (tripId, actId, status) => set(s => ({
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+          const isSkipped = status === 'skipped';
+          return {
+            ...t,
+            days: t.days.map(d => ({
+              ...d,
+              activities: d.activities.map(a =>
+                a.id !== actId ? a : { ...a, status: status ?? null }
+              ),
+            })),
+            // Exclude (or restore) the linked expense so skipped items
+            // don't appear in Splitwise settlement calculations.
+            expenses: (t.expenses || []).map(e =>
+              e.activityId !== actId ? e : { ...e, excluded: isSkipped }
+            ),
+          };
+        }),
+      })),
+
+      saveDraftPlan: (tripId, dayActivities) => set(s => ({
         trips: s.trips.map(t => t.id !== tripId ? t : {
           ...t,
-          days: t.days.map((d, i) => ({
+          draftPlan: dayActivities,
+          draftPlanTs: Date.now(),
+        }),
+      })),
+
+      clearDraftPlan: (tripId) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          draftPlan: null,
+          draftPlanTs: null,
+        }),
+      })),
+
+      // Write a pre-built dayActivities array into the trip (called from AIPlannerModal).
+      // If the pipeline attached ._budget, auto-populate Splitwise with per-family expenses.
+      applyPlannedActivities: (tripId, dayActivities) => set(s => ({
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+
+          const updatedDays = t.days.map((d, i) => ({
             ...d,
             activities: (dayActivities[i] || []).map(a => ({ ...a, id: a.id || uid() })),
-          })),
+          }));
+
+          // Auto-populate Splitwise with per-family budget breakdown if available
+          const budget = dayActivities._budget;
+          if (budget?.expenses?.length > 0) {
+            const manualExpenses = t.expenses.filter(e => e.source !== 'itinerary');
+            return {
+              ...t,
+              days: updatedDays,
+              expenses: [...manualExpenses, ...budget.expenses],
+              itineraryPushed: true,
+              budgetByFamily: budget.budgetByFamily || [],
+              agentMeta: budget.meta || null,
+            };
+          }
+
+          return { ...t, days: updatedDays };
         }),
       })),
 

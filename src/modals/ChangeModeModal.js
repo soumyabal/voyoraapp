@@ -3,12 +3,12 @@ import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography } from '../theme';
-import { BYPASS_SUBSCRIPTION, PRO_MONTHLY_PRICE } from '../config';
+import { BYPASS_SUBSCRIPTION, PRO_MONTHLY_PRICE, RELEASE_FLAGS } from '../config';
 
 const MODES = [
-  { key: 'manual', icon: '✍️', label: 'Plan Manually',    desc: 'Build and edit your itinerary yourself',            color: colors.primary },
-  { key: 'ai',     icon: '🤖', label: 'Plan with AI',     desc: 'Generate a smart AI itinerary for this trip',       color: colors.ai },
-  { key: 'expert', icon: '🧳', label: 'Plan with Expert', desc: 'A travel consultant will design your trip for you',  color: colors.expert },
+  { key: 'manual', flag: 'manualPlanner', icon: '✍️', label: 'Plan Manually',    desc: 'Build and edit your itinerary yourself',            color: colors.primary },
+  { key: 'ai',     flag: 'aiPlanner',     icon: '🤖', label: 'Plan with AI',     desc: 'Generate a smart AI itinerary for this trip',       color: colors.ai,     soon: 'v2.0' },
+  { key: 'expert', flag: 'expertMode',    icon: '🧳', label: 'Plan with Expert', desc: 'A travel consultant will design your trip for you',  color: colors.expert, soon: 'v3.0' },
 ];
 
 export default function ChangeModeModal({ visible, trip, onClose }) {
@@ -78,25 +78,30 @@ export default function ChangeModeModal({ visible, trip, onClose }) {
           </Text>
 
           {MODES.map(m => {
-            const active = selected === m.key;
+            const enabled   = RELEASE_FLAGS[m.flag] !== false;
+            const active    = selected === m.key;
             const isCurrent = trip.mode === m.key;
-            const blocked = m.key === 'ai' && !canUseAIPlanner && account.loggedIn;
+            const blocked   = m.key === 'ai' && !canUseAIPlanner && account.loggedIn;
             return (
               <TouchableOpacity
                 key={m.key}
                 style={[
                   st.modeCard,
-                  active && { borderColor: m.color, backgroundColor: m.color + '12' },
+                  active    && { borderColor: m.color, backgroundColor: m.color + '12' },
                   isCurrent && st.modeCardCurrent,
+                  !enabled  && st.modeCardDisabled,
                 ]}
-                onPress={() => handleSelect(m.key)}
+                onPress={() => {
+                  if (!enabled) { showToast(`${m.label} coming in ${m.soon || 'a future release'}`, '🔜'); return; }
+                  handleSelect(m.key);
+                }}
                 disabled={isCurrent}
-                activeOpacity={0.75}
+                activeOpacity={enabled ? 0.75 : 0.9}
               >
-                <View style={[st.iconWrap, active && { backgroundColor: m.color + '22' }]}>
+                <View style={[st.iconWrap, active && { backgroundColor: m.color + '22' }, !enabled && { opacity: 0.35 }]}>
                   <Text style={st.icon}>{m.icon}</Text>
                 </View>
-                <View style={st.modeText}>
+                <View style={[st.modeText, !enabled && { opacity: 0.45 }]}>
                   <View style={st.modeLabelRow}>
                     <Text style={[st.modeLabel, active && { color: m.color }]}>{m.label}</Text>
                     {isCurrent && (
@@ -104,22 +109,28 @@ export default function ChangeModeModal({ visible, trip, onClose }) {
                         <Text style={st.currentBadgeText}>Current</Text>
                       </View>
                     )}
-                    {blocked && (
+                    {blocked && enabled && (
                       <View style={[st.currentBadge, { backgroundColor: '#e1705522' }]}>
                         <Text style={[st.currentBadgeText, { color: '#e17055' }]}>Upgrade required</Text>
                       </View>
                     )}
                   </View>
                   <Text style={st.modeDesc}>{m.desc}</Text>
-                  {m.key === 'ai' && account.loggedIn && (
+                  {m.key === 'ai' && enabled && account.loggedIn && (
                     <Text style={[st.quotaHint, { color: canUseAIPlanner ? colors.green : '#e17055' }]}>
                       {isPro ? '✅ Pro — unlimited AI plans' : canUseAIPlanner ? '🎁 1 free AI plan available' : '🔒 Free plan used — upgrade to Pro'}
                     </Text>
                   )}
                 </View>
-                <View style={[st.radio, active && { borderColor: m.color }]}>
-                  {active && <View style={[st.radioDot, { backgroundColor: m.color }]} />}
-                </View>
+                {enabled ? (
+                  <View style={[st.radio, active && { borderColor: m.color }]}>
+                    {active && <View style={[st.radioDot, { backgroundColor: m.color }]} />}
+                  </View>
+                ) : (
+                  <View style={st.comingSoonBadge}>
+                    <Text style={st.comingSoonText}>Soon</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -159,8 +170,11 @@ const st = StyleSheet.create({
   content: { padding: spacing.xxl },
   hint: { ...typography.small, color: colors.muted, marginBottom: spacing.lg },
 
-  modeCard: { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 2, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
-  modeCardCurrent: { opacity: 0.6 },
+  modeCard:         { flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 2, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
+  modeCardCurrent:  { opacity: 0.6 },
+  modeCardDisabled: { backgroundColor: '#f8f8f8', borderColor: '#e5e5e5' },
+  comingSoonBadge:  { backgroundColor: '#f3f4f6', borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 4, borderWidth: 1, borderColor: '#d1d5db' },
+  comingSoonText:   { fontSize: 10, fontWeight: '700', color: '#9ca3af', letterSpacing: 0.5 },
   iconWrap: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface2 },
   icon: { fontSize: 26 },
   modeText: { flex: 1 },

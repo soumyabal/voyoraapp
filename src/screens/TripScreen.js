@@ -10,9 +10,11 @@ import TravelersScreen from './TravelersScreen';
 import SplitwiseScreen from './SplitwiseScreen';
 import EditTripModal from '../modals/EditTripModal';
 import ChangeModeModal from '../modals/ChangeModeModal';
-import AIPlannerModal from '../modals/AIPlannerModal';
+import AgenticPlannerModal from '../modals/AgenticPlannerModal';
 import { colors, spacing, typography, radius } from '../theme';
 import { fmt, getAllMembers } from '../utils/helpers';
+import { exportTripAsPDF } from '../utils/exportPlan';
+import { RELEASE_FLAGS } from '../config';
 
 // AI tab removed — plan is triggered directly from header / People screen
 const TABS = [
@@ -74,12 +76,15 @@ export default function TripScreen({ navigation }) {
     ]);
   };
 
+  const handleExportPDF = () => exportTripAsPDF(trip, travelers);
+
   const handleMenu = () => {
     Alert.alert(trip.name, 'What would you like to do?', [
       { text: '✏️  Edit Trip',              onPress: () => setShowEditModal(true) },
       { text: '🔄  Switch Planning Mode',   onPress: () => setShowModeModal(true) },
       { text: '📋  Duplicate',              onPress: handleDuplicate },
       { text: '📤  Share',                  onPress: handleShare },
+      { text: '📄  Export as PDF',          onPress: handleExportPDF },
       { text: '🗑️  Delete Trip',            onPress: handleDelete, style: 'destructive' },
       { text: 'Cancel',                     style: 'cancel' },
     ]);
@@ -115,8 +120,8 @@ export default function TripScreen({ navigation }) {
                 </View>
               )}
 
-              {/* Plan with AI / Update Plan button — AI mode trips only */}
-              {isAIMode && (
+              {/* Plan with AI / Update Plan button — only when AI planner is enabled */}
+              {isAIMode && RELEASE_FLAGS.aiPlanner && (
                 <TouchableOpacity
                   style={[styles.planBtn, hasActivities && styles.planBtnUpdate]}
                   onPress={() => setShowPlanner(true)}
@@ -165,7 +170,7 @@ export default function TripScreen({ navigation }) {
 
       <EditTripModal visible={showEditModal} trip={trip} onClose={() => setShowEditModal(false)} />
       <ChangeModeModal visible={showModeModal} trip={trip} onClose={() => setShowModeModal(false)} />
-      <AIPlannerModal
+      <AgenticPlannerModal
         visible={showPlanner}
         trip={trip}
         travelers={travelers}

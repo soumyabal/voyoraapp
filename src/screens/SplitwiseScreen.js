@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Switch, TextInput,
@@ -19,7 +19,7 @@ export default function SplitwiseScreen({ trip }) {
     pushItineraryToSplitwise, clearPushedItinerary,
     deleteExpense, toggleFamilySplit, toggleExpenseMember,
     updateExpensePayer, updateExpenseSplitMode, setTripSplitMode,
-    toggleExpenseExcluded, updateExpenseAmount,
+    toggleExpenseExcluded, updateExpenseAmount, updateExpenseCustomShares,
   } = useStore();
   const [showAddExpense, setShowAddExpense] = useState(false);
 
@@ -119,6 +119,7 @@ export default function SplitwiseScreen({ trip }) {
                 onChangeSplitMode={m => updateExpenseSplitMode(trip.id, exp.id, m)}
                 onToggleExcluded={() => toggleExpenseExcluded(trip.id, exp.id)}
                 onUpdateAmount={amt => updateExpenseAmount(trip.id, exp.id, amt)}
+                onUpdateCustomShares={(shares, uneven) => updateExpenseCustomShares(trip.id, exp.id, shares, uneven)}
               />
             ))}
           </>
@@ -287,13 +288,19 @@ function ExpenseCard({
   exp, trip,
   onDelete, onToggleFamily, onToggleMember,
   onChangePayer, onChangeSplitMode,
-  onToggleExcluded, onUpdateAmount,
+  onToggleExcluded, onUpdateAmount, onUpdateCustomShares,
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editAmount, setEditAmount] = useState(String(exp.amount));
 
-  // Keep editAmount in sync when the stored amount changes (e.g. initial mount)
-  React.useEffect(() => { setEditAmount(String(exp.amount)); }, [exp.amount]);
+  // Uneven split state — local input map keyed by memberId or famId
+  const [customAmounts, setCustomAmounts] = useState({});
+
+  // Seed / re-seed when expense changes
+  useEffect(() => { setEditAmount(String(exp.amount)); }, [exp.amount]);
+  useEffect(() => {
+    if (exp.customShares) setCustomAmounts({ ...exp.customShares });
+  }, [exp.id]); // only re-seed when switching to a different expense
 
   const isExcluded = !!exp.excluded;
   const effectiveMode = resolveMode(exp, trip);
@@ -307,9 +314,14 @@ function ExpenseCard({
 
   const hasEstimate = exp.estimatedAmount != null && exp.estimatedAmount !== exp.amount;
 
-  const splitSummary = effectiveMode === 'family'
-    ? `${effFams.length} group${effFams.length !== 1 ? 's' : ''} · ${fmtM(spf)}/group`
-    : `${effMembers.length} person${effMembers.length !== 1 ? 's' : ''} · ${fmtM(spp)}/person`;
+  const isUneven = !!exp.unevenSplit;
+  const splitSummary = isUneven
+    ? effectiveMode === 'family'
+      ? `${effFams.length} groups · custom split`
+      : `${effMembers.length} people · custom split`
+    : effectiveMode === 'family'
+      ? `${effFams.length} group${effFams.length !== 1 ? 's' : ''} · ${fmtM(spf)}/group`
+      : `${effMembers.length} person${effMembers.length !== 1 ? 's' : ''} · ${fmtM(spp)}/person`;
 
   const commitAmount = () => {
     const v = parseFloat(editAmount);
@@ -443,10 +455,138 @@ function ExpenseCard({
                 ))}
               </View>
 
-              {/* 4. Who's splitting */}
-              <Text style={[styles.splitLabel, { marginTop: 12 }]}>Who's splitting this?</Text>
+              {/* 4. Distribution — Even or Custom (uneven) */}
+              <Text style={[styles.splitLabel, { marginTop: 12 }]}>DISTRIBUTION</Text>
+              <View style={[styles.overrideRow, { marginBottom: 12 }]}>
+                <TouchableOpacity
+                  style={[styles.overrideChip, !isUneven && styles.overrideChipActive]}
+                  onPress={() => {
+                    setCustomAmounts({});
+                    onUpdateCustomShares({}, false);
+                  }}
+                >
+                  <Text style={[styles.overrideChipText, !isUneven && styles.overrideChipTextActive]}>
+                    ⚖️ Even
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.overrideChip, isUneven && styles.unevenChipActive]}
+                  onPress={() => {
+                    // Seed custom amounts from current even split
+                    const seeds = {};
+                    if (effectiveMode === 'family') {
+                      effFams.forEach(f => { seeds[f.id] = parseFloat(spf.toFixed(2)); });
+                    } else {
+                      effMembers.forEach(m => { seeds[m.id] = parseFloat(spp.toFixed(2)); });
+                    }
+                    setCustomAmounts(seeds);
+                    onUpdateCustomShares(seeds, true);
+                  }}
+                >
+                  <Text style={[styles.overrideChipText, isUneven && styles.unevenChipTextActive]}>
+                    ✏️ Custom
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
-              {effectiveMode === 'family' ? (
+              {/* 5. Who's splitting (even mode) / Custom amounts (uneven mode) */}
+              <Text style={[styles.splitLabel, { marginTop: 0 }]}>
+                {isUneven ? 'CUSTOM AMOUNTS' : "WHO'S SPLITTING THIS?"}
+              </Text>
+
+              {isUneven ? (
+                // ── Uneven split — amount inputs per participant ──
+                (() => {
+                  const participants = effectiveMode === 'family' ? effFams : effMembers;
+                  const assigned = participants.reduce((s, p) => s + (parseFloat(customAmounts[p.id]) || 0), 0);
+                  const remaining = parseFloat((exp.amount - assigned).toFixed(2));
+                  const remainingColor = Math.abs(remaining) < 0.01 ? colors.green : remaining < 0 ? colors.red : '#d97706';
+
+                  return (
+                    <View>
+                      {/* Remaining indicator */}
+                      <View style={styles.remainingRow}>
+                        <Text style={styles.remainingLabel}>Total: {fmtM(exp.amount)}</Text>
+                        <Text style={[styles.remainingAmt, { color: remainingColor }]}>
+                          {Math.abs(remaining) < 0.01
+                            ? '✅ Balanced'
+                            : remaining > 0
+                              ? `${fmtM(remaining)} unassigned`
+                              : `${fmtM(Math.abs(remaining))} over by`}
+                        </Text>
+                      </View>
+
+                      {effectiveMode === 'family' ? (
+                        effFams.map(fam => {
+                          const isPayer = payerFam?.id === fam.id;
+                          return (
+                            <View key={fam.id} style={styles.customRow}>
+                              <View style={[styles.famDot, { backgroundColor: fam.color }]} />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.splitRowName}>{fam.name}</Text>
+                                <Text style={styles.splitRowSub}>{fam.members.length} members</Text>
+                              </View>
+                              {isPayer && <View style={styles.payerBadge}><Text style={styles.payerBadgeText}>paid</Text></View>}
+                              <View style={styles.customAmtWrap}>
+                                <Text style={styles.customAmtDollar}>$</Text>
+                                <TextInput
+                                  style={styles.customAmtInput}
+                                  value={customAmounts[fam.id] != null ? String(customAmounts[fam.id]) : ''}
+                                  onChangeText={v => setCustomAmounts(prev => ({ ...prev, [fam.id]: v }))}
+                                  onBlur={() => {
+                                    const next = { ...customAmounts, [fam.id]: parseFloat(customAmounts[fam.id]) || 0 };
+                                    setCustomAmounts(next);
+                                    onUpdateCustomShares(next, true);
+                                  }}
+                                  keyboardType="decimal-pad"
+                                  selectTextOnFocus
+                                />
+                              </View>
+                            </View>
+                          );
+                        })
+                      ) : (
+                        trip.families.map(fam => (
+                          <View key={fam.id} style={styles.indivFamGroup}>
+                            <View style={styles.indivFamHeader}>
+                              <View style={[styles.famDot, { backgroundColor: fam.color, width: 7, height: 7 }]} />
+                              <Text style={[styles.indivFamName, { color: fam.color }]}>{fam.name}</Text>
+                            </View>
+                            {fam.members.map(m => {
+                              const inExp = effMembers.some(em => em.id === m.id);
+                              if (!inExp) return null;
+                              return (
+                                <View key={m.id} style={styles.customRow}>
+                                  <View style={[styles.memberAvatar, { backgroundColor: avatarColor(m.name), width: 22, height: 22, borderRadius: 11 }]}>
+                                    <Text style={[styles.memberAvatarText, { fontSize: 9 }]}>{m.name[0]}</Text>
+                                  </View>
+                                  <Text style={[styles.splitRowName, { flex: 1 }]}>{m.name.split(' ')[0]}</Text>
+                                  {exp.paidBy === m.id && <View style={styles.payerBadge}><Text style={styles.payerBadgeText}>paid</Text></View>}
+                                  <View style={styles.customAmtWrap}>
+                                    <Text style={styles.customAmtDollar}>$</Text>
+                                    <TextInput
+                                      style={styles.customAmtInput}
+                                      value={customAmounts[m.id] != null ? String(customAmounts[m.id]) : ''}
+                                      onChangeText={v => setCustomAmounts(prev => ({ ...prev, [m.id]: v }))}
+                                      onBlur={() => {
+                                        const next = { ...customAmounts, [m.id]: parseFloat(customAmounts[m.id]) || 0 };
+                                        setCustomAmounts(next);
+                                        onUpdateCustomShares(next, true);
+                                      }}
+                                      keyboardType="decimal-pad"
+                                      selectTextOnFocus
+                                    />
+                                  </View>
+                                </View>
+                              );
+                            })}
+                          </View>
+                        ))
+                      )}
+                    </View>
+                  );
+                })()
+              ) : effectiveMode === 'family' ? (
                 trip.families.map(fam => {
                   const participating = effFams.some(f => f.id === fam.id);
                   const isPayer = payerFam?.id === fam.id;
@@ -654,6 +794,17 @@ const styles = StyleSheet.create({
   indivFamName: { ...typography.tinyBold, flex: 1, textTransform: 'uppercase', letterSpacing: 0.4 },
   allToggle: { paddingHorizontal: 8, paddingVertical: 2 },
   allToggleText: { fontSize: 11, fontWeight: '700' },
+
+  // Uneven / custom split
+  unevenChipActive:     { borderColor: '#d97706', backgroundColor: '#fef3c7' },
+  unevenChipTextActive: { color: '#d97706', fontWeight: '700' },
+  remainingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 7, marginBottom: 8, borderWidth: 1, borderColor: colors.border },
+  remainingLabel: { fontSize: 12, fontWeight: '600', color: colors.muted },
+  remainingAmt:   { fontSize: 12, fontWeight: '800' },
+  customRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.border },
+  customAmtWrap:  { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: colors.surface, gap: 2 },
+  customAmtDollar: { fontSize: 13, fontWeight: '700', color: colors.primary },
+  customAmtInput:  { fontSize: 15, fontWeight: '700', color: colors.primary, minWidth: 55, padding: 0 },
 
   // Payer
   payerBadge: { backgroundColor: colors.greenLight, borderRadius: radius.full, paddingHorizontal: 7, paddingVertical: 1 },

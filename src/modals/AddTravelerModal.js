@@ -5,11 +5,12 @@ import {
 } from 'react-native';
 import useStore from '../store';
 import { colors, spacing, radius, typography, shadow } from '../theme';
-import { uid, NEEDS_OPTIONS } from '../utils/helpers';
+import { uid, NEEDS_OPTIONS, INTERESTS_OPTIONS } from '../utils/helpers';
 import { ModalHeader, FormField, ChipSelector, InfoBanner } from '../components/ui';
 
 const familyChipOptions = (trip) => trip.families.map(f => ({ value: f.id, label: f.name, _color: f.color }));
-const needsOptions = NEEDS_OPTIONS.map(n => ({ value: n, label: n }));
+const needsOptions     = NEEDS_OPTIONS.map(n => ({ value: n, label: n }));
+const interestsOptions = INTERESTS_OPTIONS.map(n => ({ value: n, label: n }));
 
 const PACE_LABELS = { relaxed: '🐢 Relaxed', moderate: '🚶 Moderate', packed: '🏃 Packed' };
 
@@ -19,18 +20,19 @@ export default function AddTravelerModal({ visible, trip, defaultFamId, onClose 
   const [name, setName]             = useState('');
   const [age, setAge]               = useState('');
   const [familyId, setFamilyId]     = useState(defaultFamId || trip.families[0]?.id || '');
-  const [selectedNeeds, setSelectedNeeds] = useState([]);
-  const [saveToLibrary, setSaveToLibrary] = useState(false);
+  const [selectedNeeds,     setSelectedNeeds]     = useState([]);
+  const [selectedInterests, setSelectedInterests] = useState([]);
+  const [saveToLibrary,     setSaveToLibrary]     = useState(false);
 
   React.useEffect(() => {
     if (visible) {
       setFamilyId(defaultFamId || trip.families[0]?.id || '');
-      setName(''); setAge(''); setSelectedNeeds([]); setSaveToLibrary(false);
+      setName(''); setAge(''); setSelectedNeeds([]); setSelectedInterests([]); setSaveToLibrary(false);
     }
   }, [visible, defaultFamId]);
 
-  const toggleNeed = (need) =>
-    setSelectedNeeds(prev => prev.includes(need) ? prev.filter(n => n !== need) : [...prev, need]);
+  const toggleNeed     = (need)     => setSelectedNeeds(prev     => prev.includes(need)     ? prev.filter(n => n !== need)     : [...prev, need]);
+  const toggleInterest = (interest) => setSelectedInterests(prev => prev.includes(interest) ? prev.filter(n => n !== interest) : [...prev, interest]);
 
   // Add from library — one tap adds the traveler as a trip member
   const handleAddFromLibrary = (tv) => {
@@ -65,7 +67,7 @@ export default function AddTravelerModal({ visible, trip, defaultFamId, onClose 
         emoji: '👤',
         dietary: [],
         needs: selectedNeeds,
-        interests: [],
+        interests: selectedInterests,
         pacePreference: 'moderate',
         notes: '',
       });
@@ -178,6 +180,15 @@ export default function AddTravelerModal({ visible, trip, defaultFamId, onClose 
               onSelect={toggleNeed}
               multi
               activeColor={colors.green}
+              wrap
+            />
+            <ChipSelector
+              label="Interests"
+              options={interestsOptions}
+              selected={selectedInterests}
+              onSelect={toggleInterest}
+              multi
+              activeColor={colors.primary}
               wrap
             />
 

@@ -1,15 +1,33 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Dimensions, Alert, Linking } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal } from 'react-native';
 import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
-import { fmt, fmtM, getAllMembers } from '../utils/helpers';
+import { fmt, fmtM, getActivityIcon } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
 
 const SCREEN_W = Dimensions.get('window').width;
 
+// ── Day template: time slots ──────────────────────────────────────
+const DAY_SLOTS = [
+  { key: 'morning',   emoji: '🌅', label: 'Morning',   hint: 'Before noon',   defaultTime: '09:00', range: [0,   720]  },
+  { key: 'afternoon', emoji: '☀️',  label: 'Afternoon', hint: '12 pm – 5 pm',  defaultTime: '13:00', range: [720, 1020] },
+  { key: 'evening',   emoji: '🌆', label: 'Evening',   hint: '5 pm – 9 pm',   defaultTime: '18:00', range: [1020,1260] },
+  { key: 'night',     emoji: '🌙', label: 'Night',     hint: 'After 9 pm',    defaultTime: '21:00', range: [1260,1440] },
+];
+
+function getSlotKey(timeStr) {
+  if (!timeStr) return 'morning';
+  const [h, m] = timeStr.split(':').map(Number);
+  const mins = (h || 0) * 60 + (m || 0);
+  if (mins < 720)  return 'morning';
+  if (mins < 1020) return 'afternoon';
+  if (mins < 1260) return 'evening';
+  return 'night';
+}
+
 // ── Robinhood-style expense chart ─────────────────────────────────
-function TripExpenseChart({ trip, currentDay, onSelectDay }) {
+function TripExpenseChart({ trip, currentDay, onSelectDay, compact }) {
   const dayCosts = trip.days.map(d => calcDayCostForTrip(d, trip));
   const maxCost = Math.max(...dayCosts, 1);
   const total = dayCosts.reduce((s, c) => s + c, 0);
@@ -22,7 +40,7 @@ function TripExpenseChart({ trip, currentDay, onSelectDay }) {
   if (barCount === 0) return null;
 
   return (
-    <View style={ch.wrap}>
+    <View style={compact ? ch.wrapCompact : ch.wrap}>
       {/* Header row */}
       <View style={ch.headerRow}>
         <View>
@@ -100,24 +118,140 @@ function TripExpenseChart({ trip, currentDay, onSelectDay }) {
 }
 
 
-export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
-  const { currentDay, setCurrentDay, deleteActivity, pushItineraryToSplitwise } = useStore();
-  const [showAddActivity, setShowAddActivity] = useState(false);
-  const [editActivity, setEditActivity] = useState(null);
-  const day = trip.days[currentDay] || trip.days[0];
-  const allMembers = getAllMembers(trip);
+// ── Option D: Sticky Mini-Header ─────────────────────────────────
+// Always visible above the ScrollView — never scrolls away.
+// Left:   TRIP $X,XXX
+// Right:  Day N  $XXX  $XX/p
+// ⓘ tap: slide-up detail sheet (family totals, chart, push button)
+function StickyHeader({ trip, currentDay, onSelectDay, onPush }) {
+  const [showDetail, setShowDetail] = useState(false);
   const itinTotal = calcTripItineraryTotal(trip);
+  const day     = trip.days[currentDay];
   const dayCost = day ? calcDayCostForTrip(day, trip) : 0;
-  const dayPP = day ? calcDayPerPersonCost(day) : 0;
+  const dayPP   = day ? calcDayPerPersonCost(day) : 0;
 
-  const handlePush = () => {
-    pushItineraryToSplitwise(trip.id);
-    switchTab('splitwise');
+  return (
+    <>
+      {/* ── Sticky bar ── */}
+      <View style={ch.stickyBar}>
+        {/* Trip total */}
+        <View>
+          <Text style={ch.miniTripLabel}>TRIP TOTAL</Text>
+          <Text style={ch.miniTripAmt}>{itinTotal > 0 ? fmtM(itinTotal) : '—'}</Text>
+        </View>
+
+        <View style={ch.miniSep} />
+
+        {/* Active day */}
+        <View style={{ flex: 1 }}>
+          <Text style={ch.miniTripLabel}>{day?.label?.toUpperCase() || 'DAY'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+            <Text style={ch.miniDayAmt}>{dayCost > 0 ? fmtM(dayCost) : '—'}</Text>
+            {dayCost > 0 && <Text style={ch.miniPP}>{fmtM(dayPP)}/p</Text>}
+          </View>
+        </View>
+
+        {/* Detail trigger */}
+        <TouchableOpacity style={ch.infoBtn} onPress={() => setShowDetail(true)} activeOpacity={0.7}>
+          <Text style={ch.infoBtnText}>ⓘ</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Detail sheet (slide-up Modal) ── */}
+      <Modal
+        visible={showDetail}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowDetail(false)}
+      >
+        <TouchableOpacity
+          style={ch.overlay}
+          activeOpacity={1}
+          onPress={() => setShowDetail(false)}
+        >
+          {/* onStartShouldSetResponder stops touches on the sheet closing the overlay */}
+          <View style={ch.sheet} onStartShouldSetResponder={() => true}>
+            {/* Handle + header */}
+            <View style={ch.sheetHandle} />
+            <View style={ch.sheetHeader}>
+              <Text style={ch.sheetTitle}>Trip Overview</Text>
+              <TouchableOpacity onPress={() => setShowDetail(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <Text style={ch.sheetClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Trip summary line */}
+            <View style={ch.sheetSummary}>
+              <Text style={ch.sheetTotalAmt}>{fmtM(itinTotal)}</Text>
+              <Text style={ch.sheetTotalSub}>
+                {trip.families.reduce((s, f) => s + f.members.length, 0)} travellers · {trip.days.length} days
+              </Text>
+            </View>
+
+            <View style={ch.sheetDivider} />
+
+            {/* Family totals */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={ch.famRow}>
+                {trip.families.map(fam => {
+                  const fc = calcFamilyItineraryCost(fam, trip);
+                  return (
+                    <View key={fam.id} style={ch.famCol}>
+                      <Text style={[ch.famName, { color: fam.color }]}>{fam.name.split(' ')[0]}</Text>
+                      <Text style={ch.famAmt}>{fmtM(fc)}</Text>
+                      <Text style={ch.famSub}>{fam.members.length}p</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            <View style={ch.sheetDivider} />
+
+            {/* Spend by day chart */}
+            <TripExpenseChart
+              trip={trip}
+              currentDay={currentDay}
+              compact
+              onSelectDay={v => { onSelectDay(v); setShowDetail(false); }}
+            />
+
+            {/* Push / synced */}
+            {trip.itineraryPushed ? (
+              <View style={ch.syncedBadge}>
+                <Text style={ch.syncedText}>✅ Synced to Splitwise — edits update automatically</Text>
+              </View>
+            ) : (
+              <TouchableOpacity style={ch.pushBtn} onPress={() => { onPush(); setShowDetail(false); }}>
+                <Text style={ch.pushBtnText}>➡️ Move to Splitwise</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
+  );
+}
+
+export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
+  const { currentDay, setCurrentDay, deleteActivity, pushItineraryToSplitwise, markActivityStatus } = useStore();
+  const [showAddActivity, setShowAddActivity] = useState(false);
+  const [editActivity,    setEditActivity]    = useState(null);
+  const [defaultSlotTime, setDefaultSlotTime] = useState('09:00');
+
+  const day = trip.days[currentDay] || trip.days[0];
+
+  const handlePush = () => { pushItineraryToSplitwise(trip.id); switchTab('splitwise'); };
+
+  const openEdit       = (act)  => { setEditActivity(act); setShowAddActivity(true); };
+  const openAdd        = ()     => { setDefaultSlotTime('09:00'); setEditActivity(null); setShowAddActivity(true); };
+  const openAddInSlot  = (time) => { setDefaultSlotTime(time);    setEditActivity(null); setShowAddActivity(true); };
+  const closeModal     = ()     => { setShowAddActivity(false); setEditActivity(null); };
+
+  const cycleStatus = (act) => {
+    const next = !act.status ? 'done' : act.status === 'done' ? 'skipped' : null;
+    markActivityStatus(trip.id, act.id, next);
   };
-
-  const openEdit = (act) => { setEditActivity(act); setShowAddActivity(true); };
-  const openAdd  = () => { setEditActivity(null); setShowAddActivity(true); };
-  const closeModal = () => { setShowAddActivity(false); setEditActivity(null); };
 
   const confirmDelete = (act) => {
     Alert.alert(
@@ -132,41 +266,15 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
 
   return (
     <View style={{ flex: 1 }}>
+      {/* Sticky header — always visible, never scrolls away */}
+      <StickyHeader
+        trip={trip}
+        currentDay={currentDay}
+        onSelectDay={setCurrentDay}
+        onPush={handlePush}
+      />
+
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-
-        {/* Cost Banner */}
-        <View style={styles.banner}>
-          <View style={styles.bannerTotal}>
-            <Text style={styles.bannerLabel}>Total Trip Estimate</Text>
-            <Text style={styles.bannerAmt}>{fmtM(itinTotal)}</Text>
-            <Text style={styles.bannerSub}>{allMembers.length} travelers · {trip.days.length} days</Text>
-          </View>
-          <View style={styles.bannerDivider} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.famScroll}>
-            {trip.families.map(fam => {
-              const fc = calcFamilyItineraryCost(fam, trip);
-              return (
-                <View key={fam.id} style={styles.famCol}>
-                  <Text style={[styles.famName, { color: fam.color }]}>{fam.name.split(' ')[0]}</Text>
-                  <Text style={styles.famAmt}>{fmtM(fc)}</Text>
-                  <Text style={styles.famSub}>{fam.members.length}p</Text>
-                </View>
-              );
-            })}
-          </ScrollView>
-          {trip.itineraryPushed ? (
-            <View style={styles.syncedBadge}>
-              <Text style={styles.syncedBadgeText}>✅ Synced to Splitwise — edits update automatically</Text>
-            </View>
-          ) : (
-            <TouchableOpacity style={styles.pushBtn} onPress={handlePush}>
-              <Text style={styles.pushBtnText}>➡️ Move to Splitwise</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Expense Chart */}
-        <TripExpenseChart trip={trip} currentDay={currentDay} onSelectDay={setCurrentDay} />
 
         {/* Day Navigation */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayNav} contentContainerStyle={{ paddingHorizontal: spacing.xxl }}>
@@ -196,68 +304,90 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
           </View>
         )}
 
-        {/* Day Cost Strip */}
-        {dayCost > 0 && (
-          <View style={styles.costStrip}>
-            <View style={styles.stripItem}>
-              <Text style={styles.stripLabel}>Day Total</Text>
-              <Text style={[styles.stripVal, { color: colors.green }]}>{fmtM(dayCost)}</Text>
-            </View>
-            <View style={styles.stripDivider} />
-            <View style={styles.stripItem}>
-              <Text style={styles.stripLabel}>Per Person</Text>
-              <Text style={styles.stripVal}>{fmtM(dayPP)}</Text>
-            </View>
-            <View style={styles.stripDivider} />
-            <View style={styles.stripItem}>
-              <Text style={styles.stripLabel}>Activities</Text>
-              <Text style={styles.stripVal}>{day?.activities.filter(a => a.costPerPerson > 0).length} costed</Text>
-            </View>
-          </View>
-        )}
-
-        {/* Per-family day pills */}
-        {dayCost > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: spacing.xxl }}>
-            <View style={styles.famPills}>
-              {trip.families.map(fam => {
-                const fc = fam.members.length * dayPP;
-                return (
-                  <View key={fam.id} style={styles.famPill}>
-                    <View style={[styles.famDot, { backgroundColor: fam.color }]} />
-                    <Text style={styles.famPillName}>{fam.name.split(' ')[0]}</Text>
-                    <Text style={styles.famPillAmt}>{fmtM(fc)}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          </ScrollView>
-        )}
-
-        {/* Activities */}
+        {/* Day template — Morning / Afternoon / Evening / Night */}
         <View style={styles.activities}>
-          {!day || day.activities.length === 0 ? (
-            <View style={styles.empty}>
-              <Text style={styles.emptyText}>No activities planned yet</Text>
-              {!!onPlanWithAI && (
-                <TouchableOpacity style={styles.emptyAiBtn} onPress={onPlanWithAI} activeOpacity={0.85}>
-                  <Text style={styles.emptyAiBtnText}>✨ Plan with AI</Text>
+          {!day ? null : day.activities.length === 0 ? (
+            // Completely empty day — show AI/manual prompts then slot template
+            <View>
+              <View style={styles.empty}>
+                <Text style={styles.emptyText}>No activities planned yet</Text>
+                {!!onPlanWithAI && (
+                  <TouchableOpacity style={styles.emptyAiBtn} onPress={onPlanWithAI} activeOpacity={0.85}>
+                    <Text style={styles.emptyAiBtnText}>✨ Plan with AI</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              {/* Empty slot template */}
+              {DAY_SLOTS.map(slot => (
+                <TouchableOpacity
+                  key={slot.key}
+                  style={styles.emptySlot}
+                  onPress={() => openAddInSlot(slot.defaultTime)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.emptySlotEmoji}>{slot.emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.emptySlotLabel}>{slot.label}</Text>
+                    <Text style={styles.emptySlotHint}>{slot.hint} · tap to add</Text>
+                  </View>
+                  <Text style={styles.emptySlotPlus}>+</Text>
                 </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.emptyBtn} onPress={openAdd}>
-                <Text style={styles.emptyBtnText}>+ Add Manually</Text>
-              </TouchableOpacity>
+              ))}
             </View>
           ) : (
-            [...day.activities].sort((a, b) => a.time.localeCompare(b.time)).map(act => (
-              <ActivityCard
-                key={act.id}
-                activity={act}
-                trip={trip}
-                onEdit={() => openEdit(act)}
-                onDelete={() => confirmDelete(act)}
-              />
-            ))
+            // Has activities — group by slot
+            DAY_SLOTS.map(slot => {
+              const slotActs = [...day.activities]
+                .filter(a => getSlotKey(a.time) === slot.key)
+                .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+              const doneCount    = slotActs.filter(a => a.status === 'done').length;
+              const skippedCount = slotActs.filter(a => a.status === 'skipped').length;
+
+              return (
+                <View key={slot.key} style={styles.slotSection}>
+                  {/* Slot header */}
+                  <View style={styles.slotHeader}>
+                    <Text style={styles.slotEmoji}>{slot.emoji}</Text>
+                    <Text style={styles.slotLabel}>{slot.label}</Text>
+                    <Text style={styles.slotHint}>{slot.hint}</Text>
+                    {slotActs.length > 0 && (doneCount > 0 || skippedCount > 0) && (
+                      <View style={styles.slotProgress}>
+                        {doneCount > 0    && <Text style={styles.slotDoneText}>✅ {doneCount}</Text>}
+                        {skippedCount > 0 && <Text style={styles.slotSkipText}>↩️ {skippedCount}</Text>}
+                      </View>
+                    )}
+                    <TouchableOpacity
+                      style={styles.slotAddBtn}
+                      onPress={() => openAddInSlot(slot.defaultTime)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.slotAddBtnText}>+ Add</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {slotActs.length === 0 ? (
+                    <TouchableOpacity
+                      style={styles.slotEmpty}
+                      onPress={() => openAddInSlot(slot.defaultTime)}
+                      activeOpacity={0.6}
+                    >
+                      <Text style={styles.slotEmptyText}>Nothing planned for {slot.label.toLowerCase()} · tap to add</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    slotActs.map(act => (
+                      <ActivityCard
+                        key={act.id}
+                        activity={act}
+                        trip={trip}
+                        onEdit={() => openEdit(act)}
+                        onDelete={() => confirmDelete(act)}
+                        onToggleStatus={() => cycleStatus(act)}
+                      />
+                    ))
+                  )}
+                </View>
+              );
+            })
           )}
         </View>
       </ScrollView>
@@ -267,62 +397,122 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI }) {
         trip={trip}
         currentDay={currentDay}
         editActivity={editActivity}
+        defaultTime={defaultSlotTime}
         onClose={closeModal}
       />
     </View>
   );
 }
 
-function ActivityCard({ activity: act, trip, onEdit, onDelete }) {
+function ActivityCard({ activity: act, trip, onEdit, onDelete, onToggleStatus }) {
+  const status   = act.status ?? null;   // null | 'done' | 'skipped'
+  const isDone   = status === 'done';
+  const isSkipped= status === 'skipped';
+  const dimmed   = isDone || isSkipped;
+
   const famChips = act.costPerPerson > 0 ? trip.families.map(fam => ({
     ...fam, cost: fam.members.length * act.costPerPerson,
   })) : [];
 
   const isNote = act.type === 'note';
-
-  const handleMapPress = () => { if (act.mapUrl) Linking.openURL(act.mapUrl); };
-  const handleUrlPress = () => { if (act.url) Linking.openURL(act.url); };
+  const handleMapPress  = () => { if (act.mapUrl) Linking.openURL(act.mapUrl); };
+  const handleUrlPress  = () => { if (act.url)    Linking.openURL(act.url); };
+  const actIcon         = getActivityIcon(act.type, act.subtype);
+  const isPerFamily     = act.costMode === 'per_family';
+  const displayCostAmt  = isPerFamily ? act.costAmount : act.costPerPerson;
+  const displayCostLbl  = isPerFamily ? '/family' : '/person';
 
   return (
-    <View style={[styles.actCard, { borderLeftColor: activityColors[act.type] || colors.muted }, isNote && styles.actCardNote]}>
-      <View style={styles.actTimeCol}>
+    <View style={[
+      styles.actCard,
+      { borderLeftColor: activityColors[act.type] || colors.muted },
+      isNote    && styles.actCardNote,
+      isDone    && styles.actCardDone,
+      isSkipped && styles.actCardSkipped,
+    ]}>
+      {/* ── Checkbox ── */}
+      <TouchableOpacity
+        style={styles.checkboxCol}
+        onPress={onToggleStatus}
+        hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+        activeOpacity={0.7}
+      >
+        <View style={[
+          styles.checkbox,
+          isDone    && styles.checkboxDone,
+          isSkipped && styles.checkboxSkipped,
+        ]}>
+          {isDone    && <Text style={styles.checkMark}>✓</Text>}
+          {isSkipped && <Text style={styles.checkMark}>✗</Text>}
+        </View>
+      </TouchableOpacity>
+
+      {/* ── Time + icon ── */}
+      <View style={[styles.actTimeCol, dimmed && { opacity: 0.45 }]}>
         <Text style={styles.actTime}>{act.time}</Text>
-        <Text style={styles.actIcon}>{activityIcons[act.type] || '📌'}</Text>
+        <Text style={styles.actIcon}>{actIcon}</Text>
       </View>
-      <View style={styles.actBody}>
-        {/* Name + rating on same row */}
+
+      {/* ── Body ── */}
+      <View style={[styles.actBody, dimmed && { opacity: dimmed ? 0.55 : 1 }]}>
+        {/* Status badge */}
+        {isDone    && <View style={styles.statusBadgeDone}><Text style={styles.statusBadgeText}>✅ Done</Text></View>}
+        {isSkipped && <View style={styles.statusBadgeSkip}><Text style={[styles.statusBadgeText, { color: '#6b7280' }]}>↩️ Skipped</Text></View>}
+
         <View style={styles.actNameRow}>
-          <Text style={[styles.actName, isNote && styles.actNameNote]} numberOfLines={2}>{act.name}</Text>
-          {!!act.rating && (
+          <Text style={[
+            styles.actName,
+            isNote    && styles.actNameNote,
+            isSkipped && styles.actNameSkipped,
+            isDone    && { color: colors.green },
+          ]} numberOfLines={2}>{act.name}</Text>
+          {!!act.rating && !dimmed && (
             <View style={styles.ratingBadge}>
               <Text style={styles.ratingText}>⭐ {act.rating}</Text>
             </View>
           )}
         </View>
 
-        {!!act.detail && <Text style={styles.actDetail}>{act.detail}</Text>}
+        {!!act.detail && !isSkipped && <Text style={styles.actDetail}>{act.detail}</Text>}
 
-        {/* AI Tip */}
-        {!!act.note && !isNote && (
+        {!!act.note && !isNote && !isSkipped && (
           <View style={styles.aiTipRow}>
             <Text style={styles.aiTipIcon}>💡</Text>
             <Text style={styles.aiTipText}>{act.note}</Text>
           </View>
         )}
 
-        <View style={styles.actTags}>
-          {act.costPerPerson > 0 && (
-            <View style={styles.costBadge}><Text style={styles.costBadgeText}>~${act.costPerPerson}/person</Text></View>
-          )}
-          {!!act.access && (
-            <View style={[styles.costBadge, { backgroundColor: colors.greenLight, borderColor: '#b2dfdb' }]}>
-              <Text style={[styles.costBadgeText, { color: colors.green }]}>♿ {act.access}</Text>
-            </View>
-          )}
-        </View>
+        {!!act.memo && !isSkipped && (
+          <View style={styles.memoRow}>
+            <Text style={styles.memoIcon}>📌</Text>
+            <Text style={styles.memoText}>{act.memo}</Text>
+          </View>
+        )}
+        {!!act.reminder && !isSkipped && (
+          <View style={styles.reminderRow}>
+            <Text style={styles.reminderIcon}>🔔</Text>
+            <Text style={styles.reminderText}>{act.reminder}</Text>
+          </View>
+        )}
 
-        {/* Address → opens Google Maps */}
-        {!!act.address && (
+        {!dimmed && (
+          <View style={styles.actTags}>
+            {displayCostAmt > 0 && (
+              <View style={[styles.costBadge, isPerFamily && { backgroundColor: '#f0eeff', borderColor: '#c4b5fd' }]}>
+                <Text style={[styles.costBadgeText, isPerFamily && { color: '#7c3aed' }]}>
+                  ~${displayCostAmt}{displayCostLbl}
+                </Text>
+              </View>
+            )}
+            {!!act.access && (
+              <View style={[styles.costBadge, { backgroundColor: colors.greenLight, borderColor: '#b2dfdb' }]}>
+                <Text style={[styles.costBadgeText, { color: colors.green }]}>♿ {act.access}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {!!act.address && !isSkipped && (
           <TouchableOpacity style={styles.locationRow} onPress={handleMapPress} activeOpacity={0.7}>
             <Text style={styles.locationIcon}>📍</Text>
             <Text style={styles.locationText} numberOfLines={1}>{act.address}</Text>
@@ -330,8 +520,7 @@ function ActivityCard({ activity: act, trip, onEdit, onDelete }) {
           </TouchableOpacity>
         )}
 
-        {/* Website link */}
-        {!!act.url && (
+        {!!act.url && !dimmed && (
           <TouchableOpacity style={styles.urlRow} onPress={handleUrlPress} activeOpacity={0.7}>
             <Text style={styles.urlIcon}>🌐</Text>
             <Text style={styles.urlText} numberOfLines={1}>
@@ -341,7 +530,7 @@ function ActivityCard({ activity: act, trip, onEdit, onDelete }) {
           </TouchableOpacity>
         )}
 
-        {famChips.length > 0 && (
+        {famChips.length > 0 && !dimmed && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.famChips}>
               {famChips.map(fam => (
@@ -354,6 +543,8 @@ function ActivityCard({ activity: act, trip, onEdit, onDelete }) {
           </ScrollView>
         )}
       </View>
+
+      {/* ── Edit / Delete ── */}
       <View style={styles.actActions}>
         <TouchableOpacity style={styles.actActionBtn} onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={styles.editBtnText}>✏️</Text>
@@ -474,7 +665,7 @@ const styles = StyleSheet.create({
   famPillAmt: { ...typography.caption, color: colors.muted },
 
   // ── Activities list ──────────────────────────────────────────────
-  activities: { paddingHorizontal: spacing.xxl, paddingTop: spacing.sm },
+  activities: { paddingTop: spacing.sm },
   empty: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { ...typography.body, color: colors.muted, marginBottom: spacing.lg },
   emptyAiBtn: {
@@ -495,17 +686,98 @@ const styles = StyleSheet.create({
   },
   emptyBtnText: { ...typography.bodyBold, color: colors.primary },
 
+  // ── Slot sections ────────────────────────────────────────────────
+  slotSection: { marginBottom: spacing.lg },
+  slotHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
+  },
+  slotEmoji:       { fontSize: 15 },
+  slotLabel:       { ...typography.bodyBold, color: colors.text, fontSize: 13 },
+  slotHint:        { ...typography.caption, color: colors.muted, fontSize: 11, flex: 1 },
+  slotProgress:    { flexDirection: 'row', gap: spacing.xs },
+  slotDoneText:    { ...typography.caption, color: colors.green, fontWeight: '700', fontSize: 11 },
+  slotSkipText:    { ...typography.caption, color: colors.muted, fontWeight: '700', fontSize: 11 },
+  slotAddBtn:      { backgroundColor: colors.primaryLight, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 3 },
+  slotAddBtnText:  { ...typography.caption, color: colors.primary, fontWeight: '800', fontSize: 11 },
+  slotEmpty: {
+    marginHorizontal: spacing.xxl,
+    marginBottom: spacing.sm,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    backgroundColor: '#fafafa',
+  },
+  slotEmptyText: { ...typography.caption, color: colors.muted, fontSize: 12 },
+
+  // Empty day slot template (full empty day)
+  emptySlot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginHorizontal: spacing.xxl,
+    marginBottom: spacing.sm,
+    backgroundColor: '#fff',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    ...shadow.sm,
+  },
+  emptySlotEmoji: { fontSize: 22 },
+  emptySlotLabel: { ...typography.bodyBold, color: colors.muted, fontSize: 13 },
+  emptySlotHint:  { ...typography.caption, color: '#c0c8d0', fontSize: 11, marginTop: 1 },
+  emptySlotPlus:  { fontSize: 22, color: colors.primary, fontWeight: '300' },
+
   // ── Activity card ────────────────────────────────────────────────
   actCard: {
     backgroundColor: '#fff',
     borderRadius: radius.lg,
     borderLeftWidth: 4,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
+    marginHorizontal: spacing.xxl,
     flexDirection: 'row',
     overflow: 'hidden',
     ...shadow.sm,
   },
-  actCardNote: { backgroundColor: '#f9fafb' },
+  actCardNote:    { backgroundColor: '#f9fafb' },
+  actCardDone:    { backgroundColor: '#f0fdf4', borderLeftColor: colors.green },
+  actCardSkipped: { backgroundColor: '#f9fafb', opacity: 0.75 },
+
+  // Checkbox
+  checkboxCol: {
+    width: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  checkboxDone:    { backgroundColor: colors.green, borderColor: colors.green },
+  checkboxSkipped: { backgroundColor: '#9ca3af',    borderColor: '#9ca3af' },
+  checkMark:       { fontSize: 13, color: '#fff', fontWeight: '800', lineHeight: 16 },
+
+  // Status badges
+  statusBadgeDone: { backgroundColor: '#dcfce7', borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'flex-start', marginBottom: 4 },
+  statusBadgeSkip: { backgroundColor: '#f3f4f6', borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'flex-start', marginBottom: 4 },
+  statusBadgeText: { ...typography.caption, fontSize: 10, fontWeight: '700', color: colors.green },
+  actNameSkipped:  { textDecorationLine: 'line-through', color: colors.muted },
+
   actTimeCol: {
     width: 52,
     alignItems: 'center',
@@ -531,7 +803,13 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   ratingText: { fontSize: 10, fontWeight: '700', color: '#e65100' },
-  actDetail: { ...typography.caption, color: colors.muted, marginBottom: spacing.sm },
+  actDetail:    { ...typography.caption, color: colors.muted, marginBottom: spacing.sm },
+  memoRow:      { flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginBottom: 3 },
+  memoIcon:     { fontSize: 11, marginTop: 1 },
+  memoText:     { ...typography.caption, color: colors.muted, flex: 1, fontSize: 11, lineHeight: 16 },
+  reminderRow:  { flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginBottom: 3 },
+  reminderIcon: { fontSize: 11, marginTop: 1 },
+  reminderText: { ...typography.caption, color: '#f97316', flex: 1, fontSize: 11, fontWeight: '600', lineHeight: 16 },
   aiTipRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -604,14 +882,20 @@ const styles = StyleSheet.create({
   delBtnText: { fontSize: 14 },
 });
 
-// ── Chart styles ──────────────────────────────────────────────────
+// ── Chart + CollapsibleHeader styles ─────────────────────────────
 const ch = StyleSheet.create({
+  // ── Standalone chart (legacy path, unused now) ──
   wrap: {
     marginHorizontal: spacing.xxl,
     marginTop: spacing.xl,
     backgroundColor: colors.text,
     borderRadius: radius.xl,
     padding: spacing.lg,
+  },
+  // ── Compact chart: no own background/margin — sits inside CollapsibleHeader ──
+  wrapCompact: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: spacing.sm },
   label: { ...typography.caption, color: 'rgba(255,255,255,0.45)', fontSize: 9, letterSpacing: 1, textTransform: 'uppercase' },
@@ -624,4 +908,89 @@ const ch = StyleSheet.create({
   dayLabels: { flexDirection: 'row', marginTop: spacing.xs },
   dayLabelText: { ...typography.caption, color: 'rgba(255,255,255,0.3)', fontSize: 9, textAlign: 'center' },
   dayLabelActive: { color: colors.green, fontWeight: '700' },
+
+  // ── Option D: Sticky bar ─────────────────────────────────────
+  stickyBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.text,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: 10,
+    gap: spacing.md,
+    // shadow separates bar from scroll content
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  miniTripLabel: {
+    fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.4)',
+    letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2,
+  },
+  miniTripAmt:  { fontSize: 20, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
+  miniSep:      { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.15)' },
+  miniDayAmt:   { fontSize: 15, fontWeight: '800', color: '#fff' },
+  miniPP:       { fontSize: 11, fontWeight: '600', color: colors.green },
+  infoBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  infoBtnText: { fontSize: 16, color: 'rgba(255,255,255,0.6)' },
+
+  // ── Detail sheet (Modal) ──────────────────────────────────────
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  sheet: {
+    backgroundColor: colors.text,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingBottom: 36,
+  },
+  sheetHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignSelf: 'center', marginTop: 10, marginBottom: 4,
+  },
+  sheetHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl, paddingVertical: spacing.md,
+  },
+  sheetTitle: { fontSize: 14, fontWeight: '800', color: '#fff' },
+  sheetClose: { fontSize: 16, color: 'rgba(255,255,255,0.45)', fontWeight: '700' },
+  sheetSummary: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
+  sheetTotalAmt: { fontSize: 32, fontWeight: '900', color: '#fff', letterSpacing: -1 },
+  sheetTotalSub: { fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+  sheetDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginHorizontal: spacing.xl, marginVertical: spacing.sm },
+
+  // Family row inside sheet
+  famRow: { flexDirection: 'row', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, gap: spacing.xl },
+  famCol: { alignItems: 'center' },
+  famName: { fontSize: 12, fontWeight: '800' },
+  famAmt:  { fontSize: 12, color: '#fff', fontWeight: '700', marginTop: 2 },
+  famSub:  { fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 1 },
+
+  // Push / synced inside sheet
+  pushBtn: {
+    marginHorizontal: spacing.xl, marginTop: spacing.md,
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  pushBtnText: { fontSize: 14, fontWeight: '800', color: '#fff' },
+  syncedBadge: {
+    marginHorizontal: spacing.xl, marginTop: spacing.md,
+    backgroundColor: 'rgba(0,184,148,0.18)',
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(0,184,148,0.35)',
+  },
+  syncedText: { fontSize: 12, color: colors.green, fontWeight: '700' },
 });

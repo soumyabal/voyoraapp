@@ -56,14 +56,24 @@ export function expSharePerPerson(exp, trip) {
 
 /**
  * How much one family owes for a single expense.
- *   Family mode  → equal share per participating family
- *   Individual   → sum of each involved member's per-person share
+ *   Family mode  → equal share per participating family (or custom amount if unevenSplit)
+ *   Individual   → sum of each involved member's per-person share (or custom amounts)
  */
 export function famExpenseShare(fam, exp, trip) {
   const effFams = getEffectiveFamilies(exp, trip);
   if (!effFams.find(f => f.id === fam.id)) return 0;
 
   const mode = resolveMode(exp, trip);
+
+  // Uneven split — use stored custom amounts
+  if (exp.unevenSplit && exp.customShares) {
+    if (mode === 'family') {
+      return exp.customShares[fam.id] || 0;
+    }
+    // Individual uneven: sum this family's members' custom amounts
+    return fam.members.reduce((s, m) => s + (exp.customShares[m.id] || 0), 0);
+  }
+
   if (mode === 'family') {
     return exp.amount / effFams.length;
   }
@@ -80,10 +90,23 @@ export function famExpenseShare(fam, exp, trip) {
  * How much one member owes for a single expense.
  *   Family mode  → only the family head carries the family's share; others owe 0
  *   Individual   → per-person share if member is in the participant list; else 0
+ *   Uneven       → uses exp.customShares[id] directly
  */
 export function memberExpenseShare(member, exp, trip) {
   const mode = resolveMode(exp, trip);
   const fam = trip.families.find(f => f.members.some(m => m.id === member.id));
+
+  // Uneven split — use stored custom amounts
+  if (exp.unevenSplit && exp.customShares) {
+    if (mode === 'family') {
+      // Only family head carries the custom family share
+      const head = fam?.members[0];
+      if (!head || head.id !== member.id) return 0;
+      return exp.customShares[fam.id] || 0;
+    }
+    // Individual uneven: member's own custom amount
+    return exp.customShares[member.id] || 0;
+  }
 
   if (mode === 'family') {
     const head = fam?.members[0];

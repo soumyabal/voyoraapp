@@ -17,12 +17,12 @@ import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { DateRangePicker, LocationSearchField } from '../components/ui';
 import { avatarColor } from '../utils/helpers';
-import { BYPASS_SUBSCRIPTION, PRO_MONTHLY_PRICE } from '../config';
+import { BYPASS_SUBSCRIPTION, PRO_MONTHLY_PRICE, RELEASE_FLAGS } from '../config';
 
 const MODES = [
-  { key: 'manual', icon: '✍️', label: 'Plan Manually',    desc: 'Build your itinerary from scratch — full control',     color: colors.primary },
-  { key: 'ai',     icon: '🤖', label: 'Plan with AI',     desc: 'Get a smart itinerary based on your dates & travelers', color: colors.ai },
-  { key: 'expert', icon: '🧳', label: 'Plan with Expert', desc: 'Connect with a travel consultant within 24 hrs',        color: colors.expert },
+  { key: 'manual', flag: 'manualPlanner', icon: '✍️', label: 'Plan Manually',    desc: 'Build your itinerary from scratch — full control',     color: colors.primary },
+  { key: 'ai',     flag: 'aiPlanner',     icon: '🤖', label: 'Plan with AI',     desc: 'AI-generated itinerary tailored to your group',         color: colors.ai,      soon: 'v2.0' },
+  { key: 'expert', flag: 'expertMode',    icon: '🧳', label: 'Plan with Expert', desc: 'A travel consultant designs your trip for you',         color: colors.expert,  soon: 'v3.0' },
 ];
 
 const PALETTE = ['#6c5ce7', '#0984e3', '#00b894', '#e17055', '#e84393', '#e67e22', '#fdcb6e', '#74b9ff'];
@@ -415,7 +415,11 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
   // Each: { id, name, color, groupId, members: [{ id, name, age, travelerId, saveToLibrary }] }
   const [tripFamilies, setTripFamilies] = useState([]);
 
-  // Step 3
+  // Step 3 — AI planner preferences (pre-fill AIPlannerModal)
+  const [pace,   setPace]   = useState('moderate');
+  const [budget, setBudget] = useState('mid-range');
+  const [focus,  setFocus]  = useState([]);
+
   const [generating, setGenerating] = useState(false);
 
   // ── Quota ─────────────────────────────────────────────────────
@@ -427,6 +431,7 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
     setStep(1); setMode(null); setName(''); setDestination('');
     setStartDate(''); setEndDate('');
     setTripFamilies([]);
+    setPace('moderate'); setBudget('mid-range'); setFocus([]);
     setGenerating(false);
   };
 
@@ -451,6 +456,7 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
     const hasSelectedFamilies = tripFamilies.length > 0;
     const trip = createTrip({
       name, destination, startDate, endDate, mode,
+      pace, budget, focus,
       familyForms: [],
       skipDefaultFamily: hasSelectedFamilies,
     });
@@ -622,24 +628,35 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
                   </View>
 
                   {MODES.map(m => {
-                    const active = mode === m.key;
+                    const enabled = RELEASE_FLAGS[m.flag] !== false;
+                    const active  = mode === m.key;
                     return (
                       <TouchableOpacity
                         key={m.key}
-                        style={[s.modeCard, active && { borderColor: m.color, backgroundColor: m.color + '12' }]}
-                        onPress={() => setMode(m.key)}
-                        activeOpacity={0.75}
+                        style={[
+                          s.modeCard,
+                          active   && { borderColor: m.color, backgroundColor: m.color + '12' },
+                          !enabled && s.modeCardDisabled,
+                        ]}
+                        onPress={() => enabled ? setMode(m.key) : showToast(`${m.label} — coming in ${m.soon || 'a future release'}`, '🔜')}
+                        activeOpacity={enabled ? 0.75 : 0.9}
                       >
-                        <View style={[s.modeIconWrap, active && { backgroundColor: m.color + '22' }]}>
+                        <View style={[s.modeIconWrap, active && { backgroundColor: m.color + '22' }, !enabled && { opacity: 0.35 }]}>
                           <Text style={s.modeIcon}>{m.icon}</Text>
                         </View>
-                        <View style={s.modeTextBlock}>
+                        <View style={[s.modeTextBlock, !enabled && { opacity: 0.45 }]}>
                           <Text style={[s.modeLabel, active && { color: m.color }]}>{m.label}</Text>
                           <Text style={s.modeDesc}>{m.desc}</Text>
                         </View>
-                        <View style={[s.modeRadio, active && { borderColor: m.color }]}>
-                          {active && <View style={[s.modeRadioDot, { backgroundColor: m.color }]} />}
-                        </View>
+                        {enabled ? (
+                          <View style={[s.modeRadio, active && { borderColor: m.color }]}>
+                            {active && <View style={[s.modeRadioDot, { backgroundColor: m.color }]} />}
+                          </View>
+                        ) : (
+                          <View style={s.comingSoonBadge}>
+                            <Text style={s.comingSoonText}>Soon</Text>
+                          </View>
+                        )}
                       </TouchableOpacity>
                     );
                   })}
@@ -680,6 +697,77 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
                       <Text style={s.quotaText}>
                         {isPro ? '✅ Pro — unlimited AI plans' : '🎁 1 free AI plan remaining'}
                       </Text>
+                    </View>
+                  )}
+
+                  {/* ── AI Preferences (shown when AI mode selected) ── */}
+                  {mode === 'ai' && (
+                    <View style={s.aiPrefs}>
+                      <Text style={s.aiPrefsTitle}>✨ AI Preferences</Text>
+                      <Text style={s.aiPrefsSub}>These pre-fill the planner — you can always adjust later.</Text>
+
+                      {/* Pace */}
+                      <Text style={s.prefLabel}>PACE</Text>
+                      <View style={s.prefRow}>
+                        {[
+                          { key: 'relaxed',  label: '😌 Relaxed' },
+                          { key: 'moderate', label: '🚶 Moderate' },
+                          { key: 'packed',   label: '⚡ Packed' },
+                        ].map(o => (
+                          <TouchableOpacity
+                            key={o.key}
+                            style={[s.prefChip, pace === o.key && s.prefChipActive]}
+                            onPress={() => setPace(o.key)}
+                            activeOpacity={0.75}
+                          >
+                            <Text style={[s.prefChipText, pace === o.key && s.prefChipTextActive]}>{o.label}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      {/* Budget */}
+                      <Text style={s.prefLabel}>BUDGET</Text>
+                      <View style={s.prefRow}>
+                        {[
+                          { key: 'budget',    label: '💰 Budget' },
+                          { key: 'mid-range', label: '✈️ Mid-range' },
+                          { key: 'luxury',    label: '💎 Luxury' },
+                        ].map(o => (
+                          <TouchableOpacity
+                            key={o.key}
+                            style={[s.prefChip, budget === o.key && s.prefChipActive]}
+                            onPress={() => setBudget(o.key)}
+                            activeOpacity={0.75}
+                          >
+                            <Text style={[s.prefChipText, budget === o.key && s.prefChipTextActive]}>{o.label}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      {/* Focus */}
+                      <Text style={s.prefLabel}>FOCUS  <Text style={s.prefLabelHint}>pick any</Text></Text>
+                      <View style={s.prefWrap}>
+                        {[
+                          { key: 'culture',   label: '🏛️ Culture' },
+                          { key: 'food',      label: '🍽️ Food' },
+                          { key: 'outdoors',  label: '🌿 Outdoors' },
+                          { key: 'shopping',  label: '🛍️ Shopping' },
+                          { key: 'family',    label: '👨‍👩‍👧 Family' },
+                          { key: 'nightlife', label: '🌙 Nightlife' },
+                        ].map(o => {
+                          const on = focus.includes(o.key);
+                          return (
+                            <TouchableOpacity
+                              key={o.key}
+                              style={[s.prefChip, on && s.prefChipActive]}
+                              onPress={() => setFocus(prev => on ? prev.filter(k => k !== o.key) : [...prev, o.key])}
+                              activeOpacity={0.75}
+                            >
+                              <Text style={[s.prefChipText, on && s.prefChipTextActive]}>{o.label}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
                     </View>
                   )}
                 </>
@@ -759,7 +847,10 @@ const s = StyleSheet.create({
   summaryPill: { backgroundColor: colors.surface2, borderRadius: radius.full, paddingHorizontal: spacing.lg, paddingVertical: 8, alignSelf: 'flex-start', marginBottom: spacing.lg, borderWidth: 1, borderColor: colors.border },
   summaryText: { ...typography.small, color: colors.text, fontWeight: '600' },
 
-  modeCard: { borderWidth: 2, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  modeCard:         { borderWidth: 2, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  modeCardDisabled: { backgroundColor: '#f8f8f8', borderColor: '#e5e5e5' },
+  comingSoonBadge:  { backgroundColor: '#f3f4f6', borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 4, borderWidth: 1, borderColor: '#d1d5db' },
+  comingSoonText:   { fontSize: 10, fontWeight: '700', color: '#9ca3af', letterSpacing: 0.5 },
   modeIconWrap: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface2 },
   modeIcon: { fontSize: 26 },
   modeTextBlock: { flex: 1 },
@@ -777,6 +868,19 @@ const s = StyleSheet.create({
 
   quotaInfo: { backgroundColor: colors.greenLight, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.green },
   quotaText: { ...typography.small, color: colors.green, fontWeight: '600', textAlign: 'center' },
+
+  // AI preferences panel
+  aiPrefs: { backgroundColor: colors.aiLight, borderRadius: radius.lg, padding: spacing.lg, marginTop: spacing.lg, borderWidth: 1, borderColor: 'rgba(108,92,231,0.2)' },
+  aiPrefsTitle: { ...typography.bodyBold, color: colors.ai, marginBottom: 4 },
+  aiPrefsSub: { ...typography.small, color: colors.muted, marginBottom: spacing.lg, lineHeight: 18 },
+  prefLabel: { fontSize: 10, fontWeight: '800', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: spacing.sm, marginTop: spacing.md },
+  prefLabelHint: { fontWeight: '400', textTransform: 'none', fontSize: 10, color: colors.muted },
+  prefRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'nowrap' },
+  prefWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  prefChip: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, backgroundColor: '#fff' },
+  prefChipActive: { borderColor: colors.ai, backgroundColor: colors.ai },
+  prefChipText: { ...typography.smallBold, color: colors.muted, fontSize: 12 },
+  prefChipTextActive: { color: '#fff' },
 
   generating: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl },
   genIcon:  { fontSize: 56, marginBottom: 16 },

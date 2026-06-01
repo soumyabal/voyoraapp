@@ -13,23 +13,22 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, ActivityIndicator,
+  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { analyzeItinerary, buildTripContext } from '../utils/aiAssist';
 import { CLAUDE_API_KEY, CLAUDE_MODEL, CLAUDE_API_URL, FREE_AI_REVIEW_USES, PRO_MONTHLY_PRICE, BYPASS_SUBSCRIPTION } from '../config';
 import { uid } from '../utils/helpers';
-import { useKeyboardOffset } from '../utils/useKeyboardOffset';
 
 // ─── Quick prompts ────────────────────────────────────────────────────────────
 const QUICK_PROMPTS = [
-  { label: '🔍 Review my plan',        text: 'Please review my itinerary and tell me what looks good and what I might be missing.' },
-  { label: '🌙 Evening activities',     text: 'Are there any evenings without dinner or activities planned? Can you suggest some ideas?' },
-  { label: '♿ Accessibility check',   text: 'Check if all activities are suitable for travelers with mobility or accessibility needs.' },
-  { label: '🧓 Pace check',            text: 'Is the pace suitable for all travelers, especially anyone who prefers a relaxed schedule?' },
-  { label: '🍽️ Meal gaps',             text: 'Are there any days where meals are missing or not well planned?' },
-  { label: '💰 Budget spread',         text: 'Is the budget spread well across the trip or is it heavily concentrated on one day?' },
+  { label: '🔍 Review my plan',        text: 'Review my itinerary. What looks good, what might be missing, and what would you change?' },
+  { label: '🚗 Add a side trip',        text: 'I want to add a side trip from here — maybe drive to a nearby city for a couple of days and come back. What do you recommend?' },
+  { label: '🏨 Hotel advice',           text: 'What neighbourhood should we stay in, and what should we look for in a hotel for our group? Any specific recommendations?' },
+  { label: '♿ Accessibility check',   text: 'Check if all our planned activities work for everyone in the group, especially anyone with mobility or accessibility needs.' },
+  { label: '👨‍👩‍👧 Family logistics',     text: 'Any tips for managing this trip with the kids? Things I might not have thought of — timing, nap breaks, booking ahead, that sort of thing.' },
+  { label: '💡 Local tips',             text: 'What local tips should I know for this destination? Best times to visit attractions, what to avoid, hidden gems for families.' },
 ];
 
 // ─── Smart simulation (no API key needed) ────────────────────────────────────
@@ -253,7 +252,7 @@ async function callClaude(systemPrompt, messages) {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 600,
+        max_tokens: 1024,
         system: systemPrompt,
         messages: messages.map(m => ({ role: m.role, content: m.content })),
       }),
@@ -287,7 +286,6 @@ export default function AIChatModal({ visible, trip, onClose, initialMessage }) 
   const [loading, setLoading] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [executedActions, setExecutedActions] = useState(new Set());
-  const kbOffset = useKeyboardOffset();
 
   const isPro = BYPASS_SUBSCRIPTION || account.plan === 'pro';
   const reviewsUsed = account.aiReviewsUsed || 0;
@@ -413,7 +411,7 @@ export default function AIChatModal({ visible, trip, onClose, initialMessage }) 
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-        <View style={[s.container, { paddingBottom: kbOffset }]}>
+        <View style={s.container}>
 
           {/* Header */}
           <View style={s.header}>
@@ -454,90 +452,98 @@ export default function AIChatModal({ visible, trip, onClose, initialMessage }) 
             </View>
           )}
 
-          {/* Messages */}
-          <ScrollView
-            ref={scrollRef}
-            style={s.messages}
-            contentContainerStyle={s.messagesInner}
-            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          {/* KAV wraps messages + input so the input lifts above the keyboard */}
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
-            {history.map(msg => (
-              <View key={msg.id}>
-                <View style={[s.bubble, msg.role === 'user' ? s.bubbleUser : s.bubbleAI]}>
-                  {msg.role === 'assistant' && (
-                    <Text style={s.aiAvatar}>🤖</Text>
-                  )}
-                  <View style={[s.bubbleInner, msg.role === 'user' ? s.bubbleInnerUser : s.bubbleInnerAI]}>
-                    <BoldText
-                      text={msg.content}
-                      style={[s.bubbleText, msg.role === 'user' ? s.bubbleTextUser : s.bubbleTextAI]}
-                    />
-                  </View>
-                </View>
-                {msg.role === 'assistant' && msg.actions?.length > 0 && (
-                  <View style={s.actionRow}>
-                    {msg.actions.map((action, idx) => {
-                      const actionKey = `${msg.id}-${idx}`;
-                      const done = executedActions.has(actionKey);
-                      return (
-                        <TouchableOpacity
-                          key={actionKey}
-                          style={[s.actionBtn, done && s.actionBtnDone]}
-                          onPress={() => executeAction(action, actionKey)}
-                          disabled={done}
-                        >
-                          <Text style={[s.actionBtnText, done && s.actionBtnTextDone]}>
-                            {done ? '✅ Done' : action.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-            ))}
-            {loading && (
-              <View style={[s.bubble, s.bubbleAI]}>
-                <Text style={s.aiAvatar}>🤖</Text>
-                <View style={s.bubbleInnerAI}>
-                  <ActivityIndicator size="small" color={colors.muted} />
-                </View>
-              </View>
-            )}
-          </ScrollView>
 
-          {/* Trial hint */}
-          {!isPro && trialLeft > 0 && trialLeft <= 2 && (
-            <TouchableOpacity style={s.trialHint} onPress={() => setShowUpgrade(true)}>
-              <Text style={s.trialHintText}>
-                {trialLeft === 1 ? '1 free message left — ' : `${trialLeft} free messages left — `}
-                <Text style={{ textDecorationLine: 'underline' }}>upgrade for unlimited</Text>
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Input */}
-          <View style={s.inputRow}>
-            <TextInput
-              style={s.input}
-              value={input}
-              onChangeText={setInput}
-              placeholder="Ask about your trip…"
-              placeholderTextColor={colors.muted}
-              multiline
-              maxLength={500}
-              returnKeyType="send"
-              onSubmitEditing={() => send()}
-              blurOnSubmit={false}
-            />
-            <TouchableOpacity
-              style={[s.sendBtn, (!input.trim() || loading) && s.sendBtnDisabled]}
-              onPress={() => send()}
-              disabled={!input.trim() || loading}
+            {/* Messages */}
+            <ScrollView
+              ref={scrollRef}
+              style={s.messages}
+              contentContainerStyle={s.messagesInner}
+              onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
             >
-              <Text style={s.sendBtnText}>↑</Text>
-            </TouchableOpacity>
-          </View>
+              {history.map(msg => (
+                <View key={msg.id}>
+                  <View style={[s.bubble, msg.role === 'user' ? s.bubbleUser : s.bubbleAI]}>
+                    {msg.role === 'assistant' && (
+                      <Text style={s.aiAvatar}>🤖</Text>
+                    )}
+                    <View style={[s.bubbleInner, msg.role === 'user' ? s.bubbleInnerUser : s.bubbleInnerAI]}>
+                      <BoldText
+                        text={msg.content}
+                        style={[s.bubbleText, msg.role === 'user' ? s.bubbleTextUser : s.bubbleTextAI]}
+                      />
+                    </View>
+                  </View>
+                  {msg.role === 'assistant' && msg.actions?.length > 0 && (
+                    <View style={s.actionRow}>
+                      {msg.actions.map((action, idx) => {
+                        const actionKey = `${msg.id}-${idx}`;
+                        const done = executedActions.has(actionKey);
+                        return (
+                          <TouchableOpacity
+                            key={actionKey}
+                            style={[s.actionBtn, done && s.actionBtnDone]}
+                            onPress={() => executeAction(action, actionKey)}
+                            disabled={done}
+                          >
+                            <Text style={[s.actionBtnText, done && s.actionBtnTextDone]}>
+                              {done ? '✅ Done' : action.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+              ))}
+              {loading && (
+                <View style={[s.bubble, s.bubbleAI]}>
+                  <Text style={s.aiAvatar}>🤖</Text>
+                  <View style={s.bubbleInnerAI}>
+                    <ActivityIndicator size="small" color={colors.muted} />
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Trial hint */}
+            {!isPro && trialLeft > 0 && trialLeft <= 2 && (
+              <TouchableOpacity style={s.trialHint} onPress={() => setShowUpgrade(true)}>
+                <Text style={s.trialHintText}>
+                  {trialLeft === 1 ? '1 free message left — ' : `${trialLeft} free messages left — `}
+                  <Text style={{ textDecorationLine: 'underline' }}>upgrade for unlimited</Text>
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Input */}
+            <View style={s.inputRow}>
+              <TextInput
+                style={s.input}
+                value={input}
+                onChangeText={setInput}
+                placeholder="Ask about your trip…"
+                placeholderTextColor={colors.muted}
+                multiline
+                maxLength={500}
+                returnKeyType="send"
+                onSubmitEditing={() => send()}
+                blurOnSubmit={false}
+              />
+              <TouchableOpacity
+                style={[s.sendBtn, (!input.trim() || loading) && s.sendBtnDisabled]}
+                onPress={() => send()}
+                disabled={!input.trim() || loading}
+              >
+                <Text style={s.sendBtnText}>↑</Text>
+              </TouchableOpacity>
+            </View>
+
+          </KeyboardAvoidingView>
 
         </View>
     </Modal>

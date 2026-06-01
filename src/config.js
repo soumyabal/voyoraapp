@@ -8,11 +8,23 @@
  *
  * To enable real Claude AI:
  *   1. Get an API key at console.anthropic.com
- *   2. Replace null below with your key: 'sk-ant-...'
- *   3. For production, move this to a backend — never ship API keys in a mobile app.
+ *   2. For development, provide it from a local safe source.
+ *   3. For production, move API keys to a backend — never ship them in a mobile app.
  */
+export const CLAUDE_API_KEY          = null;
+export const CLAUDE_MODEL            = 'claude-haiku-4-5-20251001';
+export const GOOGLE_PLACES_API_KEY   = null;
 
-export const CLAUDE_MODEL   = 'claude-haiku-4-5-20251001';
+// ─── Release flags ────────────────────────────────────────────────────────────
+// Controls which planning modes are available to users.
+// v1.0 launch: Manual Planner + Family Splitwise only.
+// Flip a flag to true to enable a feature in a future release.
+export const RELEASE_FLAGS = {
+  manualPlanner: true,   // ✅ v1.0 — core launch feature
+  aiPlanner:     false,  // 🔜 v2.0 — requires backend + Claude API server-side
+  expertMode:    false,  // 🔜 v3.0 — requires consultant network
+  aiReview:      false,  // 🔜 v2.0 — in-trip AI chat review
+};
 export const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 
 // Free tier quotas

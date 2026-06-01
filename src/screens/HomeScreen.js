@@ -20,6 +20,7 @@ import AuthModal from '../modals/AuthModal';
 import AddProfileModal from '../modals/AddProfileModal';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { avatarColor } from '../utils/helpers';
+import InfoBanner from '../components/ui/InfoBanner';
 
 const PACE_LABELS = { relaxed: '🐢 Relaxed', moderate: '🚶 Moderate', packed: '🏃 Packed' };
 
@@ -318,9 +319,10 @@ function NewGroupModal({ visible, travelers, onCreate, onClose }) {
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { trips, account, travelers, setCurrentTrip } = useStore();
-  const [activeTab, setActiveTab]     = useState('trips');
-  const [showNewTrip, setShowNewTrip] = useState(false);
-  const [showAuth, setShowAuth]       = useState(false);
+  const [activeTab, setActiveTab]       = useState('trips');
+  const [showNewTrip, setShowNewTrip]   = useState(false);
+  const [showAuth, setShowAuth]         = useState(false);
+  const [showTestBanner, setShowTestBanner] = useState(true);
 
   const openTrip = (tripId) => {
     setCurrentTrip(tripId);
@@ -380,6 +382,24 @@ export default function HomeScreen({ navigation }) {
             contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24 }]}
             showsVerticalScrollIndicator={false}
           >
+            {showTestBanner && (
+              <InfoBanner
+                icon="🧪"
+                title="Testing Mode"
+                subtitle="This is a test build. Data may be reset at any time."
+                color={colors.yellow}
+                bgColor={colors.yellowLight}
+                style={{ marginBottom: spacing.lg }}
+              >
+                <TouchableOpacity
+                  onPress={() => setShowTestBanner(false)}
+                  style={{ alignSelf: 'flex-end', marginTop: spacing.sm }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.muted }}>Dismiss ✕</Text>
+                </TouchableOpacity>
+              </InfoBanner>
+            )}
+
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Your Trips</Text>
               <TouchableOpacity onPress={() => setShowNewTrip(true)}>

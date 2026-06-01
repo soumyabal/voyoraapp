@@ -114,8 +114,68 @@ COST GUIDELINES (costPerPerson in USD):
 - Transport: $10–$35 per person per leg (city taxi/Uber); $5–$20 (public transit day pass)
 - Meals: scale with budget level — budget meals ~$12–20, mid-range ~$20–40, luxury ~$50–100
 - Attractions: use real published prices where known; otherwise estimate conservatively
-- Hotel/accommodation: DO NOT include — that is a separate expense category
+- Hotel stays: costPerPerson = Math.ceil(roomRatePerNight * roomsNeeded / groupSize)
+  - Estimate rooms as 1 room per 2 adults (min 1). Kids under 5 share parents' room.
+  - Budget hotels: $60–$120/room/night. Mid-range: $120–$220/room/night. Luxury: $250+/room/night.
+  - Use the "note" field to show the per-room rate: e.g. "Room rate: ~$150/night per room"
+  - If user specifies a max room rate (e.g. "hotel under $200"), ALL hotels must stay below that
 - All costs are per-person estimates; group totals are calculated by the app
+`;
+
+export const HOTEL_RULES = `
+HOTEL & ACCOMMODATION RULES:
+- Families do NOT need to stay in a single hotel for the entire trip — changing hotels is fine and often preferred.
+- For trips 5+ days: suggest at least 2 different hotels/areas unless the user says otherwise.
+- On hotel change days: add BOTH a morning checkout activity AND an afternoon check-in at the new hotel.
+  Example:
+    { "type": "stay", "time": "10:00", "name": "Hotel checkout — [Current Hotel]", "detail": "Check out, store luggage if needed", "costPerPerson": 0 }
+    { "type": "stay", "time": "15:00", "name": "Check in — [New Hotel Name]", "detail": "New hotel, freshen up, explore new neighbourhood", "costPerPerson": <calculated> }
+- If user specifies "hotel under $X per room" or "max $X room rate" — ALL stay activities must reflect a room rate at or below $X.
+- Suggest hotels by name or area where possible (e.g. "Santa Monica beachfront hotel" rather than just "hotel").
+- For family groups: note whether the hotel has family rooms, connecting rooms, or kid-friendly amenities.
+- Always include the hotel area/neighbourhood in the address field so families know where they'll be.
+`;
+
+export const MULTI_CITY_RULES = `
+MULTI-CITY TRIP RULES:
+Families often visit more than one city — including return trips to the same city. Support all routing patterns:
+
+ROUTING PATTERNS TO RECOGNISE:
+- A → B: "first N days in [City A] then [City B]"
+- A → B → A: "arrive [City A], drive to [City B] for N days, drive back to [City A]" (RETURN TRIP)
+- A → B → C: "[City A] for N days, then [City B] for M days, then [City C]"
+- Mixed: "arrive LA, rent a car and drive to San Diego for 3 days, come back to LA to fly home"
+
+TRANSPORT MODE — detect and use the correct mode:
+- User says "drive", "driving", "road trip", "by car", "rent a car" → use drive for ALL or that leg
+- User says "fly", "flight", "flying", "by plane" → use fly for ALL or that leg
+- User says "take the train", "Amtrak", "rail" → use train for that leg
+- If mode unspecified: short routes (SD↔LA) → drive by default; long routes (SFO↔LA) → fly by default
+
+TRANSIT DAY STRUCTURE (one per city change):
+- Morning: Breakfast + hotel checkout in origin city
+- Late morning: Travel (type: "transport") — name it "[Mode emoji] [Origin] → [Destination]"
+  Include real journey time + cost. Add alternative option in the "note" field.
+- Afternoon: Arrive + hotel check-in in new city (type: "stay")
+- Evening: First dinner in new city
+
+REAL TRANSIT OPTIONS:
+- San Diego → Los Angeles: 🚗 Drive I-5 ~2.5 hrs ($15/person) OR 🚂 Pacific Surfliner ~3 hrs ($37/person)
+- Los Angeles → San Diego: Same in reverse
+- Los Angeles → San Francisco: ✈️ Fly LAX→SFO ~1.5 hrs ($85–$130) OR 🚗 Drive I-5 ~5.5 hrs
+- San Francisco → Los Angeles: Same in reverse
+- San Diego → San Francisco: ✈️ Fly SAN→SFO ~1.5 hrs ($95–$140)
+
+RETURN TRIPS (A → B → A):
+- Day 1 to N: City A activities
+- Transition day: checkout A, travel to B, check-in B
+- Middle days: City B activities with real B venues
+- Return transition day: checkout B, travel back to A, check-in A (or proceed to departure)
+- Final days: City A activities again (different venues from the first stay if possible)
+
+HOTEL RULE: Every city change includes a checkout from the old hotel and a check-in at the new hotel. On return to a city, guests may re-use the same hotel or choose a different area.
+
+CITY-SPECIFIC CONTENT: Never mix venues. City A days only use City A restaurants and attractions. City B days only use City B venues.
 `;
 
 export const NOTE_PARSING_RULES = `
@@ -131,6 +191,30 @@ INSTRUCTIONS PARSING (apply user notes with highest priority):
 - Specific restaurant/venue name → Use that exact place for the relevant meal/activity
 - Unrecognised venue → Create a generic "Full day at [Venue Name]" with realistic estimated costs
 - Conflicting instructions → Latest/most specific instruction wins
+
+MULTI-CITY INSTRUCTIONS:
+- "first N days in [City]" / "N nights in [City] then [City2]" → Split, insert transit day
+- "start in [City]" / "begin in [City]" → First leg in that city
+- "end in [City]" / "fly home from [City]" → Final leg in that city
+- "drive to [City]" / "fly to [City]" / "train to [City]" → Use specified mode for that transit leg
+- "we will drive" / "road trip" / "renting a car" → All transit legs use drive mode
+- "we will fly" / "flying between cities" → All transit legs use fly mode
+- "drive back" / "fly back" / "come back to [City]" / "return to [City]" → Insert return transit + return city days
+- "back in [City] for N days" → After returning, spend N days in that city before departure
+- If multiple cities detected, ALWAYS include one transit day per city change with real options
+
+HOTEL-SPECIFIC INSTRUCTIONS:
+- "hotel under $X" / "max $X per room" / "room rate below $X" / "hotels below $X" →
+    All stay activities must use a room rate ≤ $X. Recalculate costPerPerson accordingly.
+    Add note: "Room rate: max $X/night per room"
+- "change hotel" / "different hotel" / "move hotel" / "multiple hotels" →
+    Include at least one hotel change mid-trip with checkout + new check-in activities
+- "hotel near [area]" / "stay in [neighbourhood]" →
+    Set hotel to that area; update address field accordingly
+- "same hotel throughout" / "one hotel" / "don't change hotel" →
+    Use a single hotel for the whole trip; remove any mid-trip checkout/check-in pairs
+- "upgrade hotel" / "nicer hotel" →
+    Use upper end of the budget tier's room rate range
 `;
 
 // ─── Build the system prompt sent to Claude API ───────────────────────────────
@@ -148,6 +232,10 @@ ACTIVITY TYPES — use EXACTLY one of these string values for the "type" field:
 ${typeList}
 
 ${COST_RULES}
+
+${HOTEL_RULES}
+
+${MULTI_CITY_RULES}
 
 ${NOTE_PARSING_RULES}
 

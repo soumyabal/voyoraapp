@@ -19,6 +19,7 @@ import {
 import useStore from '../store';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { uid } from '../utils/helpers';
+import { estimateDuration, formatDuration } from '../utils/tripValidator';
 import { ModalHeader } from '../components/ui';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -154,6 +155,158 @@ function TimePickerInput({ value, onChange }) {
   );
 }
 
+// ─── Duration picker ──────────────────────────────────────────────────────────
+// Common duration slots shown in the picker list
+const DURATION_SLOTS = [
+  { mins: 0,    label: 'Auto' },
+  { mins: 15,   label: '15 min' },
+  { mins: 30,   label: '30 min' },
+  { mins: 45,   label: '45 min' },
+  { mins: 60,   label: '1h' },
+  { mins: 90,   label: '1h 30min' },
+  { mins: 120,  label: '2h' },
+  { mins: 150,  label: '2h 30min' },
+  { mins: 180,  label: '3h' },
+  { mins: 240,  label: '4h' },
+  { mins: 300,  label: '5h' },
+  { mins: 360,  label: '6h' },
+  { mins: 420,  label: '7h' },
+  { mins: 480,  label: '8h' },
+  { mins: 600,  label: '10h' },
+  { mins: 720,  label: '12h' },
+  { mins: 840,  label: '14h' },
+  { mins: 960,  label: '16h' },
+  { mins: 1080, label: '18h' },
+  { mins: 1200, label: '20h' },
+  { mins: 1440, label: '24h' },
+  { mins: 1680, label: '28h' },
+  { mins: 1800, label: '30h' },
+  { mins: 2160, label: '36h' },
+  { mins: 2880, label: '48h' },
+];
+
+function formatDurDisplay(mins) {
+  if (!mins) return null;
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}min` : `${h}h`;
+}
+
+function DurationPickerInput({ value, onChange, autoLabel }) {
+  const [open, setOpen]       = useState(false);
+  const [draftH, setDraftH]   = useState('');
+  const [draftM, setDraftM]   = useState('');
+  const listRef               = useRef(null);
+
+  const displayLabel = value > 0 ? formatDurDisplay(value) : null;
+
+  const handleOpen = () => {
+    setOpen(true);
+    setDraftH(value > 0 ? String(Math.floor(value / 60)) : '');
+    setDraftM(value > 0 ? String(value % 60) : '');
+    const idx = DURATION_SLOTS.findIndex(s => s.mins === value);
+    setTimeout(() => {
+      listRef.current?.scrollToOffset({
+        offset: Math.max(0, (idx >= 0 ? idx : 0)) * SLOT_H,
+        animated: false,
+      });
+    }, 60);
+  };
+
+  const commitCustom = () => {
+    const h = parseInt(draftH) || 0;
+    const m = Math.min(59, parseInt(draftM) || 0);
+    const total = h * 60 + m;
+    onChange(total > 0 ? total : 0);
+    setOpen(false);
+  };
+
+  const handleSelect = (mins) => { onChange(mins); setOpen(false); };
+
+  return (
+    <>
+      <TouchableOpacity style={tp.row} onPress={handleOpen} activeOpacity={0.75}>
+        <Text style={tp.clock}>⏱</Text>
+        <Text style={[tp.displayText, !displayLabel && { color: colors.muted }]}>
+          {displayLabel || `Auto (${autoLabel})`}
+        </Text>
+        {displayLabel && (
+          <TouchableOpacity
+            onPress={() => onChange(0)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 4 }}
+          >
+            <Text style={{ fontSize: 12, color: colors.muted, fontWeight: '700', marginRight: 4 }}>✕</Text>
+          </TouchableOpacity>
+        )}
+        <Text style={tp.chevron}>▾</Text>
+      </TouchableOpacity>
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <TouchableOpacity style={tp.overlay} activeOpacity={1} onPress={commitCustom}>
+          <View style={tp.card} onStartShouldSetResponder={() => true}>
+
+            {/* Custom H : M inputs */}
+            <View style={tp.cardHeader}>
+              <Text style={tp.cardTitle}>Duration</Text>
+              <View style={tp.customRow}>
+                <TextInput
+                  style={[tp.customInput, { flex: 1 }]}
+                  value={draftH}
+                  onChangeText={v => setDraftH(v.replace(/\D/g, '').slice(0, 3))}
+                  keyboardType="number-pad"
+                  placeholder="0"
+                  placeholderTextColor={colors.muted}
+                  selectTextOnFocus
+                />
+                <Text style={{ fontSize: 18, fontWeight: '700', color: colors.muted }}>h</Text>
+                <TextInput
+                  style={[tp.customInput, { width: 52 }]}
+                  value={draftM}
+                  onChangeText={v => setDraftM(v.replace(/\D/g, '').slice(0, 2))}
+                  keyboardType="number-pad"
+                  placeholder="0"
+                  placeholderTextColor={colors.muted}
+                  selectTextOnFocus
+                />
+                <Text style={{ fontSize: 18, fontWeight: '700', color: colors.muted }}>min</Text>
+                <TouchableOpacity onPress={commitCustom} style={tp.doneBtn}>
+                  <Text style={tp.cardDone}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Preset slots */}
+            <FlatList
+              ref={listRef}
+              data={DURATION_SLOTS}
+              keyExtractor={item => String(item.mins)}
+              getItemLayout={(_, index) => ({ length: SLOT_H, offset: SLOT_H * index, index })}
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: SLOT_H * 6.5 }}
+              renderItem={({ item }) => {
+                const sel = item.mins === value;
+                return (
+                  <TouchableOpacity
+                    style={[tp.slot, sel && tp.slotSel]}
+                    onPress={() => handleSelect(item.mins)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[tp.slotText, sel && tp.slotSelText]}>
+                      {item.mins === 0 ? `Auto (${autoLabel})` : item.label}
+                    </Text>
+                    {sel && <Text style={tp.slotCheck}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
+  );
+}
+
 function findTile(type, subtype) {
   return TILES.find(t => t.type === type && t.subtype === (subtype || null))
       || TILES.find(t => t.type === type)
@@ -171,12 +324,16 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
   // Core fields
   const [name, setName]           = useState('');
   const [time, setTime]           = useState(defaultTime || '09:00');
+  const [arriveTime, setArriveTime] = useState('');
   const [detail, setDetail]       = useState('');
 
 
   // Cost
   const [costMode, setCostMode]   = useState('per_person'); // 'per_person' | 'per_family'
   const [costInput, setCostInput] = useState('');
+
+  // Manual duration override (0 = use auto-estimate)
+  const [durationMins, setDurationMins] = useState(0);
 
   // Notes + Reminder
   const [memo, setMemo]           = useState('');
@@ -192,20 +349,23 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setTile(findTile(editActivity.type, editActivity.subtype));
       setName(editActivity.name || '');
       setTime(editActivity.time || '09:00');
+      setArriveTime(editActivity.arriveTime || '');
       setDetail(editActivity.detail || '');
       setCostMode(editActivity.costMode || 'per_person');
       setCostInput(editActivity.costAmount > 0 ? String(editActivity.costAmount) : '');
       setMemo(editActivity.memo || '');
       setReminder(editActivity.reminder || '');
-      // Auto-expand if the activity already has secondary content
+      setDurationMins(editActivity.durationMins > 0 ? editActivity.durationMins : 0);
       setShowMore(!!(editActivity.detail || editActivity.memo || editActivity.reminder));
     } else {
       setTile(TILES[6]);
       setName('');
       setTime(defaultTime || '09:00');
+      setArriveTime('');
       setDetail('');
       setCostMode('per_person');
       setCostInput('');
+      setDurationMins(0);
       setMemo('');
       setReminder('');
       setShowMore(false);
@@ -241,6 +401,11 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               : parsedCost > 0 ? '✅ Will be added to Splitwise automatically' : null
     : null;
 
+  // ── Duration ───────────────────────────────────────────────────────────────
+  // Auto-estimate based on current name + type — shown in picker as "Auto (Xh)"
+  const autoEstimateMins  = estimateDuration({ type: tile.type, subtype: tile.subtype, name, detail });
+  const autoEstimateLabel = formatDuration(autoEstimateMins);
+
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = () => {
     if (!name.trim()) return;
@@ -249,13 +414,15 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       subtype:      tile.subtype || null,
       name:         name.trim(),
       time,
+      arriveTime:   tile.type === 'transport' && tile.subtype !== 'pitstop' && arriveTime ? arriveTime : null,
+      durationMins: durationMins > 0 ? durationMins : null,
       detail:       detail.trim(),
       costMode,
       costAmount:   parsedCost,
       costPerPerson,
       memo:         memo.trim() || null,
       reminder:     reminder.trim() || null,
-      access:       '',  // kept in schema for AI-generated activities
+      access:       '',
     };
     if (isEdit) {
       updateActivity(trip.id, editActivity.id, payload);
@@ -316,11 +483,44 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               returnKeyType="next"
             />
 
-            {/* ── Time ── */}
+            {/* ── Time / Departs + Arrives ── */}
+            {tile.type === 'transport' && tile.subtype !== 'pitstop' ? (
+              <View style={s.inlineRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.sectionLabel}>DEPARTS</Text>
+                  <TimePickerInput value={time} onChange={setTime} />
+                </View>
+                <View style={s.arrowSep}>
+                  <Text style={s.arrowSepText}>→</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.sectionLabel}>
+                    ARRIVES <Text style={s.optional}>(local)</Text>
+                  </Text>
+                  <TimePickerInput value={arriveTime || ''} onChange={setArriveTime} />
+                  {!!arriveTime && arriveTime < time && (
+                    <Text style={s.nextDayHint}>🌙 Arrives next day</Text>
+                  )}
+                </View>
+              </View>
+            ) : (
+              <View style={s.inlineRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.sectionLabel}>TIME</Text>
+                  <TimePickerInput value={time} onChange={setTime} />
+                </View>
+              </View>
+            )}
+
+            {/* ── Duration ── */}
             <View style={s.inlineRow}>
               <View style={{ flex: 1 }}>
-                <Text style={s.sectionLabel}>TIME</Text>
-                <TimePickerInput value={time} onChange={setTime} />
+                <Text style={s.sectionLabel}>DURATION</Text>
+                <DurationPickerInput
+                  value={durationMins}
+                  onChange={setDurationMins}
+                  autoLabel={autoEstimateLabel}
+                />
               </View>
             </View>
 
@@ -550,7 +750,14 @@ const s = StyleSheet.create({
   },
 
   // Inline row
-  inlineRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
+  inlineRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, alignItems: 'flex-start' },
+
+  // Arrow separator between DEPARTS and ARRIVES
+  arrowSep:     { paddingTop: 28, alignItems: 'center', paddingHorizontal: 2 },
+  arrowSepText: { fontSize: 18, color: colors.muted, fontWeight: '600' },
+
+  // Next-day hint below arrives picker
+  nextDayHint: { fontSize: 10, color: '#d97706', fontWeight: '700', marginTop: 4, textAlign: 'center' },
 
   // Time
   timeInputWrap: {

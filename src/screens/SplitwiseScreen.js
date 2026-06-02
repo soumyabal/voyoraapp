@@ -15,6 +15,10 @@ import {
   calcTripItineraryTotal, calcBalances, calcSettlements,
 } from '../utils/costs';
 
+// Expense category emoji (stored in exp.category) → Icon name + tint
+const CAT_ICON = { '🏨': 'hotel', '✈️': 'plane', '🍽️': 'food', '🎯': 'activity', '💊': 'medkit-outline', '🚗': 'transport' };
+const CAT_TINT = { '🏨': colors.smart, '✈️': colors.expert, '🍽️': '#e17055', '🎯': colors.success, '💊': colors.danger, '🚗': colors.expert };
+
 export default function SplitwiseScreen({ trip }) {
   const {
     pushItineraryToSplitwise, clearPushedItinerary,
@@ -426,7 +430,7 @@ function ExpenseCard({
         activeOpacity={0.8}
       >
         <View style={[styles.expIcon, isExcluded && { opacity: 0.35 }]}>
-          <Text style={{ fontSize: 20 }}>{exp.category}</Text>
+          <Icon name={CAT_ICON[exp.category] || 'pricetag-outline'} size={18} color={CAT_TINT[exp.category] || colors.subtle} />
         </View>
 
         <View style={[styles.expInfo, isExcluded && { opacity: 0.45 }]}>
@@ -437,13 +441,15 @@ function ExpenseCard({
             <Text style={styles.skippedHint}>Skipped · tap to restore</Text>
           ) : (
             <>
-              <Text style={styles.expSub}>
-                {effectiveMode === 'family' ? '👨‍👩‍👧' : '👤'} {splitSummary}
-              </Text>
+              <View style={styles.expSubRow}>
+                <Icon name={effectiveMode === 'family' ? 'people' : 'person'} size={11} color={colors.subtle} />
+                <Text style={styles.expSub}>{splitSummary}</Text>
+              </View>
               {payer && (
-                <Text style={styles.expPayer}>
-                  💳 {payer.name.split(' ')[0]}{payerFam ? ` · ${payerFam.name}` : ''}
-                </Text>
+                <View style={styles.expSubRow}>
+                  <Icon name="card-outline" size={11} color={colors.subtle} />
+                  <Text style={styles.expPayer}>{payer.name.split(' ')[0]}{payerFam ? ` · ${payerFam.name}` : ''}</Text>
+                </View>
               )}
             </>
           )}
@@ -851,8 +857,9 @@ const styles = StyleSheet.create({
   expInfo: { flex: 1 },
   expName: { ...typography.bodyBold, color: colors.text },
   expNameStrike: { textDecorationLine: 'line-through', color: colors.muted },
-  expSub: { ...typography.tiny, color: colors.muted, marginTop: 2 },
-  expPayer: { ...typography.tiny, color: colors.muted, marginTop: 1 },
+  expSubRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  expSub: { ...typography.tiny, color: colors.muted },
+  expPayer: { ...typography.tiny, color: colors.muted },
   skippedHint: { ...typography.tiny, color: colors.muted, fontStyle: 'italic', marginTop: 2 },
   expRight: { alignItems: 'flex-end', gap: 2 },
   amountCol: { alignItems: 'flex-end' },

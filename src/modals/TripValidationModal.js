@@ -16,6 +16,7 @@ import {
   StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { colors, spacing, radius, typography } from '../theme';
+import Icon from '../components/ui/Icon';
 import useStore from '../store';
 import {
   validateTrip, groupWarningsByDay, summariseWarnings,
@@ -24,9 +25,9 @@ import { checkDistances, countLocatedActivityPairs, isCacheFresh } from '../util
 import { RELEASE_FLAGS, GOOGLE_PLACES_API_KEY } from '../config';
 
 const SEV = {
-  error:   { bg: '#fef2f2', border: '#fecaca', icon: '#ef4444', text: '#991b1b' },
-  warning: { bg: '#fffbeb', border: '#fde68a', icon: '#f59e0b', text: '#78350f' },
-  info:    { bg: '#eff6ff', border: '#bfdbfe', icon: '#3b82f6', text: '#1e3a8a' },
+  error:   { bg: '#fef2f2', border: '#fecaca', icon: '#ef4444', text: '#991b1b', ic: 'close-circle' },
+  warning: { bg: '#fffbeb', border: '#fde68a', icon: '#f59e0b', text: '#78350f', ic: 'warning-outline' },
+  info:    { bg: '#eff6ff', border: '#bfdbfe', icon: '#3b82f6', text: '#1e3a8a', ic: 'bulb-outline' },
 };
 
 /** Stable key for a warning — used to remember ignores per trip */
@@ -210,8 +211,9 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
             {!distanceEnabled ? (
               // OFF state — show enable nudge
               <>
+                <Icon name="map-outline" size={14} color={colors.muted} />
                 <Text style={[s.distanceBarText, { flex: 1, color: colors.muted }]}>
-                  🗺️ Distance check off
+                  Distance check off
                 </Text>
                 <TouchableOpacity
                   style={s.distanceToggleBtn}
@@ -289,7 +291,10 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
 
               return (
                 <View key={key} style={s.daySection}>
-                  <Text style={s.dayLabel}>📅 {dayLabel}</Text>
+                  <View style={s.dayLabelRow}>
+                    <Icon name="calendar" size={13} color={colors.subtle} />
+                    <Text style={s.dayLabel}>{dayLabel}</Text>
+                  </View>
                   {dayWarnings.map((w, i) => {
                     const col = SEV[w.severity] || SEV.info;
                     return (
@@ -300,15 +305,16 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
                         activeOpacity={0.75}
                       >
                         <View style={s.cardHeader}>
-                          <Text style={s.cardIcon}>{w.icon}</Text>
+                          <Icon name={col.ic} size={16} color={col.icon} />
                           <Text style={[s.cardTitle, { color: col.text }]}>{w.title}</Text>
-                          <Text style={[s.cardArrow, { color: col.icon }]}>›</Text>
+                          <Icon name="forward" size={15} color={col.icon} />
                         </View>
                         <Text style={[s.cardMsg, { color: col.text }]}>{w.message}</Text>
                         {!!w.hint && (
-                          <Text style={[s.cardHint, { color: col.text }]}>
-                            💡 {w.hint}
-                          </Text>
+                          <View style={s.cardHintRow}>
+                            <Icon name="bulb-outline" size={13} color={col.text} />
+                            <Text style={[s.cardHint, { color: col.text }]}>{w.hint}</Text>
+                          </View>
                         )}
 
                         {/* Per-activity impact list */}
@@ -390,7 +396,10 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
 
           {/* Duration reference */}
           <View style={s.refCard}>
-            <Text style={s.refTitle}>⏱ Duration estimates used</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+              <Icon name="time-outline" size={14} color={colors.text} />
+              <Text style={[s.refTitle, { marginBottom: 0 }]}>Duration estimates used</Text>
+            </View>
             <Text style={s.refBody}>
               These are typical visit durations based on global tourism data. Your actual experience may vary.
             </Text>
@@ -492,10 +501,10 @@ const s = StyleSheet.create({
   allClearBody:  { ...typography.body, color: colors.muted, textAlign: 'center', lineHeight: 22 },
 
   daySection: { marginBottom: spacing.xl },
+  dayLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: spacing.sm },
   dayLabel: {
     fontSize: 11, fontWeight: '800', color: colors.muted,
     textTransform: 'uppercase', letterSpacing: 0.8,
-    marginBottom: spacing.sm,
   },
 
   card: {
@@ -506,8 +515,8 @@ const s = StyleSheet.create({
   cardIcon:   { fontSize: 16 },
   cardTitle:  { fontSize: 13, fontWeight: '800', flex: 1 },
   cardMsg:    { fontSize: 12, lineHeight: 18 },
-  cardHint:   { fontSize: 11, lineHeight: 17, marginTop: 6, opacity: 0.8 },
-  cardArrow:  { fontSize: 18, fontWeight: '700', marginLeft: 'auto' },
+  cardHintRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, marginTop: 6, opacity: 0.85 },
+  cardHint:   { fontSize: 11, lineHeight: 17, flex: 1 },
   navFooter:     { marginTop: 10, paddingTop: 8, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   navFooterText: { fontSize: 12, fontWeight: '700' },
   ignoreText:    { fontSize: 11, color: colors.muted, fontWeight: '500' },

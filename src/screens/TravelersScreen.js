@@ -402,7 +402,8 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
                               <Text style={styles.memberName}>{member.name}</Text>
                               {idx === 0 && (
                                 <View style={styles.headBadge}>
-                                  <Text style={styles.headBadgeText}>👑 head</Text>
+                                  <Icon name="star" size={9} color="#713f12" />
+                                  <Text style={styles.headBadgeText}>head</Text>
                                 </View>
                               )}
                               {overridden && (
@@ -560,7 +561,7 @@ const styles = StyleSheet.create({
   memberInfo: { flex: 1 },
   memberNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   memberName: { ...typography.bodyBold, color: colors.text },
-  headBadge: { backgroundColor: '#fef9c3', borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1, borderWidth: 1, borderColor: '#fde047' },
+  headBadge: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#fef9c3', borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1, borderWidth: 1, borderColor: '#fde047' },
   headBadgeText: { fontSize: 9, color: '#713f12', fontWeight: '700' },
   overrideBadge: { backgroundColor: '#fff3cd', borderRadius: radius.sm, paddingHorizontal: 5, paddingVertical: 1, borderWidth: 1, borderColor: '#ffc107' },
   overrideBadgeText: { fontSize: 9, color: '#856404', fontWeight: '700' },

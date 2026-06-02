@@ -252,12 +252,12 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip }) {
 
         {/* Share day */}
         <TouchableOpacity style={ch.shareBtn} onPress={handleShare} activeOpacity={0.7}>
-          <Text style={ch.shareBtnText}>📤</Text>
+          <Icon name="share-social-outline" size={15} color="#fff" />
         </TouchableOpacity>
 
         {/* Detail trigger */}
         <TouchableOpacity style={ch.infoBtn} onPress={() => setShowDetail(true)} activeOpacity={0.7}>
-          <Text style={ch.infoBtnText}>ⓘ</Text>
+          <Icon name="information-circle-outline" size={16} color="#fff" />
         </TouchableOpacity>
       </View>
 
@@ -488,13 +488,17 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           return (
             <View style={styles.mustDosStrip}>
               <View style={styles.mustDosHeader}>
-                <Text style={styles.mustDosTitle}>📌 Must-dos</Text>
-                <TouchableOpacity onPress={() => setMustDosDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={styles.mustDosDismiss}>✕ Hide</Text>
+                <View style={styles.mustDosTitleRow}>
+                  <Icon name="bookmark" size={13} color="#92400e" />
+                  <Text style={styles.mustDosTitle}>Must-dos</Text>
+                </View>
+                <TouchableOpacity onPress={() => setMustDosDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.mustDosHideBtn}>
+                  <Icon name="close" size={12} color="#92400e" />
+                  <Text style={styles.mustDosDismiss}>Hide</Text>
                 </TouchableOpacity>
               </View>
               {allDone ? (
-                <Text style={styles.mustDosAllDone}>🎉 All must-dos added!</Text>
+                <Text style={styles.mustDosAllDone}>✓ All must-dos added!</Text>
               ) : (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mustDosRow}>
                   {items.map((item, i) => {
@@ -983,10 +987,10 @@ function ActivityCard({ activity: act, trip, isHighlighted, isFirst, isLast, onM
           {/* Bottom action row — edit & move only; delete is via swipe */}
           <View style={styles.actInlineActions}>
             <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
-              <Text style={styles.editBtnText}>✏️</Text>
+              <Icon name="create-outline" size={16} color={colors.subtle} />
             </TouchableOpacity>
             <TouchableOpacity onPress={onMoveRequest} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
-              <Text style={styles.moveBtnText}>📅</Text>
+              <Icon name="calendar-outline" size={15} color={colors.subtle} />
             </TouchableOpacity>
             <Text style={styles.swipeHintText}>← swipe</Text>
           </View>
@@ -1013,21 +1017,21 @@ function ActivityCard({ activity: act, trip, isHighlighted, isFirst, isLast, onM
             style={[styles.actCardAction, { backgroundColor: '#22c55e' }]}
             onPress={() => { close(); onMarkDone(); }}
           >
-            <Text style={styles.actCardActionIcon}>✓</Text>
+            <Icon name="checkmark" size={20} color="#fff" />
             <Text style={styles.actCardActionLabel}>Done</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actCardAction, { backgroundColor: '#f97316' }]}
             onPress={() => { close(); onMarkSkipped(); }}
           >
-            <Text style={styles.actCardActionIcon}>✗</Text>
+            <Icon name="close" size={20} color="#fff" />
             <Text style={styles.actCardActionLabel}>Did Not Do</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actCardAction, { backgroundColor: '#ef4444' }]}
             onPress={() => { close(); onDelete(); }}
           >
-            <Text style={styles.actCardActionIcon}>🗑</Text>
+            <Icon name="trash-outline" size={19} color="#fff" />
             <Text style={styles.actCardActionLabel}>Delete</Text>
           </TouchableOpacity>
         </View>
@@ -1360,8 +1364,10 @@ const styles = StyleSheet.create({
     borderColor: '#fde68a',
   },
   mustDosHeader:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  mustDosTitleRow:     { flexDirection: 'row', alignItems: 'center', gap: 5 },
   mustDosTitle:        { fontSize: 12, fontWeight: '700', color: '#92400e' },
-  mustDosDismiss:      { fontSize: 11, color: colors.muted },
+  mustDosHideBtn:      { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  mustDosDismiss:      { fontSize: 11, color: '#92400e' },
   mustDosAllDone:      { fontSize: 12, color: '#15803d', fontWeight: '700', textAlign: 'center', paddingVertical: 2 },
   mustDosRow:          { gap: spacing.xs },
   mustDosChip: {

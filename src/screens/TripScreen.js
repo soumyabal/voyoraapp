@@ -130,7 +130,10 @@ export default function TripScreen({ navigation }) {
             <View style={styles.tripNameRow}>
               <Text style={styles.tripName} numberOfLines={1}>{trip.name}</Text>
             </View>
-            <Text style={styles.tripMeta}>📍 {trip.destination}  ·  {fmt(trip.startDate)} – {fmt(trip.endDate)}</Text>
+            <View style={styles.tripMetaRow}>
+              <Icon name="location" size={13} color={colors.subtle} />
+              <Text style={styles.tripMeta} numberOfLines={1}>{trip.destination}  ·  {fmt(trip.startDate)} – {fmt(trip.endDate)}</Text>
+            </View>
             <View style={styles.tags}>
               <View style={[styles.tag, { backgroundColor: trip.mode === 'ai' ? colors.aiLight : trip.mode === 'expert' ? colors.expertLight : colors.primaryLight }]}>
                 <Icon name={modeIcon} size={11} color={modeColor} />
@@ -247,7 +250,8 @@ const styles = StyleSheet.create({
   emoji: { fontSize: 26 },
   tripNameRow: { flexDirection: 'row', alignItems: 'center' },
   tripName: { fontSize: 16, fontWeight: '700', color: colors.text, flex: 1 },
-  tripMeta: { fontSize: 11, color: colors.muted, marginTop: 1 },
+  tripMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  tripMeta: { fontSize: 11, color: colors.muted, flexShrink: 1 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm, alignItems: 'center' },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   tagText: { ...typography.caption, fontWeight: '700', fontSize: 11 },

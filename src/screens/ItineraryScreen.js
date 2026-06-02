@@ -4,6 +4,7 @@ import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import DiscoverModal from '../modals/DiscoverModal';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
+import Icon from '../components/ui/Icon';
 import { fmt, fmtM, getActivityIcon } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration } from '../utils/tripValidator';
@@ -76,11 +77,14 @@ const CARD_W         = SCREEN_W - 48;              // SCREEN_W - 2 × spacing.xx
 
 // ── Day template: time slots ──────────────────────────────────────
 const DAY_SLOTS = [
-  { key: 'morning',   emoji: '🌅', label: 'Morning',   hint: 'Before noon',   defaultTime: '09:00', range: [0,   720]  },
-  { key: 'afternoon', emoji: '☀️',  label: 'Afternoon', hint: '12 pm – 5 pm',  defaultTime: '13:00', range: [720, 1020] },
-  { key: 'evening',   emoji: '🌆', label: 'Evening',   hint: '5 pm – 9 pm',   defaultTime: '18:00', range: [1020,1260] },
-  { key: 'night',     emoji: '🌙', label: 'Night',     hint: 'After 9 pm',    defaultTime: '21:00', range: [1260,1440] },
+  { key: 'morning',   emoji: '🌅', icon: 'partly-sunny-outline', tint: '#e09a37', label: 'Morning',   hint: 'Before noon',   defaultTime: '09:00', range: [0,   720]  },
+  { key: 'afternoon', emoji: '☀️',  icon: 'sunny',                tint: '#e0843c', label: 'Afternoon', hint: '12 pm – 5 pm',  defaultTime: '13:00', range: [720, 1020] },
+  { key: 'evening',   emoji: '🌆', icon: 'cloudy-night-outline', tint: '#c2683f', label: 'Evening',   hint: '5 pm – 9 pm',   defaultTime: '18:00', range: [1020,1260] },
+  { key: 'night',     emoji: '🌙', icon: 'moon',                 tint: '#6c5ce7', label: 'Night',     hint: 'After 9 pm',    defaultTime: '21:00', range: [1260,1440] },
 ];
+
+// Activity type → Icon name (see components/ui/Icon)
+const ACT_ICON = { transport: 'transport', stay: 'hotel', food: 'food', activity: 'activity', note: 'note' };
 
 function getSlotKey(timeStr) {
   if (!timeStr) return 'morning';
@@ -495,7 +499,8 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                 <Text style={styles.emptyText}>No activities planned yet</Text>
                 {!!onPlanWithAI && (
                   <TouchableOpacity style={styles.emptyAiBtn} onPress={onPlanWithAI} activeOpacity={0.85}>
-                    <Text style={styles.emptyAiBtnText}>✨ Plan with AI</Text>
+                    <Icon name="sparkles" size={16} color="#fff" />
+                    <Text style={styles.emptyAiBtnText}>Plan with AI</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -507,12 +512,14 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                   onPress={() => openAddInSlot(slot.defaultTime)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.emptySlotEmoji}>{slot.emoji}</Text>
+                  <View style={[styles.emptySlotIcon, { backgroundColor: slot.tint + '1A' }]}>
+                    <Icon name={slot.icon} size={18} color={slot.tint} />
+                  </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.emptySlotLabel}>{slot.label}</Text>
                     <Text style={styles.emptySlotHint}>{slot.hint} · tap to add</Text>
                   </View>
-                  <Text style={styles.emptySlotPlus}>+</Text>
+                  <Icon name="add" size={20} color={colors.subtle} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -540,7 +547,9 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                     onPress={() => openAddInSlot(slot.defaultTime)}
                     activeOpacity={0.6}
                   >
-                    <Text style={styles.slotCompactText}>{slot.emoji} + Add {slot.label}</Text>
+                    <Icon name={slot.icon} size={14} color={slot.tint} />
+                    <Text style={styles.slotCompactText}>Add {slot.label}</Text>
+                    <Icon name="add" size={14} color={colors.subtle} />
                   </TouchableOpacity>
                 );
               }
@@ -556,7 +565,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                   >
                     {/* Row 1: emoji · label · [+ Add pill] · chevron */}
                     <View style={styles.slotHeaderRow}>
-                      <Text style={styles.slotEmoji}>{slot.emoji}</Text>
+                      <Icon name={slot.icon} size={17} color={slot.tint} style={{ marginRight: spacing.xs }} />
                       <Text style={styles.slotLabel}>{slot.label}</Text>
                       {!isCollapsed && (
                         <TouchableOpacity
@@ -650,7 +659,8 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         onPress={() => setShowDiscover(true)}
         activeOpacity={0.85}
       >
-        <Text style={styles.discoverFabText}>🔍 Discover</Text>
+        <Icon name="search" size={16} color="#fff" />
+        <Text style={styles.discoverFabText}>Discover</Text>
       </TouchableOpacity>
 
       {/* ── Check Trip FAB ── */}
@@ -669,17 +679,17 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                        : visWarnings > 0 ? '#d97706'
                        : visInfos    > 0 ? '#3b82f6'
                        : colors.green;
-        const fabIcon  = visErrors   > 0 ? '🚫'
-                       : visWarnings > 0 ? '⚠️'
-                       : visInfos    > 0 ? '💡'
-                       : '✅';
+        const fabIcon  = visErrors   > 0 ? 'close-circle'
+                       : visWarnings > 0 ? 'warning-outline'
+                       : visInfos    > 0 ? 'bulb-outline'
+                       : 'checkmark-circle';
         return (
           <TouchableOpacity
             style={[styles.checkFab, { backgroundColor: fabColor }]}
             onPress={onCheckTrip}
             activeOpacity={0.85}
           >
-            <Text style={styles.checkFabIcon}>{fabIcon}</Text>
+            <Icon name={fabIcon} size={17} color="#fff" />
             <Text style={styles.checkFabText}>Check Trip</Text>
             {total > 0 && (
               <View style={styles.checkFabBadge}>
@@ -813,11 +823,11 @@ function ActivityCard({ activity: act, trip, isHighlighted, isFirst, isLast, onM
         {/* ── Time + icon (or big status emoji when done/skipped) ── */}
         <View style={styles.actTimeCol}>
           {dimmed ? (
-            <Text style={styles.actStatusEmoji}>{isDone ? '✅' : '❌'}</Text>
+            <Icon name={isDone ? 'checkmark-circle' : 'close-circle'} size={26} color={isDone ? colors.success : colors.danger} />
           ) : (
             <>
               <Text style={styles.actTime}>{act.time}</Text>
-              <Text style={styles.actIcon}>{actIcon}</Text>
+              <Icon name={ACT_ICON[act.type] || 'activity'} size={18} color={activityColors[act.type] || colors.subtle} style={{ marginTop: 3 }} />
               {act.type === 'transport' && !!act.arriveTime && (
                 <Text style={styles.actArriveTime}>→{act.arriveTime}</Text>
               )}
@@ -1451,7 +1461,8 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { ...typography.body, color: colors.muted, marginBottom: spacing.lg },
   emptyAiBtn: {
-    backgroundColor: colors.ai,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: colors.smart,
     borderRadius: radius.xl,
     paddingHorizontal: spacing.xxl,
     paddingVertical: spacing.md,
@@ -1534,28 +1545,27 @@ const styles = StyleSheet.create({
   },
   slotEmptyText: { ...typography.caption, color: colors.muted },
   slotCompact: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     marginHorizontal: spacing.xxl,
     marginBottom: spacing.sm,
     backgroundColor: colors.surface2,
     borderRadius: radius.md,
     padding: spacing.sm,
-    alignItems: 'center',
   },
   slotCompactText: { ...typography.caption, color: colors.muted },
   emptySlot: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     marginHorizontal: spacing.xxl,
     marginBottom: spacing.sm,
     borderRadius: radius.lg,
     borderWidth: 1.5,
-    borderColor: colors.border,
+    borderColor: colors.hairline,
     borderStyle: 'dashed',
-    padding: spacing.xl,
-    alignItems: 'center',
-    gap: spacing.xs,
+    padding: spacing.md,
   },
-  emptySlotEmoji: { fontSize: 24 },
-  emptySlotLabel: { ...typography.bodyBold, color: colors.muted },
-  emptySlotHint:  { ...typography.caption, color: colors.muted },
+  emptySlotIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  emptySlotLabel: { ...typography.bodyBold, color: colors.body },
+  emptySlotHint:  { ...typography.caption, color: colors.subtle },
   emptySlotPlus: {
     marginTop: spacing.sm,
     borderWidth: 1.5,

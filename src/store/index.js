@@ -322,7 +322,7 @@ const useStore = create(
       }),
 
       // Like addFamily but preserves full member objects (travelerId, needs, etc.)
-      addFamilyFull: (tripId, { name, members, color: c, groupId }) => set(s => {
+      addFamilyFull: (tripId, { name, members, color: c, groupId, dietary, wakeTime }) => set(s => {
         const trip = s.trips.find(t => t.id === tripId);
         const color = c || familyPalette[trip ? trip.families.length % familyPalette.length : 0];
         return {
@@ -330,6 +330,8 @@ const useStore = create(
             ...t,
             families: [...t.families, {
               id: uid(), name, color, groupId: groupId || null,
+              dietary: dietary || [],
+              wakeTime: wakeTime || 'regular',
               members: members.map(m => ({ id: uid(), ...m })),
             }],
           }),

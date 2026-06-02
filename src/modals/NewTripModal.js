@@ -10,8 +10,23 @@
 import React, { useState } from 'react';
 import {
   View, Text, Modal, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Switch,
+  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Switch, Alert,
 } from 'react-native';
+
+// ─── Dietary / wake-time constants (shared with TravelersScreen) ──
+const DIETARY_OPTS_WIZARD = [
+  { value: 'vegetarian',  label: '🥦 Veg' },
+  { value: 'vegan',       label: '🌱 Vegan' },
+  { value: 'no-alcohol',  label: '🍺 No Alcohol' },
+  { value: 'gluten-free', label: '🌾 GF' },
+  { value: 'halal',       label: '☪️ Halal' },
+  { value: 'kosher',      label: '✡️ Kosher' },
+];
+const WAKE_OPTS_WIZARD = [
+  { value: 'early',   label: '🌅 Early',  hint: '< 7am' },
+  { value: 'regular', label: '🌤 Regular', hint: '8–10am' },
+  { value: 'late',    label: '🦉 Late',    hint: '> 9am' },
+];
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography, shadow } from '../theme';
@@ -412,10 +427,15 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Step 2 — list of families being built for this trip
-  // Each: { id, name, color, groupId, members: [{ id, name, age, travelerId, saveToLibrary }] }
+  // Each: { id, name, color, groupId, dietary[], wakeTime, members: [...] }
   const [tripFamilies, setTripFamilies] = useState([]);
 
-  // Step 3 — AI planner preferences (pre-fill AIPlannerModal)
+  // Step 3 — Group Profile (dietary + wake time per family, must-dos)
+  const [mustDos, setMustDos] = useState('');
+  const updateFamilyProfile = (famId, updates) =>
+    setTripFamilies(prev => prev.map(f => f.id === famId ? { ...f, ...updates } : f));
+
+  // Step 4 — AI planner preferences (pre-fill AIPlannerModal)
   const [pace,   setPace]   = useState('moderate');
   const [budget, setBudget] = useState('mid-range');
   const [focus,  setFocus]  = useState([]);
@@ -431,6 +451,7 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
     setStep(1); setMode(null); setName(''); setDestination('');
     setStartDate(''); setEndDate('');
     setTripFamilies([]);
+    setMustDos('');
     setPace('moderate'); setBudget('mid-range'); setFocus([]);
     setGenerating(false);
   };
@@ -461,6 +482,11 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
       skipDefaultFamily: hasSelectedFamilies,
     });
 
+    // Save must-dos on the trip
+    if (mustDos.trim()) {
+      useStore.getState().updateTrip(trip.id, { mustDos: mustDos.trim() });
+    }
+
     // Persist new members flagged "Save to Library" and build families
     tripFamilies.forEach(fam => {
       const processedMembers = fam.members.map(m => {
@@ -480,6 +506,8 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
         name: fam.name,
         color: fam.color,
         groupId: fam.groupId || null,
+        dietary: fam.dietary || [],
+        wakeTime: fam.wakeTime || 'regular',
         members: processedMembers.map(m => ({
           name: m.name,
           age: m.age || 30,
@@ -531,7 +559,7 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
 
           {/* ── Step indicator ───────────────────────── */}
           <View style={s.steps}>
-            {[{ n: 1, label: 'Details' }, { n: 2, label: 'Travelers' }, { n: 3, label: 'Plan' }].map((st, idx) => (
+            {[{ n: 1, label: 'Details' }, { n: 2, label: 'Travelers' }, { n: 3, label: 'Profile' }, { n: 4, label: 'Plan' }].map((st, idx) => (
               <React.Fragment key={st.n}>
                 <View style={s.stepItem}>
                   <View style={[s.stepDot, step > st.n && s.stepDone, step === st.n && s.stepActive]}>
@@ -541,7 +569,7 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
                     {st.label}
                   </Text>
                 </View>
-                {idx < 2 && <View style={[s.stepLine, step > st.n && { backgroundColor: colors.green }]} />}
+                {idx < 3 && <View style={[s.stepLine, step > st.n && { backgroundColor: colors.green }]} />}
               </React.Fragment>
             ))}
           </View>
@@ -614,8 +642,86 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
                 />
               )}
 
-              {/* ══ STEP 3: Plan Trip ══════════════════════════ */}
+              {/* ══ STEP 3: Group Profile ══════════════════════ */}
               {step === 3 && (
+                <>
+                  <Text style={s.stepHint}>Tell us about your group's preferences so the planner can make smarter suggestions.</Text>
+
+                  {tripFamilies.length === 0 ? (
+                    <View style={gp.empty}>
+                      <Text style={gp.emptyText}>Add travelers in Step 2 to set their preferences here.</Text>
+                      <Text style={gp.emptyHint}>You can also set this later in the trip's People tab.</Text>
+                    </View>
+                  ) : (
+                    tripFamilies.map(fam => (
+                      <View key={fam.id} style={[gp.card, { borderLeftColor: fam.color }]}>
+                        <View style={gp.cardHeader}>
+                          <View style={[gp.dot, { backgroundColor: fam.color }]} />
+                          <Text style={[gp.famName, { color: fam.color }]}>{fam.name}</Text>
+                        </View>
+
+                        <Text style={gp.sectionLabel}>Dietary</Text>
+                        <View style={gp.chipRow}>
+                          {DIETARY_OPTS_WIZARD.map(opt => {
+                            const active = (fam.dietary || []).includes(opt.value);
+                            return (
+                              <TouchableOpacity
+                                key={opt.value}
+                                style={[gp.chip, active && gp.chipActive]}
+                                onPress={() => {
+                                  const cur  = fam.dietary || [];
+                                  const next = active ? cur.filter(d => d !== opt.value) : [...cur, opt.value];
+                                  updateFamilyProfile(fam.id, { dietary: next });
+                                }}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={[gp.chipText, active && gp.chipTextActive]}>{opt.label}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+
+                        <Text style={[gp.sectionLabel, { marginTop: spacing.md }]}>Wake time</Text>
+                        <View style={gp.wakeRow}>
+                          {WAKE_OPTS_WIZARD.map(opt => {
+                            const active = (fam.wakeTime || 'regular') === opt.value;
+                            return (
+                              <TouchableOpacity
+                                key={opt.value}
+                                style={[gp.wakeBtn, active && gp.wakeBtnActive]}
+                                onPress={() => updateFamilyProfile(fam.id, { wakeTime: opt.value })}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={[gp.wakeBtnLabel, active && gp.wakeBtnLabelActive]}>{opt.label}</Text>
+                                <Text style={gp.wakeBtnHint}>{opt.hint}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    ))
+                  )}
+
+                  {/* Group must-dos */}
+                  <View style={gp.mustDosSection}>
+                    <Text style={gp.mustDosLabel}>Group Must-Dos  <Text style={gp.mustDosHint}>(optional)</Text></Text>
+                    <TextInput
+                      style={gp.mustDosInput}
+                      value={mustDos}
+                      onChangeText={setMustDos}
+                      placeholder={'e.g. See the sunset, try local street food, beach day\nOne per line or comma-separated'}
+                      placeholderTextColor={colors.muted}
+                      multiline
+                      numberOfLines={4}
+                      textAlignVertical="top"
+                    />
+                    <Text style={gp.mustDosFooter}>These show as tappable chips in the planner so the group can check them off.</Text>
+                  </View>
+                </>
+              )}
+
+              {/* ══ STEP 4: Plan Trip ══════════════════════════ */}
+              {step === 4 && (
                 <>
                   <Text style={s.stepHint}>How would you like to plan this trip?</Text>
 
@@ -778,12 +884,14 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
           {/* ── Footer ───────────────────────────────── */}
           {!generating && (
             <View style={[s.footer, { paddingBottom: insets.bottom + 16 }]}>
-              {step < 3 ? (
+              {step < 4 ? (
                 <TouchableOpacity style={s.primaryBtn} onPress={nextStep}>
                   <Text style={s.primaryBtnText}>
                     {step === 2 && tripFamilies.length > 0
                       ? `Next — ${tripFamilies.length} group${tripFamilies.length !== 1 ? 's' : ''} added →`
-                      : step === 2 ? 'Skip for now →' : 'Next →'}
+                      : step === 2 ? 'Skip for now →'
+                      : step === 3 ? 'Next →'
+                      : 'Next →'}
                   </Text>
                 </TouchableOpacity>
               ) : (
@@ -812,6 +920,54 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
     </Modal>
   );
 }
+
+// ── Group Profile step styles ──────────────────────────────────────
+const gp = StyleSheet.create({
+  empty:     { alignItems: 'center', paddingVertical: 32 },
+  emptyText: { ...typography.body, color: colors.muted, textAlign: 'center' },
+  emptyHint: { ...typography.caption, color: colors.muted, marginTop: 6, textAlign: 'center' },
+
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border, borderLeftWidth: 3,
+    borderRadius: radius.lg,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+  },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.md },
+  dot:        { width: 10, height: 10, borderRadius: 5 },
+  famName:    { ...typography.bodyBold },
+
+  sectionLabel: { fontSize: 10, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: {
+    borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.full,
+    paddingHorizontal: 12, paddingVertical: 5, backgroundColor: '#fff',
+  },
+  chipActive:     { backgroundColor: '#dcfce7', borderColor: '#16a34a' },
+  chipText:       { fontSize: 12, color: colors.muted, fontWeight: '600' },
+  chipTextActive: { color: '#15803d', fontWeight: '700' },
+
+  wakeRow:         { flexDirection: 'row', gap: 6 },
+  wakeBtn: {
+    flex: 1, borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.md,
+    paddingVertical: 7, alignItems: 'center', backgroundColor: '#fff',
+  },
+  wakeBtnActive:      { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+  wakeBtnLabel:       { fontSize: 12, fontWeight: '700', color: colors.muted },
+  wakeBtnLabelActive: { color: colors.primary },
+  wakeBtnHint:        { fontSize: 9, color: colors.muted, marginTop: 1 },
+
+  mustDosSection: { marginTop: spacing.md },
+  mustDosLabel:   { fontSize: 12, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 },
+  mustDosHint:    { fontSize: 11, color: colors.muted, fontWeight: '400', textTransform: 'none', letterSpacing: 0 },
+  mustDosInput: {
+    borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.sm,
+    paddingHorizontal: 13, paddingVertical: 11, fontSize: 14, color: colors.text,
+    backgroundColor: colors.surface, minHeight: 90,
+  },
+  mustDosFooter: { ...typography.caption, color: colors.muted, marginTop: 6, lineHeight: 16 },
+});
 
 // ── Main modal styles ─────────────────────────────────────────────
 const s = StyleSheet.create({

@@ -13,7 +13,7 @@ import { GOOGLE_PLACES_API_KEY } from '../config';
 import useStore from '../store';
 import { uid } from '../utils/helpers';
 import { colors, spacing, radius, typography, shadow } from '../theme';
-import { SLOTS, getSlotKey, getSmartTime } from '../utils/slots';
+import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
 
 const CATEGORIES = [
   { key: 'attractions', label: '\u{1F3DB}️ Attractions', query: 'top tourist attractions and landmarks' },
@@ -123,12 +123,10 @@ async function fetchPlaces(textQuery) {
   } catch(e) { console.warn('[DiscoverModal]',e.message); return []; }
 }
 
-function PlaceCard({ place, onAdd, added, lateStartGroup, defaultTime }) {
+function PlaceCard({ place, onAdd, added }) {
   const typeEmoji = place.activityType==='food'?'\u{1F37D}️':place.activityType==='stay'?'\u{1F3E8}':'\u{1F3AF}';
-  const isMorning = !defaultTime || defaultTime < '12:00';
-  const dim = lateStartGroup && isMorning;
   return (
-    <View style={[card.wrap, dim && card.wrapDimmed]}>
+    <View style={card.wrap}>
       <View style={card.body}>
         <View style={card.nameRow}>
           <Text style={card.typeIcon}>{typeEmoji}</Text>
@@ -145,12 +143,10 @@ function PlaceCard({ place, onAdd, added, lateStartGroup, defaultTime }) {
         {!!place.address && <Text style={card.address} numberOfLines={1}>{'\u{1F4CD}'} {place.address}</Text>}
       </View>
       <TouchableOpacity
-        style={[card.addBtn, added&&card.addBtnDone, dim&&card.addBtnDimmed]}
+        style={[card.addBtn, added&&card.addBtnDone]}
         onPress={() => !added && onAdd(place)} activeOpacity={added?1:0.7}
       >
-        <Text style={[card.addBtnText, added&&{color:'#15803d'}]}>
-          {added?'✓':dim?'\u{1F989}':'+'}
-        </Text>
+        <Text style={[card.addBtnText, added&&{color:'#15803d'}]}>{added?'✓':'+'}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -184,7 +180,6 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const hasVeg        = allDietary.some(d => d==='vegetarian'||d==='vegan');
   const hasNoAlco     = allDietary.includes('no-alcohol');
   const dietBadge     = [hasVeg&&'\u{1F966} Veg', hasNoAlco&&'\u{1F37A} No Alcohol'].filter(Boolean);
-  const lateStartGroup = families.some(f => f.wakeTime==='late');
 
   useEffect(() => {
     if (!visible) return;
@@ -262,8 +257,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
   const handleConfirmAdd = () => {
     if (!pendingPlace) return;
-    const smartTime = getSmartTime(trip, pickerDay, pickerSlot)
-      || SLOTS.find(s => s.key===pickerSlot)?.defaultTime || '09:00';
+    const smartTime = getSuggestedTime(trip, pickerDay, pickerSlot);
     addActivity(trip.id, pickerDay, {
       id:uid(), type:pendingPlace.activityType, time:smartTime,
       name:pendingPlace.name, detail:'',
@@ -333,10 +327,6 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             })}
           </ScrollView>
 
-          {lateStartGroup && (!defaultTime||defaultTime<'12:00') && (
-            <View style={s.lateHint}><Text style={s.lateHintText}>{'\u{1F989}'} Some families wake late — morning slots are dimmed</Text></View>
-          )}
-
           {loading ? (
             <View style={s.center}><ActivityIndicator size="large" color={colors.primary}/><Text style={s.loadingText}>Searching {destination}…</Text></View>
           ) : error ? (
@@ -345,8 +335,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
               contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
               renderItem={({item}) => (
-                <PlaceCard place={item} onAdd={handleAdd} added={addedNames.has(item.name)}
-                  lateStartGroup={lateStartGroup} defaultTime={defaultTime}/>
+                <PlaceCard place={item} onAdd={handleAdd} added={addedNames.has(item.name)}/>
               )}
               ListHeaderComponent={results.length>0?<Text style={s.resultCount}>{results.length} places found</Text>:null}
             />
@@ -375,37 +364,31 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
               <Text style={sp.sectionLabel}>When</Text>
               <View style={sp.slotGrid}>
                 {SLOTS.map(slot => {
-                  const smart  = getSmartTime(trip, pickerDay, slot.key);
-                  const count  = (trip.days[pickerDay]?.activities||[]).filter(a => a.status!=='skipped'&&getSlotKey(a.time)===slot.key).length;
-                  const isFull = smart===null;
-                  const isActive = pickerSlot===slot.key;
-                  const isLate = lateStartGroup && slot.key==='morning';
+                  const suggested = getSuggestedTime(trip, pickerDay, slot.key);
+                  const count     = getSlotCount(trip, pickerDay, slot.key);
+                  const isActive  = pickerSlot===slot.key;
                   return (
                     <TouchableOpacity key={slot.key}
-                      style={[sp.slotBtn, isActive&&sp.slotBtnActive, isFull&&sp.slotBtnFull]}
-                      onPress={() => !isFull&&setPickerSlot(slot.key)} activeOpacity={isFull?1:0.7}>
+                      style={[sp.slotBtn, isActive&&sp.slotBtnActive]}
+                      onPress={() => setPickerSlot(slot.key)} activeOpacity={0.7}>
                       <View style={sp.slotBtnTop}>
                         <Text style={sp.slotEmoji}>{slot.emoji}</Text>
                         <Text style={[sp.slotLabel, isActive&&{color:colors.primary}]}>{slot.label}</Text>
-                        {isLate&&<Text style={sp.slotOwl}>{'\u{1F989}'}</Text>}
                       </View>
-                      <Text style={[sp.slotMeta, isFull&&{color:'#dc2626'}]}>{isFull?'Full':smart}</Text>
-                      {count>0&&<Text style={sp.slotCount}>{count} act{count!==1?'s':''}</Text>}
+                      <Text style={sp.slotMeta}>Add at {suggested}</Text>
+                      <Text style={sp.slotCount}>{count===0?'Open':`${count} act${count!==1?'s':''}`}</Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
 
               {(() => {
-                const smart = getSmartTime(trip, pickerDay, pickerSlot);
+                const smart = getSuggestedTime(trip, pickerDay, pickerSlot);
                 const day   = trip.days[pickerDay];
                 const slot  = SLOTS.find(s => s.key===pickerSlot);
                 return (
-                  <TouchableOpacity style={[sp.confirmBtn, !smart&&sp.confirmBtnDisabled]}
-                    onPress={smart?handleConfirmAdd:null} activeOpacity={smart?0.85:1}>
-                    <Text style={sp.confirmBtnText}>
-                      {smart ? `Add at ${smart} · ${day?.label} ${slot?.emoji} ${slot?.label}` : 'Slot full — choose another'}
-                    </Text>
+                  <TouchableOpacity style={sp.confirmBtn} onPress={handleConfirmAdd} activeOpacity={0.85}>
+                    <Text style={sp.confirmBtnText}>Add at {smart} · {day?.label} {slot?.emoji} {slot?.label}</Text>
                   </TouchableOpacity>
                 );
               })()}
@@ -498,8 +481,6 @@ const s = StyleSheet.create({
   filterChipActive:{backgroundColor:'#dcfce7',borderColor:'#16a34a'},
   filterChipTextActive:{color:'#15803d',fontWeight:'700'},
   dietBadge:{fontSize:11,color:'#15803d',fontWeight:'700',marginTop:3},
-  lateHint:{marginHorizontal:spacing.xxl,marginBottom:spacing.xs,backgroundColor:'#fef9c3',borderRadius:radius.sm,padding:spacing.sm,borderWidth:1,borderColor:'#fde047'},
-  lateHintText:{fontSize:11,color:'#713f12',fontWeight:'600'},
   list:{paddingHorizontal:spacing.xxl,paddingBottom:32},
   resultCount:{...typography.caption,color:colors.muted,marginBottom:spacing.sm},
   center:{flex:1,alignItems:'center',justifyContent:'center',padding:spacing.xxxl},
@@ -524,11 +505,9 @@ const sp = StyleSheet.create({
   slotGrid:{flexDirection:'row',flexWrap:'wrap',gap:spacing.sm,marginBottom:spacing.lg},
   slotBtn:{width:'48%',borderWidth:1.5,borderColor:colors.border,borderRadius:radius.lg,backgroundColor:'#fff',padding:spacing.md,gap:3},
   slotBtnActive:{borderColor:colors.primary,backgroundColor:colors.primaryLight},
-  slotBtnFull:{borderColor:'#fecaca',backgroundColor:'#fef2f2',opacity:0.6},
   slotBtnTop:{flexDirection:'row',alignItems:'center',gap:6},
   slotEmoji:{fontSize:16},
   slotLabel:{...typography.bodyBold,color:colors.text,fontSize:13},
-  slotOwl:{fontSize:13,marginLeft:'auto'},
   slotMeta:{fontSize:13,fontWeight:'700',color:colors.primary},
   slotCount:{fontSize:10,color:colors.muted},
   confirmBtn:{backgroundColor:colors.primary,borderRadius:radius.lg,paddingVertical:spacing.md,alignItems:'center',marginTop:spacing.xs},
@@ -550,9 +529,7 @@ const card = StyleSheet.create({
   address:{...typography.caption,color:colors.muted,lineHeight:16},
   addBtn:{width:36,height:36,borderRadius:18,backgroundColor:colors.primary,alignItems:'center',justifyContent:'center',flexShrink:0},
   addBtnDone:{backgroundColor:'#dcfce7'},
-  addBtnDimmed:{backgroundColor:'#e5e7eb',borderWidth:1.5,borderStyle:'dashed',borderColor:colors.border},
   addBtnText:{color:'#fff',fontSize:20,fontWeight:'700',lineHeight:22},
-  wrapDimmed:{opacity:0.65},
   vegBadge:{backgroundColor:'#dcfce7',borderRadius:radius.full,paddingHorizontal:6,paddingVertical:2,marginLeft:4},
   vegBadgeText:{fontSize:10,color:'#15803d',fontWeight:'700'},
 });

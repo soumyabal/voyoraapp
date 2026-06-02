@@ -23,7 +23,7 @@ import NewTripModal from '../modals/NewTripModal';
 import AuthModal from '../modals/AuthModal';
 import AddProfileModal from '../modals/AddProfileModal';
 import { colors, spacing, radius, typography, shadow } from '../theme';
-import { avatarColor } from '../utils/helpers';
+import { avatarColor, getAllMembers, fmt } from '../utils/helpers';
 import InfoBanner from '../components/ui/InfoBanner';
 
 const PACE_LABELS = { relaxed: '🐢 Relaxed', moderate: '🚶 Moderate', packed: '🏃 Packed' };
@@ -479,6 +479,66 @@ const sw = StyleSheet.create({
   actionLabel: { fontSize: 10, color: '#fff', fontWeight: '700', textAlign: 'center' },
 });
 
+// ─── Home helpers ─────────────────────────────────────────────────
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+// Phase + human countdown label for a trip relative to today.
+function tripStatus(trip) {
+  const DAY = 86400000;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = new Date(trip.startDate + 'T00:00:00');
+  const end   = new Date(trip.endDate + 'T00:00:00');
+  if (trip.archived) return { phase: 'past', label: 'Completed' };
+  if (today > end)   return { phase: 'past', label: 'Ended' };
+  if (today >= start && today <= end) {
+    const dayNum = Math.floor((today - start) / DAY) + 1;
+    return { phase: 'ongoing', label: `Happening now · Day ${dayNum} of ${trip.days.length}` };
+  }
+  const days = Math.round((start - today) / DAY);
+  const label = days === 0 ? 'Starts today' : days === 1 ? 'Tomorrow' : `In ${days} days`;
+  return { phase: 'upcoming', label, days };
+}
+
+const VALUE_PROPS = [
+  { icon: '🗓️', title: 'Day-by-day itineraries', sub: 'Smart time slots, conflict checks, and a Discover search for every city.' },
+  { icon: '💸', title: 'Per-family expense split', sub: 'Hotels by rooms, transit by family size — fairly, automatically.' },
+  { icon: '♿', title: 'Accessibility built-in', sub: 'Plan around wheelchair, dietary and pace needs per traveler.' },
+];
+
+// ─── Next-trip spotlight card ─────────────────────────────────────
+function NextTripSpotlight({ trip, status, onOpen }) {
+  const allMembers = getAllMembers(trip);
+  const famCount   = trip.families.length;
+  return (
+    <TouchableOpacity activeOpacity={0.9} onPress={onOpen} style={styles.spotCard}>
+      <LinearGradient
+        colors={trip.bgColors || ['#e17055', '#fdcb6e']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={styles.spotBand}
+      >
+        <Text style={styles.spotEmoji}>{trip.emoji}</Text>
+        <View style={styles.spotPill}><Text style={styles.spotPillText}>{status.label}</Text></View>
+      </LinearGradient>
+      <View style={styles.spotBody}>
+        <Text style={styles.spotName} numberOfLines={1}>{trip.name}</Text>
+        <Text style={styles.spotMeta}>📍 {trip.destination}</Text>
+        <Text style={styles.spotMeta}>📅 {fmt(trip.startDate)} – {fmt(trip.endDate)} · {trip.days.length}d</Text>
+        <View style={styles.spotFooter}>
+          <Text style={styles.spotPeople}>
+            👨‍👩‍👧 {famCount} famil{famCount !== 1 ? 'ies' : 'y'} · {allMembers.length} {allMembers.length !== 1 ? 'people' : 'person'}
+          </Text>
+          <View style={styles.spotOpen}><Text style={styles.spotOpenText}>Open →</Text></View>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 // ─── Main HomeScreen ──────────────────────────────────────────────
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -486,6 +546,7 @@ export default function HomeScreen({ navigation }) {
   const [activeTab, setActiveTab]       = useState('trips');
   const [showNewTrip, setShowNewTrip]   = useState(false);
   const [showAuth, setShowAuth]         = useState(false);
+  const [seg, setSeg]                   = useState('upcoming');
 
   const openTrip = (tripId) => {
     setCurrentTrip(tripId);
@@ -494,6 +555,20 @@ export default function HomeScreen({ navigation }) {
 
   const TAB_BAR_HEIGHT = 56;
 
+  // Classify trips into upcoming (incl. ongoing) vs past; spotlight = soonest.
+  const withStatus = trips.map(t => ({ trip: t, status: tripStatus(t) }));
+  const upcoming = withStatus
+    .filter(x => x.status.phase !== 'past')
+    .sort((a, b) => new Date(a.trip.startDate) - new Date(b.trip.startDate));
+  const past = withStatus
+    .filter(x => x.status.phase === 'past')
+    .sort((a, b) => new Date(b.trip.startDate) - new Date(a.trip.startDate));
+  const spotlight     = upcoming[0] || null;
+  const upcomingRest  = spotlight ? upcoming.slice(1) : upcoming;
+  const list          = seg === 'upcoming' ? upcomingRest : past;
+  const hasTrips      = trips.length > 0;
+  const firstName     = account.loggedIn && account.name ? account.name.split(' ')[0] : '';
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -501,7 +576,7 @@ export default function HomeScreen({ navigation }) {
       {/* Shared hero header */}
       <LinearGradient
         colors={['#1a1714', '#3d2c1e', '#e86c3a']}
-        style={[styles.hero, { paddingTop: insets.top + 16 }]}
+        style={[styles.hero, { paddingTop: insets.top + 16 }, activeTab === 'trips' && hasTrips && styles.heroCompact]}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
       >
         <View style={styles.heroNav}>
@@ -520,13 +595,24 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         {activeTab === 'trips' ? (
-          <View style={styles.heroContent}>
-            <Text style={styles.heroTitle}>Plan Trips Together</Text>
-            <Text style={styles.heroSub}>Daily itineraries · Multi-family expenses · Accessibility built-in</Text>
-            <TouchableOpacity style={styles.heroCta} onPress={() => setShowNewTrip(true)}>
-              <Text style={styles.heroCtaText}>Plan Your Next Trip</Text>
-            </TouchableOpacity>
-          </View>
+          hasTrips ? (
+            <View style={styles.heroGreet}>
+              <Text style={styles.heroGreetTitle}>{greeting()}{firstName ? `, ${firstName}` : ''} 👋</Text>
+              <Text style={styles.heroSub}>
+                {spotlight
+                  ? `${trips.length} trip${trips.length !== 1 ? 's' : ''} · next ${spotlight.status.label.toLowerCase()}`
+                  : `${trips.length} trip${trips.length !== 1 ? 's' : ''} planned`}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.heroContent}>
+              <Text style={styles.heroTitle}>Plan Trips Together</Text>
+              <Text style={styles.heroSub}>The only planner built for multi-family group travel</Text>
+              <TouchableOpacity style={styles.heroCta} onPress={() => setShowNewTrip(true)}>
+                <Text style={styles.heroCtaText}>Plan Your First Trip</Text>
+              </TouchableOpacity>
+            </View>
+          )
         ) : (
           <View style={styles.heroContentSmall}>
             <Text style={styles.heroTitleSmall}>Your Travelers</Text>
@@ -545,33 +631,69 @@ export default function HomeScreen({ navigation }) {
             contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24 }]}
             showsVerticalScrollIndicator={false}
           >
-
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Your Trips</Text>
-              <TouchableOpacity onPress={() => setShowNewTrip(true)}>
-                <Text style={styles.addLink}>+ Add Trip</Text>
-              </TouchableOpacity>
-            </View>
-
-            {trips.length === 0 ? (
-              <View style={styles.empty}>
-                <Text style={styles.emptyIcon}>🗺️</Text>
-                <Text style={styles.emptyTitle}>No trips yet</Text>
-                <Text style={styles.emptyText}>Start planning your first adventure!</Text>
+            {!hasTrips ? (
+              <View style={styles.onboard}>
+                {VALUE_PROPS.map(v => (
+                  <View key={v.title} style={styles.featureCard}>
+                    <Text style={styles.featureIcon}>{v.icon}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.featureTitle}>{v.title}</Text>
+                      <Text style={styles.featureSub}>{v.sub}</Text>
+                    </View>
+                  </View>
+                ))}
                 <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowNewTrip(true)}>
                   <Text style={styles.emptyBtnText}>Create a Trip</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              trips.map(trip => (
-                <SwipeableTripCard
-                  key={trip.id}
-                  trip={trip}
-                  onPress={() => openTrip(trip.id)}
-                  onComplete={() => updateTrip(trip.id, { archived: !trip.archived })}
-                  onDelete={() => deleteTrip(trip.id)}
-                />
-              ))
+              <>
+                {spotlight && (
+                  <>
+                    <Text style={styles.spotCaption}>NEXT TRIP</Text>
+                    <NextTripSpotlight
+                      trip={spotlight.trip}
+                      status={spotlight.status}
+                      onOpen={() => openTrip(spotlight.trip.id)}
+                    />
+                  </>
+                )}
+
+                {/* Upcoming / Past segmented filter */}
+                <View style={styles.segWrap}>
+                  {[
+                    { k: 'upcoming', label: `Upcoming${upcomingRest.length ? ` (${upcomingRest.length})` : ''}` },
+                    { k: 'past',     label: `Past${past.length ? ` (${past.length})` : ''}` },
+                  ].map(t => (
+                    <TouchableOpacity
+                      key={t.k}
+                      style={[styles.segBtn, seg === t.k && styles.segBtnActive]}
+                      onPress={() => setSeg(t.k)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.segText, seg === t.k && styles.segTextActive]}>{t.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {list.length === 0 ? (
+                  <Text style={styles.segEmpty}>
+                    {seg === 'upcoming'
+                      ? (spotlight ? 'No other upcoming trips — tap + New Trip to add one.' : 'No upcoming trips.')
+                      : 'No past trips yet.'}
+                  </Text>
+                ) : (
+                  list.map(({ trip }) => (
+                    <SwipeableTripCard
+                      key={trip.id}
+                      trip={trip}
+                      onPress={() => openTrip(trip.id)}
+                      onComplete={() => updateTrip(trip.id, { archived: !trip.archived })}
+                      onDelete={() => deleteTrip(trip.id)}
+                    />
+                  ))
+                )}
+              </>
             )}
           </ScrollView>
         ) : (
@@ -629,6 +751,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
 
   hero: { paddingHorizontal: spacing.xxl, paddingBottom: spacing.xxxl },
+  heroCompact: { paddingBottom: spacing.xl },
   heroNav: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     marginBottom: spacing.xl,
@@ -659,23 +782,74 @@ const styles = StyleSheet.create({
   heroTitleSmall: { fontSize: 26, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
   heroSub: { color: 'rgba(255,255,255,0.7)', fontSize: 14, marginTop: 8, lineHeight: 20 },
 
+  // Compact returning-user greeting
+  heroGreet: { paddingTop: spacing.xs },
+  heroGreetTitle: { fontSize: 24, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
+
   scroll: { flex: 1 },
   content: { padding: spacing.xxl },
-  sectionHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: spacing.lg,
+
+  // Next-trip spotlight
+  spotCaption: {
+    fontSize: 11, fontWeight: '800', color: colors.muted,
+    letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing.sm,
   },
-  sectionTitle: { ...typography.h3, color: colors.text },
-  addLink: { ...typography.bodyBold, color: colors.primary },
-  empty: { alignItems: 'center', paddingVertical: 48 },
-  emptyIcon: { fontSize: 56, marginBottom: 16 },
-  emptyTitle: { ...typography.h3, color: colors.text, marginBottom: 8 },
-  emptyText: { ...typography.body, color: colors.muted, textAlign: 'center' },
+  spotCard: {
+    backgroundColor: colors.surface, borderRadius: radius.xl,
+    borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
+    marginBottom: spacing.xl, ...shadow.lg,
+  },
+  spotBand: {
+    height: 96, alignItems: 'center', justifyContent: 'center',
+  },
+  spotEmoji: { fontSize: 44 },
+  spotPill: {
+    position: 'absolute', top: 12, right: 12,
+    backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.full,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  spotPillText: { fontSize: 11, fontWeight: '800', color: '#1a1714' },
+  spotBody: { padding: spacing.lg },
+  spotName: { ...typography.h3, color: colors.text },
+  spotMeta: { ...typography.small, color: colors.muted, marginTop: 3 },
+  spotFooter: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: spacing.md,
+  },
+  spotPeople: { ...typography.small, color: colors.text, fontWeight: '600', flex: 1 },
+  spotOpen: {
+    backgroundColor: colors.primary, borderRadius: radius.full,
+    paddingHorizontal: 18, paddingVertical: 9,
+  },
+  spotOpenText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+
+  // Upcoming / Past segmented control
+  segWrap: {
+    flexDirection: 'row', backgroundColor: colors.surface2 || '#eef0f2',
+    borderRadius: radius.full, padding: 3, marginBottom: spacing.lg,
+  },
+  segBtn: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: radius.full },
+  segBtnActive: { backgroundColor: '#fff', ...shadow.sm },
+  segText: { ...typography.smallBold, color: colors.muted },
+  segTextActive: { color: colors.text },
+  segEmpty: { ...typography.body, color: colors.muted, textAlign: 'center', paddingVertical: 32 },
+
+  // First-run onboarding (value props)
+  onboard: { paddingTop: spacing.sm },
+  featureCard: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md,
+    backgroundColor: colors.surface, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.border,
+    padding: spacing.lg, marginBottom: spacing.md, ...shadow.sm,
+  },
+  featureIcon: { fontSize: 26 },
+  featureTitle: { ...typography.bodyBold, color: colors.text },
+  featureSub: { ...typography.small, color: colors.muted, marginTop: 2, lineHeight: 18 },
   emptyBtn: {
     backgroundColor: colors.primary, borderRadius: radius.md,
-    paddingHorizontal: 20, paddingVertical: 12, marginTop: 20,
+    paddingVertical: 15, alignItems: 'center', marginTop: spacing.sm,
   },
-  emptyBtnText: { color: '#fff', fontWeight: '700' },
+  emptyBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
 
   tabBar: {
     flexDirection: 'row', backgroundColor: '#fff',

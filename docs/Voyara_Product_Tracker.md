@@ -96,6 +96,7 @@ If a feature doesn't serve at least one of these three outcomes, deprioritise it
 | ✅ | **Address + Google Maps link** | Manual activities can have an address that opens Maps on tap | |
 | ✅ | **Discover button more prominent** | Promoted to a floating action button (bottom-left, mirroring Check Trip FAB at bottom-right). Removed the small header outline button. | `discoverFab` style in `ItineraryScreen.js` |
 | ✅ | **Schedule-aware activity suggestions** | Morning slot button dimmed (opacity + dashed border + 🦉) in `PlaceCard` when any family has `wakeTime: 'late'`. A yellow hint strip appears above results. | `lateStartGroup` computed in `DiscoverModal`, passed to `PlaceCard` |
+| ✅ | **Auto-arrange a basket of Discover events** | Opt-in "+ Build a day" mode in Discover: multi-select places, then a rule-based engine spreads them across days/times. Editable preview (move to day, multi-day span for big venues, remove, re-arrange) before Apply. Merges *around* existing activities — never overwrites. Overflow that doesn't fit is surfaced, not dropped. | `src/utils/autoArrange.js` — pure engine (city clustering, nearest-neighbour routing, meal-first time packing, pin-to-day / multi-day hints), 9 jest tests. `applyArrangedActivities` store action. Basket + preview UI in `DiscoverModal.js`. Verified live on Android emulator. |
 
 ---
 

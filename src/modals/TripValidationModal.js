@@ -10,12 +10,13 @@
  *   info    → blue  — suggestion / heads-up
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Modal, View, Text, ScrollView, TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { colors, spacing, radius, typography, shadow } from '../theme';
+import { colors, spacing, radius, typography } from '../theme';
+import useStore from '../store';
 import {
   validateTrip, groupWarningsByDay, summariseWarnings,
 } from '../utils/tripValidator';
@@ -32,6 +33,9 @@ function warningKey(w) {
 }
 
 export default function TripValidationModal({ visible, trip, onClose, onNavigate, onIgnore, onClearIgnored }) {
+  const { updateActivity, moveActivity } = useStore();
+  const [activeFilter, setActiveFilter] = useState(null); // null | 'error' | 'warning' | 'info'
+
   const allWarnings = useMemo(
     () => (trip && visible ? validateTrip(trip) : []),
     [trip, visible],
@@ -44,7 +48,13 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
   );
   const ignoredCount = allWarnings.length - warnings.length;
 
-  const byDay   = useMemo(() => groupWarningsByDay(warnings, trip), [warnings, trip]);
+  // Apply severity filter
+  const filtered = useMemo(
+    () => activeFilter ? warnings.filter(w => w.severity === activeFilter) : warnings,
+    [warnings, activeFilter],
+  );
+
+  const byDay   = useMemo(() => groupWarningsByDay(filtered, trip), [filtered, trip]);
   const summary = useMemo(() => summariseWarnings(warnings),        [warnings]);
 
   if (!trip) return null;
@@ -61,6 +71,24 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
   const handleIgnore = (w) => {
     if (onIgnore) onIgnore(warningKey(w));
   };
+
+  const handleApplyFix = (w) => {
+    if (w.moveActId && w.suggestedTime) {
+      updateActivity(trip.id, w.moveActId, { time: w.suggestedTime });
+    }
+    handleIgnore(w);
+  };
+
+  // Per-activity fix: move time (overlap) or move to another day (journey conflict)
+  const handleActivityFix = (w, act) => {
+    if (act.suggestedTime) {
+      updateActivity(trip.id, act.id, { time: act.suggestedTime });
+    } else if (act.suggestedDayIndex != null) {
+      moveActivity(trip.id, w.dayIndex, act.suggestedDayIndex, act.id);
+    }
+  };
+
+  const toggleFilter = (sev) => setActiveFilter(prev => prev === sev ? null : sev);
 
   const navLabel = (w) => {
     const day = w.dayIndex != null ? trip.days[w.dayIndex] : null;
@@ -89,28 +117,40 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
           </TouchableOpacity>
         </View>
 
-        {/* Summary row */}
+        {/* Severity filter chips — tap to filter, tap again to clear */}
         <View style={s.summaryRow}>
           {summary.errors > 0 && (
-            <View style={[s.summaryPill, { backgroundColor: SEV.error.bg, borderColor: SEV.error.border }]}>
+            <TouchableOpacity
+              style={[s.summaryPill, { backgroundColor: SEV.error.bg, borderColor: SEV.error.border }, activeFilter === 'error' && s.summaryPillActive]}
+              onPress={() => toggleFilter('error')}
+              activeOpacity={0.7}
+            >
               <Text style={[s.summaryPillText, { color: SEV.error.text }]}>
-                🔴 {summary.errors} conflict{summary.errors !== 1 ? 's' : ''}
+                🔴 {summary.errors} conflict{summary.errors !== 1 ? 's' : ''}{activeFilter === 'error' ? ' ✕' : ''}
               </Text>
-            </View>
+            </TouchableOpacity>
           )}
           {summary.warnings > 0 && (
-            <View style={[s.summaryPill, { backgroundColor: SEV.warning.bg, borderColor: SEV.warning.border }]}>
+            <TouchableOpacity
+              style={[s.summaryPill, { backgroundColor: SEV.warning.bg, borderColor: SEV.warning.border }, activeFilter === 'warning' && s.summaryPillActive]}
+              onPress={() => toggleFilter('warning')}
+              activeOpacity={0.7}
+            >
               <Text style={[s.summaryPillText, { color: SEV.warning.text }]}>
-                🟠 {summary.warnings} warning{summary.warnings !== 1 ? 's' : ''}
+                🟠 {summary.warnings} warning{summary.warnings !== 1 ? 's' : ''}{activeFilter === 'warning' ? ' ✕' : ''}
               </Text>
-            </View>
+            </TouchableOpacity>
           )}
           {summary.infos > 0 && (
-            <View style={[s.summaryPill, { backgroundColor: SEV.info.bg, borderColor: SEV.info.border }]}>
+            <TouchableOpacity
+              style={[s.summaryPill, { backgroundColor: SEV.info.bg, borderColor: SEV.info.border }, activeFilter === 'info' && s.summaryPillActive]}
+              onPress={() => toggleFilter('info')}
+              activeOpacity={0.7}
+            >
               <Text style={[s.summaryPillText, { color: SEV.info.text }]}>
-                🔵 {summary.infos} suggestion{summary.infos !== 1 ? 's' : ''}
+                🔵 {summary.infos} suggestion{summary.infos !== 1 ? 's' : ''}{activeFilter === 'info' ? ' ✕' : ''}
               </Text>
-            </View>
+            </TouchableOpacity>
           )}
           {warnings.length === 0 && (
             <View style={[s.summaryPill, { backgroundColor: '#f0fdf4', borderColor: '#a7f3d0' }]}>
@@ -162,16 +202,65 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
                             💡 {w.hint}
                           </Text>
                         )}
-                        {/* Footer: Ignore (left) + Go to day (right) */}
+
+                        {/* Per-activity impact list */}
+                        {w.impactedActivities?.length > 0 && (
+                          <View style={[s.impactedList, { borderTopColor: col.border }]}>
+                            {w.impactedActivities.map(act => (
+                              <View key={act.id} style={s.impactedRow}>
+                                <View style={s.impactedInfo}>
+                                  <Text style={s.impactedTime}>{act.time}</Text>
+                                  <Text style={[s.impactedName, { color: col.text }]} numberOfLines={1}>
+                                    {act.name}
+                                  </Text>
+                                </View>
+                                {(act.suggestedTime || act.suggestedDayIndex != null) && (
+                                  <TouchableOpacity
+                                    style={[s.impactedFixBtn, { borderColor: col.icon }]}
+                                    onPress={() => handleActivityFix(w, act)}
+                                    activeOpacity={0.75}
+                                  >
+                                    <Text style={[s.impactedFixText, { color: col.icon }]}>
+                                      {act.suggestedTime
+                                        ? `→ ${act.suggestedTime}`
+                                        : `→ ${act.suggestedDayLabel}`}
+                                    </Text>
+                                  </TouchableOpacity>
+                                )}
+                              </View>
+                            ))}
+                          </View>
+                        )}
+
+                        {/* Footer: Ignore (left) + Apply Fix or Jump to Day (right) */}
                         <View style={[s.navFooter, { borderTopColor: col.border }]}>
                           <TouchableOpacity
                             onPress={() => handleIgnore(w)}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             activeOpacity={0.6}
                           >
-                            <Text style={s.ignoreText}>Ignore for this trip</Text>
+                            <Text style={s.ignoreText}>Ignore</Text>
                           </TouchableOpacity>
-                          <Text style={[s.navFooterText, { color: col.icon }]}>{navLabel(w)}</Text>
+
+                          {w.impactedActivities?.length > 0 ? (
+                            // Impacted activities shown above — footer just needs Jump to day
+                            <TouchableOpacity
+                              onPress={() => handleNavigate(w)}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={[s.navFooterText, { color: col.icon }]}>{navLabel(w)}</Text>
+                            </TouchableOpacity>
+                          ) : (
+                            // No impacted list — jump to day
+                            <TouchableOpacity
+                              onPress={() => handleNavigate(w)}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={[s.navFooterText, { color: col.icon }]}>{navLabel(w)}</Text>
+                            </TouchableOpacity>
+                          )}
                         </View>
                       </TouchableOpacity>
                     );
@@ -249,6 +338,11 @@ const s = StyleSheet.create({
     borderWidth: 1, borderRadius: radius.full,
     paddingHorizontal: spacing.md, paddingVertical: 5,
   },
+  summaryPillActive: {
+    borderWidth: 2,
+    shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
   summaryPillText: { fontSize: 12, fontWeight: '700' },
 
   scroll:  { flex: 1 },
@@ -276,9 +370,58 @@ const s = StyleSheet.create({
   cardMsg:    { fontSize: 12, lineHeight: 18 },
   cardHint:   { fontSize: 11, lineHeight: 17, marginTop: 6, opacity: 0.8 },
   cardArrow:  { fontSize: 18, fontWeight: '700', marginLeft: 'auto' },
-  navFooter:  { marginTop: 10, paddingTop: 8, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  navFooter:     { marginTop: 10, paddingTop: 8, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   navFooterText: { fontSize: 12, fontWeight: '700' },
-  ignoreText: { fontSize: 11, color: colors.muted, fontWeight: '500' },
+  ignoreText:    { fontSize: 11, color: colors.muted, fontWeight: '500' },
+  applyBtn: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 6,
+  },
+  applyBtnText: { fontSize: 12, fontWeight: '800', color: '#fff' },
+
+  // Per-activity impacted list
+  impactedList: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    gap: spacing.xs,
+  },
+  impactedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    gap: spacing.sm,
+  },
+  impactedInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flex: 1,
+  },
+  impactedTime: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+    minWidth: 36,
+  },
+  impactedName: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  impactedFixBtn: {
+    borderWidth: 1.5,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    flexShrink: 0,
+  },
+  impactedFixText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
   ignoredStrip: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     backgroundColor: colors.surface2, borderRadius: radius.md,

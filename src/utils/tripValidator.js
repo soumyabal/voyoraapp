@@ -21,8 +21,9 @@
  *   6. Very early non-transport start (< 6am)
  *   7. Empty day — ALL days, warning severity (common AI miss on 7+ day trips)
  *   8. Notes-only day — has notes but no real activities
- *   9. Wake time conflict — non-transport activity too early for late/regular families
- *  10. Dietary conflict — food activity name contains meat/alcohol keywords vs group dietary profile
+ *   9. Multi-day journey — transport arriveTime < departTime (crosses midnight)
+ *  10. Wake time conflict — non-transport activity too early for late/regular families
+ *  11. Dietary conflict — food activity name contains meat/alcohol keywords vs group dietary profile
  */
 
 // ─── Dietary conflict patterns ────────────────────────────────────
@@ -36,6 +37,9 @@ const ALCO_RE = /\b(beer|wine|cocktail|whisky|whiskey|vodka|rum|gin|spirits|alco
  * Uses keyword matching on name + detail fields.
  */
 export function estimateDuration(activity) {
+  // Manual override always wins — covers long-haul flights, multi-day treks, etc.
+  if (activity.durationMins > 0) return activity.durationMins;
+
   const name   = (activity.name   || '').toLowerCase();
   const detail = (activity.detail || '').toLowerCase();
   const text   = `${name} ${detail}`;
@@ -43,11 +47,12 @@ export function estimateDuration(activity) {
   // ── Transport ────────────────────────────────────────────────────
   if (activity.type === 'transport') {
     switch (activity.subtype) {
-      case 'flight': return 180;  // flight + 2h airport buffer
-      case 'car':    return 120;  // default drive
-      case 'train':  return 90;
-      case 'ship':   return 240;
-      default:       return 120;
+      case 'flight':  return 180;  // flight + 2h airport buffer
+      case 'car':     return 120;  // default drive
+      case 'train':   return 90;
+      case 'ship':    return 240;
+      case 'pitstop': return 15;   // fuel stop, rest stop, quick break
+      default:        return 120;
     }
   }
 
@@ -187,20 +192,31 @@ function validateDay(day, dayIndex, families = []) {
     if (curr.duration > 0 && curr.endMin > next.startMin) {
       const overlapMin = curr.endMin - next.startMin;
       warnings.push({
-        type:     'overlap',
-        severity: overlapMin >= 90 ? 'error' : 'warning',
-        icon:     '⏱',
-        title:    'Schedule overlap',
-        message:  `"${curr.act.name}" typically takes ${formatDuration(curr.duration)}, overlapping with "${next.act.name}" by ~${overlapMin} min.`,
-        hint:     `Consider moving "${next.act.name}" to ${formatEndTime(curr.endMin)} or later.`,
+        type:          'overlap',
+        severity:      overlapMin >= 90 ? 'error' : 'warning',
+        icon:          '⏱',
+        title:         'Schedule overlap',
+        message:       `"${curr.act.name}" typically takes ${formatDuration(curr.duration)}, overlapping with "${next.act.name}" by ~${overlapMin} min.`,
+        hint:          `Move "${next.act.name}" to ${formatEndTime(curr.endMin)} or later.`,
+        suggestedTime:      formatEndTime(curr.endMin),
+        moveActId:          next.act.id,
+        moveActName:        next.act.name,
+        impactedActivities: [{
+          id:            next.act.id,
+          name:          next.act.name,
+          time:          next.act.time,
+          suggestedTime: formatEndTime(curr.endMin),
+        }],
         dayIndex,
-        actIds:   [curr.act.id, next.act.id],
+        actIds: [curr.act.id, next.act.id],
       });
     }
   }
 
   // ── Rule 2: Full-day venue with too many other activities ─────────
-  const fullDayItems = timeline.filter(t => t.duration >= 360);
+  // Transport activities are intentionally excluded — long flights are
+  // handled by the trip-level long_journey_conflict rule instead.
+  const fullDayItems = timeline.filter(t => t.duration >= 360 && t.act.type !== 'transport');
   fullDayItems.forEach(({ act }) => {
     const others = acts.filter(a => a.id !== act.id && a.type !== 'note' && a.type !== 'food');
     if (others.length >= 2) {
@@ -277,6 +293,26 @@ function validateDay(day, dayIndex, families = []) {
     });
   }
 
+  // ── Rule 8: Multi-day journey (arriveTime crosses midnight) ──────
+  // When a transport activity has arriveTime set and it is earlier in
+  // the clock than departTime, the journey crosses midnight and the
+  // arrival logically belongs on the next day.
+  acts.filter(a => a.type === 'transport' && a.arriveTime).forEach(act => {
+    const crossesMidnight = act.arriveTime < act.time; // e.g. departs 22:00, arrives 06:00
+    if (crossesMidnight) {
+      warnings.push({
+        type:     'multi_day_journey',
+        severity: 'info',
+        icon:     '🌙',
+        title:    'Overnight journey',
+        message:  `"${act.name}" departs ${act.time} and arrives ${act.arriveTime} — looks like it crosses midnight into the next day.`,
+        hint:     'Consider adding the arrival on the next day so your schedule stays accurate.',
+        dayIndex,
+        actIds:   [act.id],
+      });
+    }
+  });
+
   // ── Rule 9: Wake time conflict ────────────────────────────────────
   // 'late' families shouldn't have non-transport activities before 9am.
   // 'regular' (default) families shouldn't have non-transport before 7am.
@@ -314,10 +350,8 @@ function validateDay(day, dayIndex, families = []) {
   }
 
   // ── Rule 10: Dietary conflict ─────────────────────────────────────
-  // Flag food activities whose name/detail contains meat or alcohol keywords
-  // when the group has veg/vegan/no-alcohol families.
   if (families.length > 0) {
-    const vegFamilies   = families.filter(f => (f.dietary || []).some(d => d === 'vegetarian' || d === 'vegan')).map(f => f.name);
+    const vegFamilies    = families.filter(f => (f.dietary || []).some(d => d === 'vegetarian' || d === 'vegan')).map(f => f.name);
     const noAlcoFamilies = families.filter(f => (f.dietary || []).includes('no-alcohol')).map(f => f.name);
 
     acts.filter(a => a.type === 'food').forEach(act => {
@@ -373,17 +407,14 @@ export function validateTrip(trip) {
   });
 
   // ── Trip rule: empty or near-empty days ──────────────────────────
-  // Checks ALL days (not just middle ones). Common on long trips where
-  // the AI planner skips a day entirely.
   const isLongTrip = trip.days.length >= 7;
 
   trip.days.forEach((day, i) => {
-    const isEdge = i === 0 || i === trip.days.length - 1;
+    const isEdge     = i === 0 || i === trip.days.length - 1;
     const nonSkipped = day.activities.filter(a => a.status !== 'skipped');
     const realActs   = nonSkipped.filter(a => a.type !== 'note');
 
     if (nonSkipped.length === 0) {
-      // Completely empty day — warning for middle days, info for arrival/departure
       warnings.push({
         type:     'empty_day',
         severity: isEdge ? 'info' : 'warning',
@@ -396,7 +427,6 @@ export function validateTrip(trip) {
         dayIndex: i,
       });
     } else if (realActs.length === 0) {
-      // Has only notes — no real activities scheduled
       warnings.push({
         type:     'notes_only_day',
         severity: 'info',
@@ -407,6 +437,54 @@ export function validateTrip(trip) {
         dayIndex: i,
       });
     }
+  });
+
+  // ── Trip rule: long journey days ─────────────────────────────────
+  // Transport activities >= 6h with other activities on the same day.
+  // Each other activity gets a per-activity "Move to Day N" suggestion.
+  trip.days.forEach((day, i) => {
+    const nonSkipped = day.activities.filter(a => a.status !== 'skipped');
+
+    const longJourneys = nonSkipped.filter(a =>
+      a.type === 'transport' && estimateDuration(a) >= 360
+    );
+
+    longJourneys.forEach(journey => {
+      const others = nonSkipped.filter(a =>
+        a.id !== journey.id && a.type !== 'note'
+      );
+      if (others.length === 0) return;
+
+      const nextDay = trip.days[i + 1] || null;
+      const prevDay = trip.days[i - 1] || null;
+
+      const impactedActivities = others.map(a => {
+        const targetDay = nextDay || prevDay;
+        return {
+          id:                a.id,
+          name:              a.name,
+          time:              a.time,
+          suggestedDayIndex: targetDay ? (nextDay ? i + 1 : i - 1) : null,
+          suggestedDayLabel: targetDay?.label || null,
+        };
+      });
+
+      warnings.push({
+        type:               'long_journey_conflict',
+        severity:           'warning',
+        icon:               '✈️',
+        title:              'Long journey — other activities affected',
+        message:            `"${journey.name}" takes ${formatDuration(estimateDuration(journey))}. The ${others.length} other activit${others.length === 1 ? 'y' : 'ies'} on this day may not be reachable.`,
+        hint:               nextDay
+          ? `Move the other activities to ${nextDay.label}.`
+          : prevDay
+            ? `Move the other activities to ${prevDay.label}.`
+            : 'Consider spreading activities across adjacent days.',
+        impactedActivities,
+        dayIndex:           i,
+        actIds:             [journey.id, ...others.map(a => a.id)],
+      });
+    });
   });
 
   return warnings;

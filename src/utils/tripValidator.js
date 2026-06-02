@@ -21,7 +21,13 @@
  *   6. Very early non-transport start (< 6am)
  *   7. Empty day — ALL days, warning severity (common AI miss on 7+ day trips)
  *   8. Notes-only day — has notes but no real activities
+ *   9. Wake time conflict — non-transport activity too early for late/regular families
+ *  10. Dietary conflict — food activity name contains meat/alcohol keywords vs group dietary profile
  */
+
+// ─── Dietary conflict patterns ────────────────────────────────────
+const MEAT_RE = /\b(beef|pork|lamb|chicken|mutton|fish|prawn|shrimp|seafood|lobster|crab|oyster|sashimi|sushi|steak|burger|bbq|barbecue|bacon|ham|salami|pepperoni|chorizo|meat|non.?veg)\b/i;
+const ALCO_RE = /\b(beer|wine|cocktail|whisky|whiskey|vodka|rum|gin|spirits|alcohol|brewery|pub|bar|tavern|champagne|prosecco|sake|sangria|mojito|margarita|tequila)\b/i;
 
 // ─── Duration estimation ──────────────────────────────────────────
 
@@ -156,7 +162,7 @@ export function formatDuration(mins) {
 
 // ─── Per-day validation ───────────────────────────────────────────
 
-function validateDay(day, dayIndex) {
+function validateDay(day, dayIndex, families = []) {
   const warnings = [];
 
   // Sort non-skipped activities by time
@@ -271,6 +277,78 @@ function validateDay(day, dayIndex) {
     });
   }
 
+  // ── Rule 9: Wake time conflict ────────────────────────────────────
+  // 'late' families shouldn't have non-transport activities before 9am.
+  // 'regular' (default) families shouldn't have non-transport before 7am.
+  // 'early' families have no restriction.
+  if (families.length > 0) {
+    const lateFamilies    = families.filter(f => f.wakeTime === 'late').map(f => f.name);
+    const regularFamilies = families.filter(f => !f.wakeTime || f.wakeTime === 'regular').map(f => f.name);
+
+    timeline.forEach(({ act, startMin }) => {
+      if (act.type === 'transport' || act.type === 'note') return;
+      if (startMin < 9 * 60 && lateFamilies.length > 0) {
+        warnings.push({
+          type:     'wake_time',
+          severity: 'warning',
+          icon:     '🦉',
+          title:    'Early for late risers',
+          message:  `"${act.name}" starts at ${act.time} — ${lateFamilies.join(', ')} tend to wake late (after 9am).`,
+          hint:     'Consider moving this activity to the afternoon, or confirm the group is OK with an early start.',
+          dayIndex,
+          actIds:   [act.id],
+        });
+      } else if (startMin < 7 * 60 && regularFamilies.length > 0) {
+        warnings.push({
+          type:     'wake_time',
+          severity: 'info',
+          icon:     '⏰',
+          title:    'Very early for the group',
+          message:  `"${act.name}" starts at ${act.time} — before 7am for ${regularFamilies.join(', ')}.`,
+          hint:     'Check this is intentional (e.g. a sunrise trek or early flight connection).',
+          dayIndex,
+          actIds:   [act.id],
+        });
+      }
+    });
+  }
+
+  // ── Rule 10: Dietary conflict ─────────────────────────────────────
+  // Flag food activities whose name/detail contains meat or alcohol keywords
+  // when the group has veg/vegan/no-alcohol families.
+  if (families.length > 0) {
+    const vegFamilies   = families.filter(f => (f.dietary || []).some(d => d === 'vegetarian' || d === 'vegan')).map(f => f.name);
+    const noAlcoFamilies = families.filter(f => (f.dietary || []).includes('no-alcohol')).map(f => f.name);
+
+    acts.filter(a => a.type === 'food').forEach(act => {
+      const text = `${act.name} ${act.detail || ''}`;
+      if (vegFamilies.length > 0 && MEAT_RE.test(text)) {
+        warnings.push({
+          type:     'dietary_conflict',
+          severity: 'warning',
+          icon:     '🥦',
+          title:    'Dietary conflict',
+          message:  `"${act.name}" may contain meat/seafood — ${vegFamilies.join(', ')} are vegetarian/vegan.`,
+          hint:     'Confirm this restaurant has suitable vegetarian options, or swap for a veg-friendly place.',
+          dayIndex,
+          actIds:   [act.id],
+        });
+      }
+      if (noAlcoFamilies.length > 0 && ALCO_RE.test(text)) {
+        warnings.push({
+          type:     'dietary_conflict',
+          severity: 'warning',
+          icon:     '🚫',
+          title:    'Alcohol in activity',
+          message:  `"${act.name}" involves alcohol — ${noAlcoFamilies.join(', ')} prefer no alcohol.`,
+          hint:     'Check if a non-alcoholic option is available, or consider an alternative activity.',
+          dayIndex,
+          actIds:   [act.id],
+        });
+      }
+    });
+  }
+
   return warnings;
 }
 
@@ -291,7 +369,7 @@ export function validateTrip(trip) {
   const warnings = [];
 
   trip.days.forEach((day, i) => {
-    warnings.push(...validateDay(day, i));
+    warnings.push(...validateDay(day, i, trip.families || []));
   });
 
   // ── Trip rule: empty or near-empty days ──────────────────────────

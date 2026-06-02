@@ -327,7 +327,160 @@ function escHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-// ─── Public export function ───────────────────────────────────────────────────
+// ─── Per-day HTML builder ─────────────────────────────────────────────────────
+
+function buildDayHTML(trip, day, dayIndex) {
+  const dayCost = (day.activities || []).reduce((s, a) => s + (a.costPerPerson || 0), 0);
+
+  const css = `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; font-size: 13px; }
+    .page { max-width: 600px; margin: 0 auto; padding: 28px; }
+    .brand { font-size: 10px; font-weight: 700; color: #6b7280; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 4px; }
+    .day-title { font-size: 22px; font-weight: 800; color: #1a1a2e; margin-bottom: 2px; }
+    .day-meta  { font-size: 12px; color: #6b7280; margin-bottom: 16px; }
+    .families  { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .fam-tag   { border-radius: 20px; padding: 4px 12px; font-size: 11px; font-weight: 700; border-left: 3px solid; }
+    .diet-tag  { font-size: 10px; color: #6b7280; margin-top: 2px; }
+    .divider   { height: 1px; background: #e5e7eb; margin: 12px 0; }
+    .slot-label { font-size: 10px; font-weight: 800; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.8px; margin: 14px 0 6px; }
+    .activity  { display: flex; align-items: flex-start; gap: 10px; padding: 7px 10px; border-radius: 6px; margin-bottom: 3px; background: #fafafa; }
+    .act-time  { font-size: 11px; color: #6b7280; width: 40px; flex-shrink: 0; padding-top: 1px; font-variant-numeric: tabular-nums; }
+    .act-dot   { width: 7px; height: 7px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+    .act-body  { flex: 1; }
+    .act-name  { font-weight: 600; font-size: 13px; color: #1a1a2e; }
+    .act-detail{ font-size: 11px; color: #6b7280; margin-top: 1px; }
+    .act-cost  { font-size: 12px; font-weight: 700; color: #374151; white-space: nowrap; flex-shrink: 0; }
+    .summary   { background: #f3f4f6; border-radius: 8px; padding: 12px 16px; margin-top: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .sum-label { font-size: 10px; color: #6b7280; font-weight: 700; text-transform: uppercase; }
+    .sum-val   { font-size: 18px; font-weight: 800; color: #1a1a2e; }
+    .footer    { margin-top: 20px; font-size: 10px; color: #9ca3af; text-align: center; }
+  `;
+
+  const SLOT_ORDER = ['morning', 'afternoon', 'evening', 'night'];
+  const SLOT_LABELS = { morning: '🌅 Morning', afternoon: '☀️ Afternoon', evening: '🌆 Evening', night: '🌙 Night' };
+
+  function getSlot(timeStr) {
+    const [h] = (timeStr || '09:00').split(':').map(Number);
+    const m = h * 60;
+    if (m < 720)  return 'morning';
+    if (m < 1020) return 'afternoon';
+    if (m < 1260) return 'evening';
+    return 'night';
+  }
+
+  const bySlot = { morning: [], afternoon: [], evening: [], night: [] };
+  (day.activities || [])
+    .slice()
+    .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+    .forEach(a => bySlot[getSlot(a.time)].push(a));
+
+  const activitiesHTML = SLOT_ORDER
+    .filter(sk => bySlot[sk].length > 0)
+    .map(sk => {
+      const rows = bySlot[sk].map(act => {
+        const color = ACT_COLORS[act.type] || '#6b7280';
+        const icon  = ACT_ICONS[act.type]  || '📌';
+        return `
+          <div class="activity">
+            <div class="act-time">${act.time || ''}</div>
+            <div class="act-dot" style="background:${color}"></div>
+            <div class="act-body">
+              <div class="act-name">${icon} ${escHtml(act.name)}</div>
+              ${act.detail ? `<div class="act-detail">${escHtml(act.detail)}</div>` : ''}
+            </div>
+            ${act.costPerPerson > 0 ? `<div class="act-cost">$${act.costPerPerson}/p</div>` : ''}
+          </div>`;
+      }).join('');
+      return `<div class="slot-label">${SLOT_LABELS[sk]}</div>${rows}`;
+    }).join('');
+
+  const familiesHTML = (trip.families || []).map(fam => {
+    const dietLabels = (fam.dietary || []).join(' · ');
+    return `
+      <div class="fam-tag" style="border-left-color:${fam.color};background:${fam.color}14;color:${fam.color}">
+        ${escHtml(fam.name)}
+        ${dietLabels ? `<div class="diet-tag">${dietLabels}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  const now = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escHtml(day.label)} — ${escHtml(trip.name)}</title>
+  <style>${css}</style>
+</head>
+<body>
+<div class="page">
+  <div class="brand">Voyara · ${escHtml(trip.name)}</div>
+  <div class="day-title">${escHtml(day.label)}</div>
+  <div class="day-meta">📅 ${fmt(day.date)} · 📍 ${escHtml(trip.destination)}</div>
+  <div class="families">${familiesHTML}</div>
+  <div class="divider"></div>
+  ${activitiesHTML || '<p style="color:#9ca3af;font-size:12px;">No activities planned.</p>'}
+  <div class="summary">
+    <div>
+      <div class="sum-label">Day cost estimate</div>
+      <div class="sum-val">${fmtM(dayCost)}<span style="font-size:12px;font-weight:500;color:#6b7280">/person</span></div>
+    </div>
+    <div style="text-align:right">
+      <div class="sum-label">${(day.activities || []).length} activities</div>
+    </div>
+  </div>
+  <div class="footer">Generated ${now} · Voyara multi-family travel planner</div>
+</div>
+</body>
+</html>`;
+}
+
+// ─── Public export functions ──────────────────────────────────────────────────
+
+/**
+ * exportDayAsPDF(trip, day, dayIndex)
+ *
+ * Compact single-day PDF: families + dietary, activities by slot, day cost summary.
+ * Triggered from the ⓘ detail sheet in ItineraryScreen.
+ */
+export async function exportDayAsPDF(trip, day) {
+  if (!trip || !day) return;
+
+  try {
+    let Print, Sharing;
+    try {
+      Print   = await import('expo-print');
+      Sharing = await import('expo-sharing');
+    } catch {
+      Alert.alert(
+        'Package not installed',
+        'Run this in your terminal first:\n\nnpx expo install expo-print expo-sharing\n\nThen restart Expo Go.',
+        [{ text: 'OK' }],
+      );
+      return;
+    }
+
+    const html = buildDayHTML(trip, day);
+    const { uri } = await Print.printToFileAsync({ html, base64: false });
+
+    const canShare = await Sharing.isAvailableAsync();
+    if (!canShare) {
+      Alert.alert('Sharing not available', 'PDF was saved but sharing is not supported on this device.');
+      return;
+    }
+
+    await Sharing.shareAsync(uri, {
+      mimeType: 'application/pdf',
+      dialogTitle: `Share ${day.label} plan`,
+      UTI: 'com.adobe.pdf',
+    });
+  } catch (err) {
+    console.error('[exportPlan:day]', err);
+    Alert.alert('Export failed', `Could not generate PDF: ${err.message}`);
+  }
+}
 
 /**
  * exportTripAsPDF(trip, travelers)

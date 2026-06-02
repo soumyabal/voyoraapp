@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal, Share } from 'react-native';
 import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import DiscoverModal from '../modals/DiscoverModal';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
 import Icon from '../components/ui/Icon';
+import Snackbar from '../components/ui/Snackbar';
 import { fmt, fmtM, getActivityIcon } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration } from '../utils/tripValidator';
@@ -333,6 +334,9 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const [defaultSlotTime,       setDefaultSlotTime]       = useState('09:00');
   const [showDiscover,          setShowDiscover]          = useState(false);
   const [movingAct,             setMovingAct]             = useState(null);
+  const [snack,                 setSnack]                 = useState(null);  // undo toast
+  const snackTimer = useRef(null);
+  useEffect(() => () => clearTimeout(snackTimer.current), []);
   const [reorderHint,           setReorderHint]           = useState(false);
   const [collapsedSlots,        setCollapsedSlots]        = useState({});
   const [mustDosDismissed,      setMustDosDismissed]      = useState(false);
@@ -369,9 +373,34 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     const next = !act.status ? 'done' : act.status === 'done' ? 'skipped' : null;
     markActivityStatus(trip.id, act.id, next);
   };
-  // Direct-status setters for swipe actions (toggle off if already set)
-  const setDone    = (act) => markActivityStatus(trip.id, act.id, act.status === 'done'    ? null : 'done');
-  const setSkipped = (act) => markActivityStatus(trip.id, act.id, act.status === 'skipped' ? null : 'skipped');
+  // Show an undo toast after a status change; rolls back to the prior status.
+  const showUndo = (message, icon, actId, prevStatus) => {
+    clearTimeout(snackTimer.current);
+    setSnack({ message, icon, actId, prevStatus, nonce: Date.now() });
+    snackTimer.current = setTimeout(() => setSnack(null), 4500);
+  };
+  const undoStatus = () => {
+    if (!snack) return;
+    clearTimeout(snackTimer.current);
+    markActivityStatus(trip.id, snack.actId, snack.prevStatus);
+    setSnack(null);
+  };
+
+  // Direct-status setters for swipe actions (toggle off if already set) + undo toast.
+  const setDone = (act) => {
+    const prev = act.status ?? null;
+    const next = prev === 'done' ? null : 'done';
+    markActivityStatus(trip.id, act.id, next);
+    showUndo(next === 'done' ? 'Marked as done' : 'Marked as not done',
+             next === 'done' ? 'checkmark-circle' : 'ellipse-outline', act.id, prev);
+  };
+  const setSkipped = (act) => {
+    const prev = act.status ?? null;
+    const next = prev === 'skipped' ? null : 'skipped';
+    markActivityStatus(trip.id, act.id, next);
+    showUndo(next === 'skipped' ? "Marked as didn't do" : 'Status cleared',
+             next === 'skipped' ? 'close-circle' : 'ellipse-outline', act.id, prev);
+  };
 
   // Long-press → move activity to a different time slot (same day)
   const openSlotMove = (act) => {
@@ -699,6 +728,18 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           </TouchableOpacity>
         );
       })()}
+
+      {/* Undo toast — appears above the FABs after a done/didn't-do swipe */}
+      {snack && (
+        <Snackbar
+          key={snack.nonce}
+          message={snack.message}
+          icon={snack.icon}
+          actionLabel="Undo"
+          onAction={undoStatus}
+          bottom={92}
+        />
+      )}
 
       <AddActivityModal
         visible={showAddActivity}

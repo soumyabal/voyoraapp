@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, Modal, TouchableOpacity, StyleSheet,
   ScrollView, FlatList, TextInput, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Image,
+  KeyboardAvoidingView, Platform, Image, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GOOGLE_PLACES_API_KEY } from '../config';
@@ -122,7 +122,7 @@ async function fetchPlaces(textQuery) {
       const place = {
         name:p.displayName?.text??'Place', address:p.formattedAddress??'',
         rating:p.rating??null, ratingCount:p.userRatingCount??0,
-        costPerPerson:PRICE_TO_COST[p.priceLevel]??0, types:p.types??[],
+        costPerPerson:PRICE_TO_COST[p.priceLevel]??0, priceLevel:p.priceLevel??null, types:p.types??[],
         activityType:inferActivityType(p.types??[]),
         wheelchairOk:p.accessibilityOptions?.wheelchairAccessibleEntrance??null,
         url:p.websiteUri??'', lat:p.location?.latitude??null, lng:p.location?.longitude??null,
@@ -150,10 +150,18 @@ function PlaceCard({ place, onAdd, added, selectMode, selected, onToggle }) {
           {place.rating!=null && <View style={card.ratingRow}><Icon name="star" size={11} color="#e0a93c" /><Text style={card.rating}>{place.rating.toFixed(1)}</Text></View>}
           {place.costPerPerson>0
             ? <View style={card.costBadge}><Text style={card.costText}>~${place.costPerPerson}/p</Text></View>
-            : <View style={[card.costBadge,{backgroundColor:'#dcfce7'}]}><Text style={[card.costText,{color:'#15803d'}]}>Free</Text></View>}
+            : place.priceLevel==='PRICE_LEVEL_FREE'
+              ? <View style={[card.costBadge,{backgroundColor:'#dcfce7'}]}><Text style={[card.costText,{color:'#15803d'}]}>Free</Text></View>
+              : null}
           {place.wheelchairOk && <Text style={card.badge}>{'♿'}</Text>}
         </View>
         {!!place.address && <Text style={card.address} numberOfLines={1}>{'\u{1F4CD}'} {place.address}</Text>}
+        {!!place.url && (
+          <TouchableOpacity style={card.linkRow} onPress={() => Linking.openURL(place.url)} hitSlop={{top:6,bottom:6,left:6,right:6}}>
+            <Icon name="open-outline" size={12} color={colors.accent} />
+            <Text style={card.linkText}>{place.activityType==='stay' ? 'Book rooms ↗' : 'Visit website ↗'}</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <TouchableOpacity
         style={[card.addBtn, isOn&&card.addBtnDone]}
@@ -181,7 +189,9 @@ function PlaceMapCard({ place, checked, onToggle }) {
         <Text style={mc.name} numberOfLines={1}>{place.name}</Text>
         <View style={mc.meta}>
           {place.rating != null && <><Icon name="star" size={11} color="#e0a93c" /><Text style={mc.rating}>{place.rating.toFixed(1)}</Text></>}
-          <Text style={place.costPerPerson > 0 ? mc.cost : mc.free}>{place.costPerPerson > 0 ? `~$${place.costPerPerson}/p` : 'Free'}</Text>
+          {place.costPerPerson > 0
+            ? <Text style={mc.cost}>~${place.costPerPerson}/p</Text>
+            : place.priceLevel === 'PRICE_LEVEL_FREE' ? <Text style={mc.free}>Free</Text> : null}
         </View>
       </View>
     </TouchableOpacity>
@@ -845,6 +855,8 @@ const card = StyleSheet.create({
   wrap:{flexDirection:'row',alignItems:'center',backgroundColor:'#fff',borderRadius:radius.lg,borderWidth:1,borderColor:colors.border,marginBottom:spacing.sm,padding:spacing.md,gap:spacing.sm,...shadow.sm},
   thumb:{width:58,height:58,borderRadius:radius.md,backgroundColor:colors.surface2},
   thumbPh:{alignItems:'center',justifyContent:'center'},
+  linkRow:{flexDirection:'row',alignItems:'center',gap:4,marginTop:4},
+  linkText:{fontSize:12,fontWeight:'800',color:colors.accent},
   wrapSel:{borderColor:colors.smart,backgroundColor:colors.smartSoft},
   body:{flex:1,gap:4},
   nameRow:{flexDirection:'row',alignItems:'flex-start',gap:6},

@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, Modal, TouchableOpacity, StyleSheet,
   ScrollView, FlatList, TextInput, ActivityIndicator,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GOOGLE_PLACES_API_KEY } from '../config';
@@ -103,7 +103,10 @@ function inferActivityType(types = []) {
 }
 
 const PLACES_URL = 'https://places.googleapis.com/v1/places:searchText';
-const FIELD_MASK = ['places.displayName','places.formattedAddress','places.rating','places.userRatingCount','places.priceLevel','places.types','places.accessibilityOptions','places.websiteUri','places.location'].join(',');
+const FIELD_MASK = ['places.displayName','places.formattedAddress','places.rating','places.userRatingCount','places.priceLevel','places.types','places.accessibilityOptions','places.websiteUri','places.location','places.photos'].join(',');
+
+// Google Place Photos: a photo resource name → image URL (billed per fetch).
+const photoUrl = name => `https://places.googleapis.com/v1/${name}/media?maxWidthPx=640&maxHeightPx=420&key=${GOOGLE_PLACES_API_KEY}`;
 
 async function fetchPlaces(textQuery) {
   if (!GOOGLE_PLACES_API_KEY) return [];
@@ -123,6 +126,7 @@ async function fetchPlaces(textQuery) {
         activityType:inferActivityType(p.types??[]),
         wheelchairOk:p.accessibilityOptions?.wheelchairAccessibleEntrance??null,
         url:p.websiteUri??'', lat:p.location?.latitude??null, lng:p.location?.longitude??null,
+        photo:p.photos?.[0]?.name ? photoUrl(p.photos[0].name) : null,
       };
       place.vegFriendly = isVegFriendly(place);
       return place;
@@ -134,9 +138,11 @@ function PlaceCard({ place, onAdd, added, selectMode, selected, onToggle }) {
   const isOn = selectMode ? selected : added;
   return (
     <View style={[card.wrap, selectMode&&selected&&card.wrapSel]}>
+      {place.photo
+        ? <Image source={{uri:place.photo}} style={card.thumb} />
+        : <View style={[card.thumb, card.thumbPh]}><Icon name={TYPE_ICON[place.activityType]||'activity'} size={20} color={TYPE_TINT[place.activityType]||colors.subtle} /></View>}
       <View style={card.body}>
         <View style={card.nameRow}>
-          <Icon name={TYPE_ICON[place.activityType]||'activity'} size={15} color={TYPE_TINT[place.activityType]||colors.subtle} style={{marginTop:2}} />
           <Text style={card.name} numberOfLines={2}>{place.name}</Text>
           {place.vegFriendly && <View style={card.vegBadge}><Text style={card.vegBadgeText}>{'\u{1F966} Veg'}</Text></View>}
         </View>
@@ -156,6 +162,29 @@ function PlaceCard({ place, onAdd, added, selectMode, selected, onToggle }) {
         <Icon name={isOn?'check':'add'} size={20} color={isOn?colors.success:'#fff'} />
       </TouchableOpacity>
     </View>
+  );
+}
+
+// ─── Photo card for the map carousel (mindtrip-style) ────────────────
+function PlaceMapCard({ place, checked, onToggle }) {
+  return (
+    <TouchableOpacity style={mc.card} activeOpacity={0.9} onPress={() => onToggle(place)}>
+      <View>
+        {place.photo
+          ? <Image source={{ uri: place.photo }} style={mc.photo} />
+          : <View style={[mc.photo, mc.photoPh]}><Icon name={TYPE_ICON[place.activityType]||'activity'} size={26} color={TYPE_TINT[place.activityType]||colors.subtle} /></View>}
+        <View style={[mc.check, checked && mc.checkOn]}>
+          <Icon name={checked ? 'check' : 'add'} size={16} color={checked ? '#fff' : colors.accent} />
+        </View>
+      </View>
+      <View style={mc.body}>
+        <Text style={mc.name} numberOfLines={1}>{place.name}</Text>
+        <View style={mc.meta}>
+          {place.rating != null && <><Icon name="star" size={11} color="#e0a93c" /><Text style={mc.rating}>{place.rating.toFixed(1)}</Text></>}
+          <Text style={place.costPerPerson > 0 ? mc.cost : mc.free}>{place.costPerPerson > 0 ? `~$${place.costPerPerson}/p` : 'Free'}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -482,21 +511,29 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <View style={s.center}><ActivityIndicator size="large" color={colors.primary}/><Text style={s.loadingText}>Searching {destination}…</Text></View>
           ) : error ? (
             <View style={s.center}><Icon name="search" size={34} color={colors.subtle} /><Text style={s.errorText}>{error}</Text></View>
-          ) : (
+          ) : viewMode === 'map' ? (
             <View style={{ flex: 1 }}>
-              {viewMode === 'map' && <DiscoverMap places={results} />}
+              <DiscoverMap places={results} />
               <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
-                contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
+                horizontal showsHorizontalScrollIndicator={false}
+                style={s.carousel} contentContainerStyle={s.carouselContent}
                 renderItem={({item}) => (
-                  <PlaceCard place={item} onAdd={handleAdd} added={addedNames.has(item.name)}
-                    selectMode={selectMode} selected={basketHas(item.name)} onToggle={toggleBasket}/>
+                  <PlaceMapCard place={item} checked={basketHas(item.name)} onToggle={toggleBasket}/>
                 )}
               />
             </View>
+          ) : (
+            <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
+              contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
+              renderItem={({item}) => (
+                <PlaceCard place={item} onAdd={handleAdd} added={addedNames.has(item.name)}
+                  selectMode={selectMode} selected={basketHas(item.name)} onToggle={toggleBasket}/>
+              )}
+            />
           )}
 
-          {/* Basket bar — appears in select mode once events are chosen */}
-          {selectMode && basket.length > 0 && (
+          {/* Basket bar — appears once events are chosen (select mode or map) */}
+          {(selectMode || viewMode === 'map') && basket.length > 0 && (
             <View style={[s.basketBar, { paddingBottom: (insets.bottom || spacing.md) }]}>
               <View style={{ flex: 1 }}>
                 <Text style={s.basketCount}>{basket.length} event{basket.length !== 1 ? 's' : ''} selected</Text>
@@ -763,7 +800,9 @@ const s = StyleSheet.create({
   filterChipTextActive:{color:'#15803d',fontWeight:'700'},
   dietBadge:{fontSize:11,color:'#15803d',fontWeight:'700',marginTop:3},
   list:{paddingHorizontal:spacing.xxl,paddingBottom:32},
-  mapPane:{height:300,marginHorizontal:spacing.xxl,marginBottom:spacing.sm,borderRadius:radius.lg,overflow:'hidden',borderWidth:1,borderColor:colors.hairline,backgroundColor:'#dfe6e9'},
+  mapPane:{flex:1,backgroundColor:'#dfe6e9'},
+  carousel:{position:'absolute',left:0,right:0,bottom:0},
+  carouselContent:{paddingHorizontal:spacing.md,paddingVertical:spacing.md},
   resultsBar:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:spacing.xxl,paddingVertical:spacing.xs},
   resultCount:{...typography.caption,color:colors.muted},
   viewToggle:{flexDirection:'row',backgroundColor:colors.surface2,borderRadius:radius.full,padding:3,gap:2},
@@ -804,6 +843,8 @@ const sp = StyleSheet.create({
 
 const card = StyleSheet.create({
   wrap:{flexDirection:'row',alignItems:'center',backgroundColor:'#fff',borderRadius:radius.lg,borderWidth:1,borderColor:colors.border,marginBottom:spacing.sm,padding:spacing.md,gap:spacing.sm,...shadow.sm},
+  thumb:{width:58,height:58,borderRadius:radius.md,backgroundColor:colors.surface2},
+  thumbPh:{alignItems:'center',justifyContent:'center'},
   wrapSel:{borderColor:colors.smart,backgroundColor:colors.smartSoft},
   body:{flex:1,gap:4},
   nameRow:{flexDirection:'row',alignItems:'flex-start',gap:6},
@@ -865,4 +906,19 @@ const mp = StyleSheet.create({
   legendDot:{fontSize:11},
   legendTxt:{fontSize:11,fontWeight:'700',color:colors.body,marginRight:8},
   cardWrap:{position:'absolute',left:spacing.md,right:spacing.md,bottom:spacing.md},
+});
+
+// Map photo carousel card
+const mc = StyleSheet.create({
+  card:{width:190,backgroundColor:'#fff',borderRadius:radius.lg,marginRight:spacing.sm,overflow:'hidden',borderWidth:1,borderColor:colors.hairline,...shadow.lg},
+  photo:{width:'100%',height:104,backgroundColor:colors.surface2},
+  photoPh:{alignItems:'center',justifyContent:'center'},
+  check:{position:'absolute',top:8,right:8,width:30,height:30,borderRadius:15,backgroundColor:'rgba(255,255,255,0.95)',alignItems:'center',justifyContent:'center',...shadow.sm},
+  checkOn:{backgroundColor:colors.accent},
+  body:{padding:spacing.sm,gap:3},
+  name:{...typography.smallBold,color:colors.ink,fontSize:13},
+  meta:{flexDirection:'row',alignItems:'center',gap:4},
+  rating:{fontSize:11,fontWeight:'700',color:'#92400e',marginRight:4},
+  cost:{fontSize:11,fontWeight:'700',color:colors.green},
+  free:{fontSize:11,fontWeight:'700',color:colors.green},
 });

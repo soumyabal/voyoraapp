@@ -15,6 +15,7 @@ import { uid } from '../utils/helpers';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
 import { autoArrange } from '../utils/autoArrange';
+import { WebView } from 'react-native-webview';
 import Icon from '../components/ui/Icon';
 
 // Place type → Icon name + tint
@@ -158,10 +159,76 @@ function PlaceCard({ place, onAdd, added, selectMode, selected, onToggle }) {
   );
 }
 
+// ─── Map view (Leaflet in a WebView — works in Expo Go) ──────────────
+const MAP_TINT = { food: '#e17055', stay: '#6c5ce7', activity: '#0e9f6e' };
+
+// Self-contained Leaflet HTML: rating-labelled pins coloured by type,
+// OpenStreetMap tiles (no API key), fit to all markers. A pin tap posts
+// the place index back to React Native.
+function buildMapHTML(places) {
+  const pts = places.map((p, i) => ({ i, lat: p.lat, lng: p.lng, t: p.activityType, r: p.rating }));
+  return `<!DOCTYPE html><html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>html,body,#map{height:100%;margin:0;background:#eee}
+.pin{display:flex;align-items:center;justify-content:center;min-width:30px;height:24px;padding:0 7px;border-radius:13px;color:#fff;font:700 12px -apple-system,system-ui,sans-serif;box-shadow:0 1px 5px rgba(0,0,0,.35);border:2px solid #fff;white-space:nowrap}
+.pin.sel{transform:scale(1.2)}</style></head><body><div id="map"></div>
+<script>
+var TINT=${JSON.stringify(MAP_TINT)},DATA=${JSON.stringify(pts)};
+var map=L.map('map',{zoomControl:false,attributionControl:false});
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+var ms=[],pts2=[];
+DATA.forEach(function(d){
+  var c=TINT[d.t]||'#e86c3a',lbl=d.r?d.r.toFixed(1):'•';
+  var ic=L.divIcon({className:'',html:'<div class="pin" style="background:'+c+'">'+lbl+'</div>',iconSize:[38,24],iconAnchor:[19,12]});
+  var m=L.marker([d.lat,d.lng],{icon:ic}).addTo(map);
+  m.on('click',function(){
+    ms.forEach(function(x){if(x._icon)x._icon.firstChild.classList.remove('sel')});
+    if(m._icon)m._icon.firstChild.classList.add('sel');
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'select',index:d.i}));
+  });
+  ms.push(m);pts2.push([d.lat,d.lng]);
+});
+if(pts2.length===1)map.setView(pts2[0],14);else if(pts2.length)map.fitBounds(pts2,{padding:[44,44]});
+function recv(e){try{var msg=JSON.parse(e.data);if(msg.type==='focus'&&DATA[msg.index]){var d=DATA[msg.index];map.setView([d.lat,d.lng],15);ms[msg.index]&&ms[msg.index].fire('click');}}catch(_){}}
+document.addEventListener('message',recv);window.addEventListener('message',recv);
+</script></body></html>`;
+}
+
+// Geographic context pane — located results as pins. Adding happens in the
+// list beneath it (Redfin-style map-over-list), so this is display-only.
+function DiscoverMap({ places }) {
+  const withCoords = places.filter(p => p.lat != null && p.lng != null);
+  const html = React.useMemo(() => buildMapHTML(withCoords), [withCoords.map(p => p.name).join('|')]);
+
+  if (withCoords.length === 0) {
+    return (
+      <View style={[s.center, { height: 150 }]}>
+        <Icon name="map" size={28} color={colors.subtle} />
+        <Text style={s.errorText}>No map locations for these results.</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={s.mapPane}>
+      <WebView originWhitelist={['*']} source={{ html }} style={{ flex: 1, backgroundColor: '#dfe6e9' }} />
+      <View style={mp.legendWrap} pointerEvents="none">
+        <View style={mp.legend}>
+          <Text style={[mp.legendDot, { color: MAP_TINT.activity }]}>●</Text><Text style={mp.legendTxt}>See</Text>
+          <Text style={[mp.legendDot, { color: MAP_TINT.food }]}>●</Text><Text style={mp.legendTxt}>Eat</Text>
+          <Text style={[mp.legendDot, { color: MAP_TINT.stay }]}>●</Text><Text style={mp.legendTxt}>Stay</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime }) {
   const insets = useSafeAreaInsets();
   const { addActivity, applyArrangedActivities } = useStore();
 
+  const [viewMode,   setViewMode]   = useState('list'); // 'list' | 'map'
   const [selectMode, setSelectMode] = useState(false);  // basket multi-select
   const [basket,     setBasket]     = useState([]);      // chosen places (city-tagged)
   const [preview,    setPreview]    = useState(null);    // autoArrange draft + editable placements
@@ -194,7 +261,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     const parsed = parseLocations(destination);
     const start  = parsed[0] || destination;
     setSearchText(''); setAddedNames(new Set());
-    setSelectMode(false); setBasket([]); setPreview(null); setArrangeHints({}); setEditingRow(null);
+    setSelectMode(false); setBasket([]); setPreview(null); setArrangeHints({}); setEditingRow(null); setViewMode('list');
     setCities(parsed.length ? parsed : (destination ? [destination] : []));
     setActiveCity(start);
     setCityPickerOpen(false); setNewCity('');
@@ -395,19 +462,37 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             })}
           </ScrollView>
 
+          {/* Results count + List/Map toggle */}
+          {!loading && !error && results.length > 0 && (
+            <View style={s.resultsBar}>
+              <Text style={s.resultCount}>{results.length} places found</Text>
+              <View style={s.viewToggle}>
+                {[{ k: 'list', ic: 'list' }, { k: 'map', ic: 'map' }].map(v => (
+                  <TouchableOpacity key={v.k} style={[s.viewToggleBtn, viewMode === v.k && s.viewToggleBtnOn]}
+                    onPress={() => setViewMode(v.k)} activeOpacity={0.8}>
+                    <Icon name={v.ic} size={15} color={viewMode === v.k ? '#fff' : colors.subtle} />
+                    <Text style={[s.viewToggleText, viewMode === v.k && { color: '#fff' }]}>{v.k === 'list' ? 'List' : 'Map'}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
           {loading ? (
             <View style={s.center}><ActivityIndicator size="large" color={colors.primary}/><Text style={s.loadingText}>Searching {destination}…</Text></View>
           ) : error ? (
             <View style={s.center}><Icon name="search" size={34} color={colors.subtle} /><Text style={s.errorText}>{error}</Text></View>
           ) : (
-            <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
-              contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
-              renderItem={({item}) => (
-                <PlaceCard place={item} onAdd={handleAdd} added={addedNames.has(item.name)}
-                  selectMode={selectMode} selected={basketHas(item.name)} onToggle={toggleBasket}/>
-              )}
-              ListHeaderComponent={results.length>0?<Text style={s.resultCount}>{results.length} places found</Text>:null}
-            />
+            <View style={{ flex: 1 }}>
+              {viewMode === 'map' && <DiscoverMap places={results} />}
+              <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
+                contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
+                renderItem={({item}) => (
+                  <PlaceCard place={item} onAdd={handleAdd} added={addedNames.has(item.name)}
+                    selectMode={selectMode} selected={basketHas(item.name)} onToggle={toggleBasket}/>
+                )}
+              />
+            </View>
           )}
 
           {/* Basket bar — appears in select mode once events are chosen */}
@@ -678,7 +763,13 @@ const s = StyleSheet.create({
   filterChipTextActive:{color:'#15803d',fontWeight:'700'},
   dietBadge:{fontSize:11,color:'#15803d',fontWeight:'700',marginTop:3},
   list:{paddingHorizontal:spacing.xxl,paddingBottom:32},
-  resultCount:{...typography.caption,color:colors.muted,marginBottom:spacing.sm},
+  mapPane:{height:300,marginHorizontal:spacing.xxl,marginBottom:spacing.sm,borderRadius:radius.lg,overflow:'hidden',borderWidth:1,borderColor:colors.hairline,backgroundColor:'#dfe6e9'},
+  resultsBar:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:spacing.xxl,paddingVertical:spacing.xs},
+  resultCount:{...typography.caption,color:colors.muted},
+  viewToggle:{flexDirection:'row',backgroundColor:colors.surface2,borderRadius:radius.full,padding:3,gap:2},
+  viewToggleBtn:{flexDirection:'row',alignItems:'center',gap:4,paddingHorizontal:spacing.md,paddingVertical:5,borderRadius:radius.full},
+  viewToggleBtnOn:{backgroundColor:colors.accent},
+  viewToggleText:{fontSize:12,fontWeight:'800',color:colors.subtle},
   center:{flex:1,alignItems:'center',justifyContent:'center',padding:spacing.xxxl},
   loadingText:{...typography.body,color:colors.muted,marginTop:spacing.lg},
   errorEmoji:{fontSize:36,marginBottom:spacing.md},
@@ -765,4 +856,13 @@ const pv = StyleSheet.create({
   reBtnText:{fontSize:15,fontWeight:'800',color:colors.text},
   applyBtn:{flex:1,backgroundColor:colors.smart,borderRadius:radius.full,paddingVertical:spacing.md,alignItems:'center'},
   applyBtnText:{color:'#fff',fontWeight:'800',fontSize:16},
+});
+
+// Map view
+const mp = StyleSheet.create({
+  legendWrap:{position:'absolute',top:10,left:0,right:0,alignItems:'center'},
+  legend:{flexDirection:'row',alignItems:'center',gap:4,backgroundColor:'rgba(255,255,255,0.95)',borderRadius:radius.full,paddingHorizontal:12,paddingVertical:5,...shadow.sm},
+  legendDot:{fontSize:11},
+  legendTxt:{fontSize:11,fontWeight:'700',color:colors.body,marginRight:8},
+  cardWrap:{position:'absolute',left:spacing.md,right:spacing.md,bottom:spacing.md},
 });

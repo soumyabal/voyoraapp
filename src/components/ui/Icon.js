@@ -28,6 +28,7 @@ const MAP = {
   person:    'person-circle-outline',
   plane:     'airplane',
   map:       'map-outline',
+  list:      'list',
   sparkles:  'sparkles',
   wand:      'color-wand-outline',
   clock:     'time-outline',

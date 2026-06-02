@@ -31,6 +31,38 @@ const CATEGORIES = [
   { key: 'hotels',      label: '🏨 Hotels',       query: 'highly rated hotels and resorts' },
 ];
 
+// ─── Dietary filter chips ─────────────────────────────────────────
+const FILTER_OPTS = [
+  { key: 'vegetarian',  label: '🥦 Veg',       bias: 'vegetarian friendly' },
+  { key: 'vegan',       label: '🌱 Vegan',      bias: 'vegan friendly' },
+  { key: 'no-alcohol',  label: '🍺 No Alcohol', bias: 'non-alcoholic' },
+  { key: 'gluten-free', label: '🌾 GF',         bias: 'gluten free' },
+];
+
+// ─── Dietary bias helpers ─────────────────────────────────────────
+function getDietaryBias(families = []) {
+  const all = families.flatMap(f => f.dietary || []);
+  const biases = [];
+  if (all.includes('vegetarian') || all.includes('vegan')) biases.push('vegetarian friendly');
+  if (all.includes('vegan'))       biases.push('vegan');
+  if (all.includes('no-alcohol'))  biases.push('non-alcoholic options');
+  if (all.includes('gluten-free')) biases.push('gluten free options');
+  return biases.join(' ');
+}
+
+function getFilterBias(activeFilters) {
+  return activeFilters.map(k => FILTER_OPTS.find(f => f.key === k)?.bias).filter(Boolean).join(' ');
+}
+
+// ─── Veg-friendly detection ───────────────────────────────────────
+const VEG_NAME_RE = /vegetarian|vegan|veggie|plant.based|organic|salad|juice|smoothie|falafel/i;
+const VEG_TYPES   = new Set(['cafe', 'bakery', 'juice_bar', 'health', 'natural_goods']);
+
+function isVegFriendly(place) {
+  if (VEG_NAME_RE.test(place.name)) return true;
+  return (place.types || []).some(t => VEG_TYPES.has(t));
+}
+
 // ─── Price level → cost per person ───────────────────────────────
 const PRICE_TO_COST = {
   PRICE_LEVEL_FREE:           0,
@@ -75,19 +107,23 @@ async function fetchPlaces(textQuery) {
     });
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.places ?? []).map(p => ({
-      name:          p.displayName?.text ?? 'Place',
-      address:       p.formattedAddress ?? '',
-      rating:        p.rating ?? null,
-      ratingCount:   p.userRatingCount ?? 0,
-      costPerPerson: PRICE_TO_COST[p.priceLevel] ?? 0,
-      types:         p.types ?? [],
-      activityType:  inferActivityType(p.types ?? []),
-      wheelchairOk:  p.accessibilityOptions?.wheelchairAccessibleEntrance ?? null,
-      url:           p.websiteUri ?? '',
-      lat:           p.location?.latitude ?? null,
-      lng:           p.location?.longitude ?? null,
-    }));
+    return (data.places ?? []).map(p => {
+      const place = {
+        name:          p.displayName?.text ?? 'Place',
+        address:       p.formattedAddress ?? '',
+        rating:        p.rating ?? null,
+        ratingCount:   p.userRatingCount ?? 0,
+        costPerPerson: PRICE_TO_COST[p.priceLevel] ?? 0,
+        types:         p.types ?? [],
+        activityType:  inferActivityType(p.types ?? []),
+        wheelchairOk:  p.accessibilityOptions?.wheelchairAccessibleEntrance ?? null,
+        url:           p.websiteUri ?? '',
+        lat:           p.location?.latitude ?? null,
+        lng:           p.location?.longitude ?? null,
+      };
+      place.vegFriendly = isVegFriendly(place);
+      return place;
+    });
   } catch (e) {
     console.warn('[DiscoverModal] Places fetch error:', e.message);
     return [];
@@ -95,17 +131,26 @@ async function fetchPlaces(textQuery) {
 }
 
 // ─── Result card ──────────────────────────────────────────────────
-function PlaceCard({ place, onAdd, added }) {
+function PlaceCard({ place, onAdd, added, lateStartGroup, defaultTime }) {
   const typeEmoji =
     place.activityType === 'food'  ? '🍽️' :
     place.activityType === 'stay'  ? '🏨' : '🎯';
 
+  // Dim the "Add to Morning" affordance if group has late wakers and defaultTime is morning
+  const isMorningSlot = !defaultTime || defaultTime < '12:00';
+  const dimMorning    = lateStartGroup && isMorningSlot;
+
   return (
-    <View style={card.wrap}>
+    <View style={[card.wrap, dimMorning && card.wrapDimmed]}>
       <View style={card.body}>
         <View style={card.nameRow}>
           <Text style={card.typeIcon}>{typeEmoji}</Text>
           <Text style={card.name} numberOfLines={2}>{place.name}</Text>
+          {place.vegFriendly && (
+            <View style={card.vegBadge}>
+              <Text style={card.vegBadgeText}>🥦 Veg</Text>
+            </View>
+          )}
         </View>
 
         <View style={card.meta}>
@@ -133,12 +178,12 @@ function PlaceCard({ place, onAdd, added }) {
       </View>
 
       <TouchableOpacity
-        style={[card.addBtn, added && card.addBtnDone]}
+        style={[card.addBtn, added && card.addBtnDone, dimMorning && card.addBtnDimmed]}
         onPress={() => !added && onAdd(place)}
         activeOpacity={added ? 1 : 0.7}
       >
         <Text style={[card.addBtnText, added && { color: '#15803d' }]}>
-          {added ? '✓' : '+'}
+          {added ? '✓' : dimMorning ? '🦉' : '+'}
         </Text>
       </TouchableOpacity>
     </View>
@@ -156,43 +201,73 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [loading, setLoading]               = useState(false);
   const [error, setError]                   = useState(null);
   const [addedNames, setAddedNames]         = useState(new Set());
+  const [activeFilters, setActiveFilters]   = useState([]);
   const searchTimeout = useRef(null);
 
-  const destination = trip?.destination ?? '';
+  const destination  = trip?.destination ?? '';
+  const families     = trip?.families ?? [];
 
-  // Search when category changes or modal opens
+  // Compute group dietary profile for header badge
+  const allDietary  = families.flatMap(f => f.dietary || []);
+  const hasVeg      = allDietary.some(d => d === 'vegetarian' || d === 'vegan');
+  const hasNoAlco   = allDietary.includes('no-alcohol');
+  const dietaryBadgeParts = [
+    hasVeg    && '🥦 Veg',
+    hasNoAlco && '🍺 No Alcohol',
+  ].filter(Boolean);
+
+  // Late-start group: any family with wakeTime === 'late'
+  const lateStartGroup = families.some(f => f.wakeTime === 'late');
+
+  // Seed filter chips from group dietary profile on open
   useEffect(() => {
     if (!visible) return;
     setSearchText('');
     setAddedNames(new Set());
-    runCategorySearch(activeCategory);
+    const seeded = FILTER_OPTS
+      .filter(f => allDietary.includes(f.key))
+      .map(f => f.key);
+    setActiveFilters(seeded);
+  }, [visible]);
+
+  // Re-search when category changes or modal opens
+  useEffect(() => {
+    if (!visible) return;
+    runSearch(searchText, activeCategory, activeFilters);
   }, [visible, activeCategory]);
 
-  const runCategorySearch = async (catKey) => {
-    const cat = CATEGORIES.find(c => c.key === catKey);
-    if (!cat) return;
-    setLoading(true);
-    setError(null);
-    const places = await fetchPlaces(`${cat.query} in ${destination}`);
-    setResults(places);
-    setLoading(false);
-    if (!places.length) setError('No results found. Try another category or search term.');
-  };
+  const runSearch = async (text, catKey, filters) => {
+    const cat      = CATEGORIES.find(c => c.key === catKey);
+    const baseQ    = text.trim()
+      ? `${text.trim()} near ${destination}`
+      : `${cat?.query ?? 'places'} in ${destination}`;
+    const dietBias = getDietaryBias(families);
+    const filtBias = getFilterBias(filters);
+    const bias     = [dietBias, filtBias].filter(Boolean).join(' ');
+    const query    = bias ? `${baseQ} ${bias}` : baseQ;
 
-  const runTextSearch = async (text) => {
-    if (!text.trim()) { runCategorySearch(activeCategory); return; }
     setLoading(true);
     setError(null);
-    const places = await fetchPlaces(`${text.trim()} near ${destination}`);
+    const places = await fetchPlaces(query);
     setResults(places);
     setLoading(false);
-    if (!places.length) setError(`No results for "${text.trim()}". Try a different search.`);
+    if (!places.length) setError(text.trim()
+      ? `No results for "${text.trim()}". Try a different search.`
+      : 'No results found. Try another category or search term.');
   };
 
   const handleSearchChange = (text) => {
     setSearchText(text);
     clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => runTextSearch(text), 600);
+    searchTimeout.current = setTimeout(() => runSearch(text, activeCategory, activeFilters), 600);
+  };
+
+  const toggleFilter = (key) => {
+    const next = activeFilters.includes(key)
+      ? activeFilters.filter(k => k !== key)
+      : [...activeFilters, key];
+    setActiveFilters(next);
+    runSearch(searchText, activeCategory, next);
   };
 
   const handleAdd = (place) => {
@@ -224,9 +299,12 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
           {/* Header */}
           <View style={s.header}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={s.title}>Discover</Text>
               <Text style={s.subtitle} numberOfLines={1}>📍 {destination}</Text>
+              {dietaryBadgeParts.length > 0 && (
+                <Text style={s.dietBadge}>{dietaryBadgeParts.join(' · ')} · filtered</Text>
+              )}
             </View>
             <TouchableOpacity style={s.closeBtn} onPress={onClose}>
               <Text style={s.closeBtnText}>Done</Text>
@@ -243,7 +321,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
               placeholder={`Search in ${destination}…`}
               placeholderTextColor={colors.muted}
               returnKeyType="search"
-              onSubmitEditing={() => runTextSearch(searchText)}
+              onSubmitEditing={() => runSearch(searchText, activeCategory, activeFilters)}
               clearButtonMode="while-editing"
             />
           </View>
@@ -269,6 +347,35 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             ))}
           </ScrollView>
 
+          {/* Dietary filter chips */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.filterChips}
+            style={s.filterRow}
+          >
+            {FILTER_OPTS.map(f => {
+              const on = activeFilters.includes(f.key);
+              return (
+                <TouchableOpacity
+                  key={f.key}
+                  style={[s.filterChip, on && s.filterChipActive]}
+                  onPress={() => toggleFilter(f.key)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[s.filterChipText, on && s.filterChipTextActive]}>{f.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* Late-start group hint */}
+          {lateStartGroup && (!defaultTime || defaultTime < '12:00') && (
+            <View style={s.lateHint}>
+              <Text style={s.lateHintText}>🦉 Some families wake late — morning slots are dimmed</Text>
+            </View>
+          )}
+
           {/* Results */}
           {loading ? (
             <View style={s.center}>
@@ -291,6 +398,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
                   place={item}
                   onAdd={handleAdd}
                   added={addedNames.has(item.name)}
+                  lateStartGroup={lateStartGroup}
+                  defaultTime={defaultTime}
                 />
               )}
               ListHeaderComponent={
@@ -348,6 +457,32 @@ const s = StyleSheet.create({
   loadingText: { ...typography.body, color: colors.muted, marginTop: spacing.lg },
   errorEmoji:  { fontSize: 36, marginBottom: spacing.md },
   errorText:   { ...typography.body, color: colors.muted, textAlign: 'center', lineHeight: 22 },
+
+  // Dietary badge under subtitle
+  dietBadge: { fontSize: 11, color: '#15803d', fontWeight: '700', marginTop: 3 },
+
+  // Dietary filter chips row
+  filterRow:      { maxHeight: 40, marginBottom: spacing.xs },
+  filterChips:    { paddingHorizontal: spacing.xxl, gap: spacing.xs, alignItems: 'center' },
+  filterChip:     {
+    borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.full,
+    paddingHorizontal: spacing.md, paddingVertical: 5, backgroundColor: '#fff',
+  },
+  filterChipActive:     { backgroundColor: '#dcfce7', borderColor: '#16a34a' },
+  filterChipText:       { fontSize: 12, color: colors.muted, fontWeight: '600' },
+  filterChipTextActive: { color: '#15803d', fontWeight: '700' },
+
+  // Late-start group hint bar
+  lateHint: {
+    marginHorizontal: spacing.xxl,
+    marginBottom: spacing.xs,
+    backgroundColor: '#fef9c3',
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    borderWidth: 1,
+    borderColor: '#fde047',
+  },
+  lateHintText: { fontSize: 11, color: '#713f12', fontWeight: '600' },
 });
 
 const card = StyleSheet.create({
@@ -374,6 +509,12 @@ const card = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  addBtnDone: { backgroundColor: '#dcfce7' },
-  addBtnText: { color: '#fff', fontSize: 20, fontWeight: '700', lineHeight: 22 },
+  addBtnDone:   { backgroundColor: '#dcfce7' },
+  addBtnDimmed: { backgroundColor: '#e5e7eb', borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.border },
+  addBtnText:   { color: '#fff', fontSize: 20, fontWeight: '700', lineHeight: 22 },
+
+  wrapDimmed: { opacity: 0.65 },
+
+  vegBadge:     { backgroundColor: '#dcfce7', borderRadius: radius.full, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 4 },
+  vegBadgeText: { fontSize: 10, color: '#15803d', fontWeight: '700' },
 });

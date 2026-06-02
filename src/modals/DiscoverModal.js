@@ -15,6 +15,11 @@ import { uid } from '../utils/helpers';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
 import { autoArrange } from '../utils/autoArrange';
+import Icon from '../components/ui/Icon';
+
+// Place type → Icon name + tint
+const TYPE_ICON = { food: 'food', stay: 'hotel', activity: 'activity' };
+const TYPE_TINT = { food: '#e17055', stay: colors.smart, activity: colors.success };
 
 const CATEGORIES = [
   { key: 'attractions', label: '\u{1F3DB}️ Attractions', query: 'top tourist attractions and landmarks' },
@@ -125,18 +130,17 @@ async function fetchPlaces(textQuery) {
 }
 
 function PlaceCard({ place, onAdd, added, selectMode, selected, onToggle }) {
-  const typeEmoji = place.activityType==='food'?'\u{1F37D}️':place.activityType==='stay'?'\u{1F3E8}':'\u{1F3AF}';
   const isOn = selectMode ? selected : added;
   return (
     <View style={[card.wrap, selectMode&&selected&&card.wrapSel]}>
       <View style={card.body}>
         <View style={card.nameRow}>
-          <Text style={card.typeIcon}>{typeEmoji}</Text>
+          <Icon name={TYPE_ICON[place.activityType]||'activity'} size={15} color={TYPE_TINT[place.activityType]||colors.subtle} style={{marginTop:2}} />
           <Text style={card.name} numberOfLines={2}>{place.name}</Text>
           {place.vegFriendly && <View style={card.vegBadge}><Text style={card.vegBadgeText}>{'\u{1F966} Veg'}</Text></View>}
         </View>
         <View style={card.meta}>
-          {place.rating!=null && <Text style={card.rating}>{'⭐'} {place.rating.toFixed(1)}</Text>}
+          {place.rating!=null && <View style={card.ratingRow}><Icon name="star" size={11} color="#e0a93c" /><Text style={card.rating}>{place.rating.toFixed(1)}</Text></View>}
           {place.costPerPerson>0
             ? <View style={card.costBadge}><Text style={card.costText}>~${place.costPerPerson}/p</Text></View>
             : <View style={[card.costBadge,{backgroundColor:'#dcfce7'}]}><Text style={[card.costText,{color:'#15803d'}]}>Free</Text></View>}
@@ -148,7 +152,7 @@ function PlaceCard({ place, onAdd, added, selectMode, selected, onToggle }) {
         style={[card.addBtn, isOn&&card.addBtnDone]}
         onPress={() => selectMode ? onToggle(place) : (!added && onAdd(place))} activeOpacity={isOn&&!selectMode?1:0.7}
       >
-        <Text style={[card.addBtnText, isOn&&{color:'#15803d'}]}>{isOn?'✓':'+'}</Text>
+        <Icon name={isOn?'check':'add'} size={20} color={isOn?colors.success:'#fff'} />
       </TouchableOpacity>
     </View>
   );
@@ -347,7 +351,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             </View>
             <View style={s.headerActions}>
               <TouchableOpacity style={[s.modeBtn, selectMode&&s.modeBtnOn]} onPress={() => setSelectMode(m => !m)} activeOpacity={0.8}>
-                <Text style={[s.modeBtnText, selectMode&&s.modeBtnTextOn]}>{selectMode ? '\u{1F9E0} Building' : '+ Build a day'}</Text>
+                <Icon name={selectMode?'sparkles':'add'} size={13} color={selectMode?colors.smart:colors.text} />
+                <Text style={[s.modeBtnText, selectMode&&s.modeBtnTextOn]}>{selectMode ? 'Building' : 'Build a day'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={s.closeBtn} onPress={onClose}>
                 <Text style={s.closeBtnText}>Done</Text>
@@ -356,7 +361,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
           </View>
 
           <View style={s.searchRow}>
-            <Text style={s.searchIcon}>{'\u{1F50D}'}</Text>
+            <Icon name="search" size={16} color={colors.subtle} style={{marginRight:spacing.xs}} />
             <TextInput
               style={s.searchInput} value={searchText} onChangeText={handleSearchChange}
               placeholder={`Search in ${cityLabel(activeCity) || destination}…`} placeholderTextColor={colors.muted}
@@ -367,12 +372,13 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
           {/* Prominent location bar — where you're searching + tap to change city */}
           <TouchableOpacity style={s.locBar} onPress={() => setCityPickerOpen(true)} activeOpacity={0.7}>
-            <Text style={s.locBarPin}>{'\u{1F4CD}'}</Text>
+            <Icon name="location" size={18} color={colors.accent} />
             <View style={{ flex: 1 }}>
               <Text style={s.locBarCaption}>SEARCHING IN</Text>
               <Text style={s.locBarCity} numberOfLines={1}>{cityLabel(activeCity) || destination || 'Pick a city'}</Text>
             </View>
-            <Text style={s.locBarChange}>Change ▾</Text>
+            <Text style={s.locBarChange}>Change</Text>
+            <Icon name="forward" size={14} color={colors.accent} />
           </TouchableOpacity>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
@@ -397,7 +403,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
           {loading ? (
             <View style={s.center}><ActivityIndicator size="large" color={colors.primary}/><Text style={s.loadingText}>Searching {destination}…</Text></View>
           ) : error ? (
-            <View style={s.center}><Text style={s.errorEmoji}>{'\u{1F50D}'}</Text><Text style={s.errorText}>{error}</Text></View>
+            <View style={s.center}><Icon name="search" size={34} color={colors.subtle} /><Text style={s.errorText}>{error}</Text></View>
           ) : (
             <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
               contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
@@ -417,7 +423,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
                 <Text style={s.basketHint}>We'll spread them across your days</Text>
               </View>
               <TouchableOpacity style={s.basketBtn} onPress={runArrange} activeOpacity={0.85}>
-                <Text style={s.basketBtnText}>{'\u{1F9E0}'} Auto-arrange</Text>
+                <Icon name="sparkles" size={15} color="#fff" />
+                <Text style={s.basketBtnText}>Auto-arrange</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -630,14 +637,14 @@ const s = StyleSheet.create({
   closeBtn:{backgroundColor:colors.primary,borderRadius:radius.full,paddingHorizontal:spacing.lg,paddingVertical:8,marginTop:4},
   closeBtnText:{color:'#fff',fontWeight:'700',fontSize:14},
   headerActions:{flexDirection:'row',alignItems:'center',gap:spacing.xs,marginTop:4},
-  modeBtn:{borderRadius:radius.full,paddingHorizontal:spacing.md,paddingVertical:8,borderWidth:1.5,borderColor:colors.border,backgroundColor:'#fff'},
-  modeBtnOn:{backgroundColor:'#eef2ff',borderColor:'#6366f1'},
+  modeBtn:{flexDirection:'row',alignItems:'center',gap:4,borderRadius:radius.full,paddingHorizontal:spacing.md,paddingVertical:8,borderWidth:1.5,borderColor:colors.border,backgroundColor:'#fff'},
+  modeBtnOn:{backgroundColor:colors.smartSoft,borderColor:colors.smart},
   modeBtnText:{fontSize:13,fontWeight:'800',color:colors.text},
-  modeBtnTextOn:{color:'#4f46e5'},
+  modeBtnTextOn:{color:colors.smart},
   basketBar:{flexDirection:'row',alignItems:'center',gap:spacing.md,paddingHorizontal:spacing.xxl,paddingTop:spacing.md,backgroundColor:'#fff',borderTopWidth:1,borderTopColor:colors.border,...shadow.lg},
   basketCount:{...typography.bodyBold,color:colors.text},
   basketHint:{fontSize:11,color:colors.muted,marginTop:1},
-  basketBtn:{backgroundColor:'#4f46e5',borderRadius:radius.full,paddingHorizontal:spacing.xl,paddingVertical:spacing.md},
+  basketBtn:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:colors.smart,borderRadius:radius.full,paddingHorizontal:spacing.xl,paddingVertical:spacing.md},
   basketBtnText:{color:'#fff',fontWeight:'800',fontSize:15},
   searchRow:{flexDirection:'row',alignItems:'center',marginHorizontal:spacing.xxl,marginBottom:spacing.sm,backgroundColor:colors.surface2,borderRadius:radius.md,paddingHorizontal:spacing.md,paddingVertical:spacing.xs,borderWidth:1,borderColor:colors.border},
   searchIcon:{fontSize:15,marginRight:spacing.xs},
@@ -652,20 +659,20 @@ const s = StyleSheet.create({
   chipLabel:{fontSize:13,color:colors.text,fontWeight:'600'},
   chipActive:{backgroundColor:colors.primary,borderColor:colors.primary},
   chipTextActive:{color:'#fff'},
-  locChipActive:{backgroundColor:'#2563eb',borderColor:'#2563eb'},
+  locChipActive:{backgroundColor:colors.accent,borderColor:colors.accent},
   // Prominent "searching in <city>" bar
-  locBar:{flexDirection:'row',alignItems:'center',gap:spacing.sm,marginHorizontal:spacing.xxl,marginBottom:spacing.sm,backgroundColor:'#eff6ff',borderRadius:radius.md,borderWidth:1,borderColor:'#bfdbfe',paddingHorizontal:spacing.md,paddingVertical:spacing.sm},
+  locBar:{flexDirection:'row',alignItems:'center',gap:spacing.sm,marginHorizontal:spacing.xxl,marginBottom:spacing.sm,backgroundColor:colors.accentSoft,borderRadius:radius.md,borderWidth:1,borderColor:colors.accentTint,paddingHorizontal:spacing.md,paddingVertical:spacing.sm},
   locBarPin:{fontSize:18},
-  locBarCaption:{fontSize:9,fontWeight:'800',color:'#3b82f6',letterSpacing:0.8},
-  locBarCity:{fontSize:15,fontWeight:'800',color:'#1d4ed8'},
-  locBarChange:{fontSize:13,fontWeight:'800',color:'#2563eb'},
+  locBarCaption:{fontSize:9,fontWeight:'800',color:colors.accent,letterSpacing:0.8},
+  locBarCity:{fontSize:15,fontWeight:'800',color:colors.accentDark},
+  locBarChange:{fontSize:13,fontWeight:'800',color:colors.accent},
   // City picker sheet
   cityPickWrap:{flexDirection:'row',flexWrap:'wrap',gap:spacing.sm,marginBottom:spacing.lg},
   cityPick:{flexDirection:'row',alignItems:'center',gap:6,borderWidth:1.5,borderColor:colors.border,borderRadius:radius.full,paddingHorizontal:spacing.md,paddingVertical:spacing.sm,backgroundColor:'#fff'},
-  cityPickActive:{borderColor:'#2563eb',backgroundColor:'#eff6ff'},
+  cityPickActive:{borderColor:colors.accent,backgroundColor:colors.accentSoft},
   cityPickText:{fontSize:14,fontWeight:'600',color:colors.text},
-  cityPickTextActive:{color:'#1d4ed8',fontWeight:'800'},
-  cityPickCheck:{fontSize:14,fontWeight:'800',color:'#2563eb'},
+  cityPickTextActive:{color:colors.accentDark,fontWeight:'800'},
+  cityPickCheck:{fontSize:14,fontWeight:'800',color:colors.accent},
   cityAddLabel:{fontSize:10,fontWeight:'800',color:colors.muted,textTransform:'uppercase',letterSpacing:0.8,marginBottom:spacing.sm},
   cityAddRow:{flexDirection:'row',alignItems:'center',gap:spacing.sm},
   cityAddInput:{flex:1,borderWidth:1.5,borderColor:colors.border,borderRadius:radius.md,paddingHorizontal:spacing.md,paddingVertical:spacing.sm,fontSize:15,color:colors.text,backgroundColor:'#fff'},
@@ -711,13 +718,14 @@ const sp = StyleSheet.create({
 
 const card = StyleSheet.create({
   wrap:{flexDirection:'row',alignItems:'center',backgroundColor:'#fff',borderRadius:radius.lg,borderWidth:1,borderColor:colors.border,marginBottom:spacing.sm,padding:spacing.md,gap:spacing.sm,...shadow.sm},
-  wrapSel:{borderColor:'#6366f1',backgroundColor:'#eef2ff'},
+  wrapSel:{borderColor:colors.smart,backgroundColor:colors.smartSoft},
   body:{flex:1,gap:4},
   nameRow:{flexDirection:'row',alignItems:'flex-start',gap:6},
   typeIcon:{fontSize:16,marginTop:1},
   name:{...typography.bodyBold,color:colors.text,flex:1,lineHeight:20},
   meta:{flexDirection:'row',alignItems:'center',gap:6,flexWrap:'wrap'},
-  rating:{fontSize:12,color:'#92400e',fontWeight:'600'},
+  ratingRow:{flexDirection:'row',alignItems:'center',gap:3},
+  rating:{fontSize:12,color:'#92400e',fontWeight:'700'},
   costBadge:{backgroundColor:'#e0faf4',borderRadius:radius.full,paddingHorizontal:8,paddingVertical:2},
   costText:{fontSize:11,fontWeight:'700',color:colors.green},
   badge:{fontSize:13},
@@ -734,22 +742,22 @@ const pv = StyleSheet.create({
   dayCard:{backgroundColor:'#fff',borderRadius:radius.lg,borderWidth:1,borderColor:colors.border,padding:spacing.md,marginBottom:spacing.md,...shadow.sm},
   dayTitle:{...typography.bodyBold,color:colors.text,marginBottom:spacing.sm},
   row:{flexDirection:'row',alignItems:'center',gap:spacing.sm,paddingVertical:6,borderTopWidth:1,borderTopColor:colors.border},
-  time:{fontSize:13,fontWeight:'800',color:'#4f46e5',width:48},
+  time:{fontSize:13,fontWeight:'800',color:colors.smart,width:48},
   name:{...typography.body,color:colors.text},
   metaRow:{flexDirection:'row',alignItems:'center',gap:spacing.md,marginTop:1,flexWrap:'wrap'},
   city:{fontSize:11,color:colors.muted},
-  editLink:{fontSize:11,fontWeight:'800',color:'#4f46e5'},
-  editPanel:{backgroundColor:'#f5f3ff',borderRadius:radius.md,padding:spacing.sm,marginTop:spacing.xs,marginBottom:spacing.xs,gap:spacing.xs},
-  editLabel:{fontSize:10,fontWeight:'800',color:'#6d28d9',textTransform:'uppercase',letterSpacing:0.6},
+  editLink:{fontSize:11,fontWeight:'800',color:colors.smart},
+  editPanel:{backgroundColor:colors.smartSoft,borderRadius:radius.md,padding:spacing.sm,marginTop:spacing.xs,marginBottom:spacing.xs,gap:spacing.xs},
+  editLabel:{fontSize:10,fontWeight:'800',color:colors.smartDeep,textTransform:'uppercase',letterSpacing:0.6},
   chipRow:{flexDirection:'row',gap:spacing.xs,alignItems:'center',paddingVertical:2},
   dayChip:{borderWidth:1.5,borderColor:colors.border,borderRadius:radius.full,paddingHorizontal:spacing.md,paddingVertical:6,backgroundColor:'#fff'},
-  dayChipOn:{borderColor:'#6366f1',backgroundColor:'#e0e7ff'},
+  dayChipOn:{borderColor:colors.smart,backgroundColor:colors.smartSoft},
   dayChipText:{fontSize:12,fontWeight:'700',color:colors.text},
-  dayChipTextOn:{color:'#4338ca'},
+  dayChipTextOn:{color:colors.smartDeep},
   spanBtn:{borderWidth:1.5,borderColor:colors.border,borderRadius:radius.full,paddingHorizontal:spacing.md,paddingVertical:6,backgroundColor:'#fff'},
-  spanBtnOn:{borderColor:'#6366f1',backgroundColor:'#e0e7ff'},
+  spanBtnOn:{borderColor:colors.smart,backgroundColor:colors.smartSoft},
   spanBtnText:{fontSize:12,fontWeight:'700',color:colors.text},
-  spanBtnTextOn:{color:'#4338ca'},
+  spanBtnTextOn:{color:colors.smartDeep},
   remove:{width:28,height:28,borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:'#fef2f2'},
   removeText:{fontSize:14,fontWeight:'800',color:'#dc2626'},
   unplacedCard:{backgroundColor:'#fffbeb',borderRadius:radius.lg,borderWidth:1,borderColor:'#fde68a',padding:spacing.md,marginBottom:spacing.md},
@@ -760,6 +768,6 @@ const pv = StyleSheet.create({
   applyBar:{position:'absolute',left:0,right:0,bottom:0,flexDirection:'row',gap:spacing.md,paddingHorizontal:spacing.xxl,paddingTop:spacing.md,backgroundColor:'#fff',borderTopWidth:1,borderTopColor:colors.border,...shadow.lg},
   reBtn:{borderRadius:radius.full,paddingHorizontal:spacing.xl,paddingVertical:spacing.md,borderWidth:1.5,borderColor:colors.border,backgroundColor:'#fff'},
   reBtnText:{fontSize:15,fontWeight:'800',color:colors.text},
-  applyBtn:{flex:1,backgroundColor:'#4f46e5',borderRadius:radius.full,paddingVertical:spacing.md,alignItems:'center'},
+  applyBtn:{flex:1,backgroundColor:colors.smart,borderRadius:radius.full,paddingVertical:spacing.md,alignItems:'center'},
   applyBtnText:{color:'#fff',fontWeight:'800',fontSize:16},
 });

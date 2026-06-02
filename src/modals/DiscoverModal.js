@@ -170,9 +170,9 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [pendingPlace,   setPendingPlace]   = useState(null);
   const [pickerDay,      setPickerDay]      = useState(dayIndex ?? 0);
   const [pickerSlot,     setPickerSlot]     = useState('morning');
-  const [cities,         setCities]         = useState([]);     // searchable cities (chips)
+  const [cities,         setCities]         = useState([]);     // searchable cities
   const [activeCity,     setActiveCity]     = useState('');     // current search city
-  const [addingCity,     setAddingCity]     = useState(false);  // custom-city input open?
+  const [cityPickerOpen, setCityPickerOpen] = useState(false);  // city picker sheet
   const [newCity,        setNewCity]        = useState('');
   const searchTimeout = useRef(null);
   const filterTimeout = useRef(null);
@@ -193,7 +193,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setSearchText(''); setAddedNames(new Set());
     setCities(parsed.length ? parsed : (destination ? [destination] : []));
     setActiveCity(start);
-    setAddingCity(false); setNewCity('');
+    setCityPickerOpen(false); setNewCity('');
     cacheRef.current.clear();
     setActiveFilters(FILTER_OPTS.filter(f => allDietary.includes(f.key)).map(f => f.key));
   }, [visible]);
@@ -242,14 +242,15 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   };
 
   // Selecting a city re-runs the search via the activeCity effect.
-  const selectCity = c => { setAddingCity(false); setActiveCity(c); };
+  const chooseCity = c => { setCityPickerOpen(false); setActiveCity(c); };
 
   // Commit a freely-typed city (need not be in the trip's destination).
   const commitNewCity = () => {
     const c = newCity.trim();
-    setAddingCity(false); setNewCity('');
-    if (!c) return;
+    setNewCity('');
+    if (!c) { setCityPickerOpen(false); return; }
     setCities(prev => prev.some(x => cityLabel(x) === cityLabel(c)) ? prev : [...prev, c]);
+    setCityPickerOpen(false);
     setActiveCity(c);
   };
 
@@ -303,28 +304,15 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             />
           </View>
 
-          {/* City selector — always shown; search any city, not just the destination */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
-            {cities.map(c => (
-              <Chip key={c} label={'\u{1F4CD} ' + cityLabel(c)} active={activeCity === c}
-                activeStyle={s.locChipActive} activeTextStyle={s.chipTextActive}
-                onPress={() => selectCity(c)} />
-            ))}
-            {addingCity ? (
-              <View style={s.addCityWrap}>
-                <TextInput
-                  style={s.addCityInput} value={newCity} onChangeText={setNewCity}
-                  placeholder="City name…" placeholderTextColor={colors.muted}
-                  autoFocus returnKeyType="search"
-                  onSubmitEditing={commitNewCity} onBlur={commitNewCity}
-                />
-              </View>
-            ) : (
-              <Chip label="＋ City" active={false}
-                activeStyle={s.locChipActive} activeTextStyle={s.chipTextActive}
-                onPress={() => setAddingCity(true)} />
-            )}
-          </ScrollView>
+          {/* Prominent location bar — where you're searching + tap to change city */}
+          <TouchableOpacity style={s.locBar} onPress={() => setCityPickerOpen(true)} activeOpacity={0.7}>
+            <Text style={s.locBarPin}>{'\u{1F4CD}'}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.locBarCaption}>SEARCHING IN</Text>
+              <Text style={s.locBarCity} numberOfLines={1}>{cityLabel(activeCity) || destination || 'Pick a city'}</Text>
+            </View>
+            <Text style={s.locBarChange}>Change ▾</Text>
+          </TouchableOpacity>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
             {CATEGORIES.map(cat => (
@@ -425,6 +413,43 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
           </TouchableOpacity>
         </Modal>
 
+        {/* City picker sheet */}
+        <Modal visible={cityPickerOpen} transparent animationType="slide" onRequestClose={() => setCityPickerOpen(false)}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <TouchableOpacity style={sp.overlay} activeOpacity={1} onPress={() => setCityPickerOpen(false)}>
+            <View style={sp.sheet} onStartShouldSetResponder={() => true}>
+              <View style={sp.handle}/>
+              <Text style={sp.sheetTitle}>Search which city?</Text>
+              <Text style={sp.sheetSubtitle}>Pick a stop or type any city — handy for multi-city trips.</Text>
+
+              <View style={s.cityPickWrap}>
+                {cities.map(c => {
+                  const sel = c === activeCity;
+                  return (
+                    <TouchableOpacity key={c} style={[s.cityPick, sel&&s.cityPickActive]} onPress={() => chooseCity(c)} activeOpacity={0.7}>
+                      <Text style={[s.cityPickText, sel&&s.cityPickTextActive]} numberOfLines={1}>{'\u{1F4CD}'} {cityLabel(c)}</Text>
+                      {sel && <Text style={s.cityPickCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={s.cityAddLabel}>Add another city</Text>
+              <View style={s.cityAddRow}>
+                <TextInput
+                  style={s.cityAddInput} value={newCity} onChangeText={setNewCity}
+                  placeholder="e.g. San Diego" placeholderTextColor={colors.muted}
+                  returnKeyType="search" onSubmitEditing={commitNewCity} autoCorrect={false}
+                />
+                <TouchableOpacity style={[s.cityAddBtn, !newCity.trim()&&s.cityAddBtnOff]} onPress={commitNewCity} disabled={!newCity.trim()}>
+                  <Text style={s.cityAddBtnText}>Search</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+          </KeyboardAvoidingView>
+        </Modal>
+
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -451,8 +476,25 @@ const s = StyleSheet.create({
   chipActive:{backgroundColor:colors.primary,borderColor:colors.primary},
   chipTextActive:{color:'#fff'},
   locChipActive:{backgroundColor:'#2563eb',borderColor:'#2563eb'},
-  addCityWrap:{height:36,justifyContent:'center',borderWidth:1.5,borderColor:'#2563eb',borderRadius:radius.full,paddingHorizontal:spacing.md,backgroundColor:'#fff',minWidth:120},
-  addCityInput:{fontSize:13,color:colors.text,fontWeight:'600',padding:0},
+  // Prominent "searching in <city>" bar
+  locBar:{flexDirection:'row',alignItems:'center',gap:spacing.sm,marginHorizontal:spacing.xxl,marginBottom:spacing.sm,backgroundColor:'#eff6ff',borderRadius:radius.md,borderWidth:1,borderColor:'#bfdbfe',paddingHorizontal:spacing.md,paddingVertical:spacing.sm},
+  locBarPin:{fontSize:18},
+  locBarCaption:{fontSize:9,fontWeight:'800',color:'#3b82f6',letterSpacing:0.8},
+  locBarCity:{fontSize:15,fontWeight:'800',color:'#1d4ed8'},
+  locBarChange:{fontSize:13,fontWeight:'800',color:'#2563eb'},
+  // City picker sheet
+  cityPickWrap:{flexDirection:'row',flexWrap:'wrap',gap:spacing.sm,marginBottom:spacing.lg},
+  cityPick:{flexDirection:'row',alignItems:'center',gap:6,borderWidth:1.5,borderColor:colors.border,borderRadius:radius.full,paddingHorizontal:spacing.md,paddingVertical:spacing.sm,backgroundColor:'#fff'},
+  cityPickActive:{borderColor:'#2563eb',backgroundColor:'#eff6ff'},
+  cityPickText:{fontSize:14,fontWeight:'600',color:colors.text},
+  cityPickTextActive:{color:'#1d4ed8',fontWeight:'800'},
+  cityPickCheck:{fontSize:14,fontWeight:'800',color:'#2563eb'},
+  cityAddLabel:{fontSize:10,fontWeight:'800',color:colors.muted,textTransform:'uppercase',letterSpacing:0.8,marginBottom:spacing.sm},
+  cityAddRow:{flexDirection:'row',alignItems:'center',gap:spacing.sm},
+  cityAddInput:{flex:1,borderWidth:1.5,borderColor:colors.border,borderRadius:radius.md,paddingHorizontal:spacing.md,paddingVertical:spacing.sm,fontSize:15,color:colors.text,backgroundColor:'#fff'},
+  cityAddBtn:{backgroundColor:colors.primary,borderRadius:radius.md,paddingHorizontal:spacing.lg,paddingVertical:spacing.sm},
+  cityAddBtnOff:{backgroundColor:colors.border},
+  cityAddBtnText:{color:'#fff',fontWeight:'800',fontSize:14},
   filterChipActive:{backgroundColor:'#dcfce7',borderColor:'#16a34a'},
   filterChipTextActive:{color:'#15803d',fontWeight:'700'},
   dietBadge:{fontSize:11,color:'#15803d',fontWeight:'700',marginTop:3},

@@ -222,7 +222,7 @@ function validateDay(day, dayIndex, families = []) {
     if (others.length >= 2) {
       warnings.push({
         type:     'full_day_conflict',
-        severity: 'warning',
+        severity: 'error',
         icon:     '🎡',
         title:    'Full-day venue',
         message:  `"${act.name}" typically takes a full day (${formatDuration(estimateDuration(act))}). ${others.length} other activities may not fit.`,
@@ -471,7 +471,7 @@ export function validateTrip(trip) {
 
       warnings.push({
         type:               'long_journey_conflict',
-        severity:           'warning',
+        severity:           'error',
         icon:               '✈️',
         title:              'Long journey — other activities affected',
         message:            `"${journey.name}" takes ${formatDuration(estimateDuration(journey))}. The ${others.length} other activit${others.length === 1 ? 'y' : 'ies'} on this day may not be reachable.`,

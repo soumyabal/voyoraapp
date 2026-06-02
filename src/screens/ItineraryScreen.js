@@ -853,6 +853,9 @@ function ActivityCard({ activity: act, trip, isHighlighted, isFirst, isLast, onM
             <>
               <Text style={styles.actTime}>{act.time}</Text>
               <Text style={styles.actIcon}>{actIcon}</Text>
+              {act.type === 'transport' && !!act.arriveTime && (
+                <Text style={styles.actArriveTime}>→{act.arriveTime}</Text>
+              )}
             </>
           )}
         </View>
@@ -1713,6 +1716,7 @@ const styles = StyleSheet.create({
   actTimeCol:    { alignItems: 'center', justifyContent: 'center', minWidth: 44 },
   actTime:       { ...typography.caption, color: colors.primary, fontWeight: '700' },
   actIcon:       { fontSize: 18, marginTop: 3 },
+  actArriveTime: { fontSize: 9, color: colors.muted, fontWeight: '600', marginTop: 3 },
   actStatusEmoji:{ fontSize: 26 },
 
   // Dimmed subtitle (time + cost shown under name when done/skipped)

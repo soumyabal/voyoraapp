@@ -122,6 +122,22 @@ function EditTravelerModal({ visible, initial, onSave, onClose }) {
   );
 }
 
+// ── Dietary / wake time constants ────────────────────────────────
+const DIETARY_OPTS = [
+  { value: 'vegetarian',  label: '🥦 Veg' },
+  { value: 'vegan',       label: '🌱 Vegan' },
+  { value: 'no-alcohol',  label: '🍺 No Alcohol' },
+  { value: 'gluten-free', label: '🌾 GF' },
+  { value: 'halal',       label: '☪️ Halal' },
+  { value: 'kosher',      label: '✡️ Kosher' },
+];
+
+const WAKE_OPTS = [
+  { value: 'early',   label: '🌅 Early',   hint: 'Before 7am' },
+  { value: 'regular', label: '🌤 Regular',  hint: '8–10am' },
+  { value: 'late',    label: '🦉 Late',     hint: 'After 9am' },
+];
+
 // ── Main screen ───────────────────────────────────────────────────
 export default function TravelersScreen({ trip, onUpdatePlan }) {
   const { travelers, deleteTraveler, setMemberOverride, updateFamily, deleteFamily, setFamilyHead } = useStore();
@@ -306,6 +322,54 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
                     <Text style={[styles.chevron, isCollapsed && styles.chevronUp]}>▾</Text>
                   </View>
                 </TouchableOpacity>
+
+                {/* Dietary + wake time (always visible, collapsed in compact row) */}
+                {!isCollapsed && (
+                  <View style={styles.familyProfile}>
+                    <Text style={styles.familyProfileLabel}>Dietary</Text>
+                    <View style={styles.familyProfileChips}>
+                      {DIETARY_OPTS.map(opt => {
+                        const active = (fam.dietary || []).includes(opt.value);
+                        return (
+                          <TouchableOpacity
+                            key={opt.value}
+                            style={[styles.profileChip, active && styles.profileChipActive]}
+                            onPress={() => {
+                              const cur  = fam.dietary || [];
+                              const next = active
+                                ? cur.filter(d => d !== opt.value)
+                                : [...cur, opt.value];
+                              updateFamily(trip.id, fam.id, { dietary: next });
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.profileChipText, active && styles.profileChipTextActive]}>
+                              {opt.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    <Text style={[styles.familyProfileLabel, { marginTop: spacing.sm }]}>Wake time</Text>
+                    <View style={styles.wakeRow}>
+                      {WAKE_OPTS.map(opt => {
+                        const active = (fam.wakeTime || 'regular') === opt.value;
+                        return (
+                          <TouchableOpacity
+                            key={opt.value}
+                            style={[styles.wakeBtn, active && styles.wakeBtnActive]}
+                            onPress={() => updateFamily(trip.id, fam.id, { wakeTime: opt.value })}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.wakeBtnLabel, active && styles.wakeBtnLabelActive]}>{opt.label}</Text>
+                            <Text style={styles.wakeBtnHint}>{opt.hint}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
 
                 {/* Members */}
                 {!isCollapsed && (
@@ -508,6 +572,35 @@ const styles = StyleSheet.create({
   emptyMembers: { padding: spacing.lg, alignItems: 'center', gap: 6 },
   emptyMembersText: { ...typography.small, color: colors.muted },
   emptyMembersLink: { ...typography.smallBold, color: colors.primary },
+
+  // Dietary + wake time section
+  familyProfile: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface2,
+  },
+  familyProfileLabel: { fontSize: 10, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 },
+  familyProfileChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  profileChip: {
+    borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.full,
+    paddingHorizontal: spacing.md, paddingVertical: 5, backgroundColor: '#fff',
+  },
+  profileChipActive:     { backgroundColor: '#dcfce7', borderColor: '#16a34a' },
+  profileChipText:       { fontSize: 12, color: colors.muted, fontWeight: '600' },
+  profileChipTextActive: { color: '#15803d', fontWeight: '700' },
+
+  // Wake time row
+  wakeRow: { flexDirection: 'row', gap: 6 },
+  wakeBtn: {
+    flex: 1, borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.md,
+    paddingVertical: 6, alignItems: 'center', backgroundColor: '#fff',
+  },
+  wakeBtnActive:      { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+  wakeBtnLabel:       { fontSize: 12, fontWeight: '700', color: colors.muted },
+  wakeBtnLabelActive: { color: colors.primary },
+  wakeBtnHint:        { fontSize: 9, color: colors.muted, marginTop: 1 },
 
   // Update Plan sticky banner
   updateBanner: {

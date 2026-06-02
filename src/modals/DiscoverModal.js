@@ -108,13 +108,16 @@ const FIELD_MASK = ['places.displayName','places.formattedAddress','places.ratin
 // Google Place Photos: a photo resource name → image URL (billed per fetch).
 const photoUrl = name => `https://places.googleapis.com/v1/${name}/media?maxWidthPx=640&maxHeightPx=420&key=${GOOGLE_PLACES_API_KEY}`;
 
-async function fetchPlaces(textQuery) {
+async function fetchPlaces(textQuery, bias = null) {
   if (!GOOGLE_PLACES_API_KEY) return [];
   try {
     const res = await fetch(PLACES_URL, {
       method:'POST',
       headers:{'Content-Type':'application/json','X-Goog-Api-Key':GOOGLE_PLACES_API_KEY,'X-Goog-FieldMask':FIELD_MASK},
-      body:JSON.stringify({textQuery,maxResultCount:20}),
+      body:JSON.stringify({
+        textQuery, maxResultCount:20,
+        ...(bias ? { locationBias: { circle: { center: { latitude: bias.lat, longitude: bias.lng }, radius: bias.radius || 15000 } } } : {}),
+      }),
     });
     if (!res.ok) return [];
     const data = await res.json();
@@ -230,6 +233,8 @@ DATA.forEach(function(d){
   ms.push(m);pts2.push([d.lat,d.lng]);
 });
 if(pts2.length===1)map.setView(pts2[0],14);else if(pts2.length)map.fitBounds(pts2,{padding:[44,44]});
+// User dragged the map → tell RN so it can offer "Search this area".
+map.on('dragend',function(){var c=map.getCenter();window.ReactNativeWebView.postMessage(JSON.stringify({type:'moved',lat:c.lat,lng:c.lng}));});
 function recv(e){try{var msg=JSON.parse(e.data);if(msg.type==='focus'&&DATA[msg.index]){var d=DATA[msg.index];map.setView([d.lat,d.lng],15);ms[msg.index]&&ms[msg.index].fire('click');}}catch(_){}}
 document.addEventListener('message',recv);window.addEventListener('message',recv);
 </script></body></html>`;
@@ -237,7 +242,7 @@ document.addEventListener('message',recv);window.addEventListener('message',recv
 
 // Geographic context pane — located results as pins. Adding happens in the
 // list beneath it (Redfin-style map-over-list), so this is display-only.
-function DiscoverMap({ places }) {
+function DiscoverMap({ places, onMoved }) {
   const withCoords = places.filter(p => p.lat != null && p.lng != null);
   const html = React.useMemo(() => buildMapHTML(withCoords), [withCoords.map(p => p.name).join('|')]);
 
@@ -251,7 +256,8 @@ function DiscoverMap({ places }) {
   }
   return (
     <View style={s.mapPane}>
-      <WebView originWhitelist={['*']} source={{ html }} style={{ flex: 1, backgroundColor: '#dfe6e9' }} />
+      <WebView originWhitelist={['*']} source={{ html }} style={{ flex: 1, backgroundColor: '#dfe6e9' }}
+        onMessage={e => { try { const d = JSON.parse(e.nativeEvent.data); if (d.type === 'moved') onMoved && onMoved({ lat: d.lat, lng: d.lng }); } catch (_) {} }} />
       <View style={mp.legendWrap} pointerEvents="none">
         <View style={mp.legend}>
           <Text style={[mp.legendDot, { color: MAP_TINT.activity }]}>●</Text><Text style={mp.legendTxt}>See</Text>
@@ -268,6 +274,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const { addActivity, applyArrangedActivities } = useStore();
 
   const [viewMode,   setViewMode]   = useState('list'); // 'list' | 'map'
+  const [mapCenter,  setMapCenter]  = useState(null);   // {lat,lng} of the map view
+  const [mapMoved,   setMapMoved]   = useState(false);  // user panned → show "Search this area"
   const [selectMode, setSelectMode] = useState(false);  // basket multi-select
   const [basket,     setBasket]     = useState([]);      // chosen places (city-tagged)
   const [preview,    setPreview]    = useState(null);    // autoArrange draft + editable placements
@@ -312,29 +320,44 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
   useEffect(() => {
     if (!visible || !activeCity) return;
+    setMapMoved(false);   // category/city changed → fresh city-scoped search
     runSearch(searchText, activeCategory, activeFilters, activeCity);
   }, [visible, activeCategory, activeCity]);
 
+  // Map panned → offer to re-search that area (Redfin "search this area").
+  const handleMapMoved = c => { setMapCenter(c); setMapMoved(true); };
+  const searchThisArea = () => {
+    if (!mapCenter) return;
+    setMapMoved(false);
+    runSearch(searchText, activeCategory, activeFilters, activeCity, mapCenter);
+  };
+
   // One API call per unique query; identical queries (e.g. switching back to a
   // previously-viewed category/city/filter combo) are served from cache.
-  const runSearch = async (text, catKey, filters, loc = activeCity) => {
+  // `area` ({lat,lng}) = re-search the map's current view ("search this area"):
+  // drop the city scope and bias results to that point instead.
+  const runSearch = async (text, catKey, filters, loc = activeCity, area = null) => {
     const cat   = CATEGORIES.find(c => c.key===catKey);
     const scope = loc || destination;
-    const baseQ = text.trim() ? `${text.trim()} near ${scope}` : `${cat?.query??'places'} in ${scope}`;
+    const baseQ = area
+      ? (text.trim() || cat?.query || 'places')
+      : (text.trim() ? `${text.trim()} near ${scope}` : `${cat?.query??'places'} in ${scope}`);
     const bias  = [getDietaryBias(families), getFilterBias(filters)].filter(Boolean).join(' ');
     const fullQ = bias ? `${baseQ} ${bias}` : baseQ;
+    const geoBias = area ? { lat: area.lat, lng: area.lng, radius: 12000 } : null;
+    const cacheKey = fullQ + (area ? `@${area.lat.toFixed(2)},${area.lng.toFixed(2)}` : '');
 
     setError(null);
-    if (cacheRef.current.has(fullQ)) {
-      const cached = cacheRef.current.get(fullQ);
+    if (cacheRef.current.has(cacheKey)) {
+      const cached = cacheRef.current.get(cacheKey);
       setResults(cached); setLoading(false);
       if (!cached.length) setError(text.trim() ? `No results for "${text.trim()}".` : 'No results found.');
       return;
     }
 
     setLoading(true);
-    const places = await fetchPlaces(fullQ);
-    cacheRef.current.set(fullQ, places);
+    const places = await fetchPlaces(fullQ, geoBias);
+    cacheRef.current.set(cacheKey, places);
     setResults(places); setLoading(false);
     if (!places.length) setError(text.trim() ? `No results for "${text.trim()}".` : 'No results found.');
   };
@@ -541,7 +564,15 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <View style={s.center}><Icon name="search" size={34} color={colors.subtle} /><Text style={s.errorText}>{error}</Text></View>
           ) : viewMode === 'map' ? (
             <View style={{ flex: 1 }}>
-              <DiscoverMap places={results} />
+              <DiscoverMap places={results} onMoved={handleMapMoved} />
+              {mapMoved && (
+                <View style={s.searchAreaWrap} pointerEvents="box-none">
+                  <TouchableOpacity style={s.searchAreaBtn} onPress={searchThisArea} activeOpacity={0.85}>
+                    <Icon name="search" size={14} color="#fff" />
+                    <Text style={s.searchAreaText}>Search this area</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
                 horizontal showsHorizontalScrollIndicator={false}
                 style={s.carousel} contentContainerStyle={s.carouselContent}
@@ -852,6 +883,9 @@ const s = StyleSheet.create({
   mapPane:{flex:1,backgroundColor:'#dfe6e9'},
   carousel:{position:'absolute',left:0,right:0,bottom:0},
   carouselContent:{paddingHorizontal:spacing.md,paddingVertical:spacing.md},
+  searchAreaWrap:{position:'absolute',top:12,left:0,right:0,alignItems:'center'},
+  searchAreaBtn:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:colors.ink,borderRadius:radius.full,paddingHorizontal:spacing.lg,paddingVertical:spacing.sm,...shadow.lg},
+  searchAreaText:{color:'#fff',fontWeight:'800',fontSize:13},
   resultsBar:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:spacing.xxl,paddingVertical:spacing.xs},
   resultCount:{...typography.caption,color:colors.muted},
   viewToggle:{flexDirection:'row',backgroundColor:colors.surface2,borderRadius:radius.full,padding:3,gap:2},

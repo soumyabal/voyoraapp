@@ -19,6 +19,26 @@ export const colors = {
   text: '#1a1714',
   muted: '#7a7067',
   white: '#ffffff',
+
+  // ── Refined-Warm semantic layer (prefer these in new/redesigned UI) ──
+  // Brand
+  accent:      '#e86c3a',  // primary terracotta — main actions
+  accentDark:  '#c8532a',
+  accentSoft:  '#fdf0eb',
+  accentTint:  '#fbe7dc',  // slightly stronger wash for chips/badges
+  // Smart / AI (the ONE secondary accent — replaces stray indigo/blue)
+  smart:       '#6c5ce7',
+  smartSoft:   '#eeecfc',
+  smartDeep:   '#4b3fae',
+  // Semantic
+  success:     '#0e9f6e', successSoft: '#e3f6ee',
+  danger:      '#e23b35', dangerSoft:  '#fdeceb',
+  warn:        '#e09a37', warnSoft:    '#fdf3e2',
+  // Warm neutrals (refined)
+  ink:         '#1c1714', // headings
+  body:        '#43382f', // body text
+  subtle:      '#8a7d72', // secondary text
+  hairline:    '#ece4da', // 1px lines
 };
 
 export const spacing = {
@@ -40,9 +60,10 @@ export const radius = {
 };
 
 export const typography = {
+  display: { fontSize: 32, fontWeight: '900', letterSpacing: -0.8 },
   h1: { fontSize: 28, fontWeight: '900', letterSpacing: -0.5 },
-  h2: { fontSize: 22, fontWeight: '800' },
-  h3: { fontSize: 18, fontWeight: '700' },
+  h2: { fontSize: 22, fontWeight: '800', letterSpacing: -0.3 },
+  h3: { fontSize: 18, fontWeight: '700', letterSpacing: -0.2 },
   h4: { fontSize: 16, fontWeight: '700' },
   body: { fontSize: 14, fontWeight: '400' },
   bodyBold: { fontSize: 14, fontWeight: '600' },
@@ -51,6 +72,8 @@ export const typography = {
   tiny: { fontSize: 11, fontWeight: '400' },
   tinyBold: { fontSize: 11, fontWeight: '600' },
   caption: { fontSize: 11, fontWeight: '400' },
+  // Uppercase eyebrow/label used above sections
+  overline: { fontSize: 11, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
 };
 
 export const shadow = {

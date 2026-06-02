@@ -1,66 +1,57 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, radius, typography, shadow } from '../theme';
-import { getAllMembers, fmt, fmtM, avatarColor } from '../utils/helpers';
+import { getAllMembers, fmt, fmtM } from '../utils/helpers';
 import { calcTripItineraryTotal } from '../utils/costs';
+import Icon from './ui/Icon';
 
+// Compact list row: emoji thumbnail · name + one meta line · total.
+// Kept short on purpose — the spotlight handles the "hero" treatment.
 export default function TripCard({ trip, onPress, style }) {
-  const allMembers = getAllMembers(trip);
-  const itinTotal = calcTripItineraryTotal(trip);
-  const expTotal = trip.expenses.filter(e => e.source === 'manual').reduce((s, e) => s + e.amount, 0);
+  const allMembers   = getAllMembers(trip);
+  const itinTotal    = calcTripItineraryTotal(trip);
+  const expTotal     = trip.expenses.filter(e => e.source === 'manual').reduce((s, e) => s + e.amount, 0);
   const hasAccessible = trip.families.some(f => f.members.some(m => m.needs.length > 0));
-  const displayMembers = allMembers.slice(0, 4);
-  const extra = allMembers.length - 4;
-
-  const modeLabel = trip.mode === 'ai' ? '🤖 AI' : trip.mode === 'expert' ? '🧳 Expert' : '✍️ Manual';
-  const modeColor = trip.mode === 'ai' ? colors.ai : trip.mode === 'expert' ? colors.expert : colors.primary;
 
   return (
-    <TouchableOpacity style={[styles.card, trip.archived && styles.cardArchived, style]} onPress={onPress} activeOpacity={0.85}>
-      <LinearGradient colors={trip.bgColors || ['#e17055', '#fdcb6e']} style={[styles.header, trip.archived && { opacity: 0.5 }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+    <TouchableOpacity
+      style={[styles.card, trip.archived && styles.cardArchived, style]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
+      <LinearGradient
+        colors={trip.bgColors || ['#e17055', '#fdcb6e']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={[styles.thumb, trip.archived && { opacity: 0.5 }]}
+      >
         <Text style={styles.emoji}>{trip.emoji}</Text>
       </LinearGradient>
 
       <View style={styles.body}>
-        <Text style={styles.name} numberOfLines={1}>{trip.name}</Text>
-        <Text style={styles.meta}>📍 {trip.destination}</Text>
-        <Text style={styles.meta}>📅 {fmt(trip.startDate)} – {fmt(trip.endDate)} · {trip.days.length}d</Text>
-
-        <View style={styles.tags}>
-          {trip.archived && (
-            <View style={[styles.tag, { backgroundColor: '#dcfce7' }]}>
-              <Text style={[styles.tagText, { color: '#15803d' }]}>✓ Completed</Text>
-            </View>
-          )}
-          <View style={[styles.tag, { backgroundColor: modeColor + '20' }]}>
-            <Text style={[styles.tagText, { color: modeColor }]}>{modeLabel}</Text>
-          </View>
-          {hasAccessible && (
-            <View style={[styles.tag, { backgroundColor: colors.greenLight }]}>
-              <Text style={[styles.tagText, { color: colors.green }]}>♿ Accessible</Text>
-            </View>
-          )}
+        <View style={styles.nameRow}>
+          {trip.archived && <Icon name="check" size={14} color={colors.success} />}
+          <Text style={styles.name} numberOfLines={1}>{trip.name}</Text>
+        </View>
+        <View style={styles.metaRow}>
+          <Icon name="location" size={12} color={colors.subtle} />
+          <Text style={styles.meta} numberOfLines={1}>
+            {trip.destination} · {fmt(trip.startDate)}–{fmt(trip.endDate)} · {trip.days.length}d
+          </Text>
+        </View>
+        <View style={styles.metaRow}>
+          <Icon name="people" size={12} color={colors.subtle} />
+          <Text style={styles.meta} numberOfLines={1}>
+            {trip.families.length} famil{trip.families.length !== 1 ? 'ies' : 'y'} · {allMembers.length} {allMembers.length !== 1 ? 'people' : 'person'}
+          </Text>
+          {hasAccessible && <Icon name="accessible" size={12} color={colors.success} style={{ marginLeft: 2 }} />}
         </View>
       </View>
 
-      <View style={styles.footer}>
-        <View style={styles.avatars}>
-          {displayMembers.map((m, i) => (
-            <View key={m.id} style={[styles.avatar, { backgroundColor: avatarColor(m.name), marginLeft: i === 0 ? 0 : -8 }]}>
-              <Text style={styles.avatarText}>{m.name[0]}</Text>
-            </View>
-          ))}
-          {extra > 0 && (
-            <View style={[styles.avatar, { backgroundColor: colors.muted, marginLeft: -8 }]}>
-              <Text style={styles.avatarText}>+{extra}</Text>
-            </View>
-          )}
-        </View>
-        <View style={styles.totalBox}>
-          <Text style={styles.totalAmt}>{fmtM(itinTotal + expTotal)}</Text>
-          <Text style={styles.totalLabel}>est. total</Text>
-        </View>
+      <View style={styles.right}>
+        <Text style={styles.totalAmt}>{fmtM(itinTotal + expTotal)}</Text>
+        <Text style={styles.totalLabel}>est.</Text>
+        <Icon name="forward" size={16} color={colors.subtle} style={{ marginTop: 2 }} />
       </View>
     </TouchableOpacity>
   );
@@ -68,47 +59,24 @@ export default function TripCard({ trip, onPress, style }) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-    marginBottom: spacing.lg,
-    ...shadow.md,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    backgroundColor: colors.surface, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.hairline,
+    padding: spacing.sm, paddingRight: spacing.md,
+    marginBottom: spacing.md, ...shadow.sm,
   },
-  cardArchived: {
-    borderColor: '#bbf7d0',
-    backgroundColor: '#f0fdf4',
-  },
-  header: {
-    height: 120,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emoji: { fontSize: 48 },
-  body: { padding: spacing.lg },
-  name: { ...typography.h4, color: colors.text, marginBottom: 4 },
-  meta: { ...typography.small, color: colors.muted, marginTop: 2 },
-  tags: { flexDirection: 'row', gap: 6, marginTop: 10, flexWrap: 'wrap' },
-  tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full },
-  tagText: { ...typography.tinyBold },
-  footer: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  avatars: { flexDirection: 'row', alignItems: 'center' },
-  avatar: {
-    width: 28, height: 28, borderRadius: 14,
-    borderWidth: 2, borderColor: colors.surface,
+  cardArchived: { backgroundColor: '#f6faf7', borderColor: '#cde7d6' },
+  thumb: {
+    width: 58, height: 58, borderRadius: radius.md,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  totalBox: { alignItems: 'flex-end' },
-  totalAmt: { ...typography.bodyBold, color: colors.text },
-  totalLabel: { ...typography.tiny, color: colors.muted },
+  emoji: { fontSize: 28 },
+  body: { flex: 1, gap: 3 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  name: { ...typography.h4, color: colors.ink, flexShrink: 1 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  meta: { ...typography.small, color: colors.subtle, flexShrink: 1 },
+  right: { alignItems: 'flex-end', minWidth: 52 },
+  totalAmt: { ...typography.bodyBold, color: colors.ink },
+  totalLabel: { ...typography.tiny, color: colors.subtle },
 });

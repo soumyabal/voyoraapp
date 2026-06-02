@@ -25,6 +25,9 @@ import AddProfileModal from '../modals/AddProfileModal';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { avatarColor, getAllMembers, fmt } from '../utils/helpers';
 import InfoBanner from '../components/ui/InfoBanner';
+import Icon from '../components/ui/Icon';
+import PressableScale from '../components/ui/PressableScale';
+import { select } from '../utils/feedback';
 
 const PACE_LABELS = { relaxed: '🐢 Relaxed', moderate: '🚶 Moderate', packed: '🏃 Packed' };
 
@@ -505,9 +508,9 @@ function tripStatus(trip) {
 }
 
 const VALUE_PROPS = [
-  { icon: '🗓️', title: 'Day-by-day itineraries', sub: 'Smart time slots, conflict checks, and a Discover search for every city.' },
-  { icon: '💸', title: 'Per-family expense split', sub: 'Hotels by rooms, transit by family size — fairly, automatically.' },
-  { icon: '♿', title: 'Accessibility built-in', sub: 'Plan around wheelchair, dietary and pace needs per traveler.' },
+  { icon: 'calendar', tint: colors.accent, title: 'Day-by-day itineraries', sub: 'Smart time slots, conflict checks, and a Discover search for every city.' },
+  { icon: 'wallet',   tint: colors.smart,  title: 'Per-family expense split', sub: 'Hotels by rooms, transit by family size — fairly, automatically.' },
+  { icon: 'accessible', tint: colors.success, title: 'Accessibility built-in', sub: 'Plan around wheelchair, dietary and pace needs per traveler.' },
 ];
 
 // ─── Next-trip spotlight card ─────────────────────────────────────
@@ -515,27 +518,39 @@ function NextTripSpotlight({ trip, status, onOpen }) {
   const allMembers = getAllMembers(trip);
   const famCount   = trip.families.length;
   return (
-    <TouchableOpacity activeOpacity={0.9} onPress={onOpen} style={styles.spotCard}>
+    <PressableScale haptic="light" onPress={onOpen} style={styles.spotCard} scaleTo={0.985}>
       <LinearGradient
         colors={trip.bgColors || ['#e17055', '#fdcb6e']}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
         style={styles.spotBand}
       >
-        <Text style={styles.spotEmoji}>{trip.emoji}</Text>
+        <View style={styles.spotEmojiWrap}><Text style={styles.spotEmoji}>{trip.emoji}</Text></View>
         <View style={styles.spotPill}><Text style={styles.spotPillText}>{status.label}</Text></View>
       </LinearGradient>
       <View style={styles.spotBody}>
         <Text style={styles.spotName} numberOfLines={1}>{trip.name}</Text>
-        <Text style={styles.spotMeta}>📍 {trip.destination}</Text>
-        <Text style={styles.spotMeta}>📅 {fmt(trip.startDate)} – {fmt(trip.endDate)} · {trip.days.length}d</Text>
+        <View style={styles.spotMetaRow}>
+          <Icon name="location" size={14} color={colors.subtle} />
+          <Text style={styles.spotMeta} numberOfLines={1}>{trip.destination}</Text>
+        </View>
+        <View style={styles.spotMetaRow}>
+          <Icon name="calendar" size={14} color={colors.subtle} />
+          <Text style={styles.spotMeta}>{fmt(trip.startDate)} – {fmt(trip.endDate)} · {trip.days.length}d</Text>
+        </View>
         <View style={styles.spotFooter}>
-          <Text style={styles.spotPeople}>
-            👨‍👩‍👧 {famCount} famil{famCount !== 1 ? 'ies' : 'y'} · {allMembers.length} {allMembers.length !== 1 ? 'people' : 'person'}
-          </Text>
-          <View style={styles.spotOpen}><Text style={styles.spotOpenText}>Open →</Text></View>
+          <View style={styles.spotMetaRow}>
+            <Icon name="people" size={14} color={colors.subtle} />
+            <Text style={styles.spotPeople}>
+              {famCount} famil{famCount !== 1 ? 'ies' : 'y'} · {allMembers.length} {allMembers.length !== 1 ? 'people' : 'person'}
+            </Text>
+          </View>
+          <View style={styles.spotOpen}>
+            <Text style={styles.spotOpenText}>Open</Text>
+            <Icon name="open" size={15} color="#fff" />
+          </View>
         </View>
       </View>
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 
@@ -635,16 +650,19 @@ export default function HomeScreen({ navigation }) {
               <View style={styles.onboard}>
                 {VALUE_PROPS.map(v => (
                   <View key={v.title} style={styles.featureCard}>
-                    <Text style={styles.featureIcon}>{v.icon}</Text>
+                    <View style={[styles.featureIconWrap, { backgroundColor: v.tint + '1A' }]}>
+                      <Icon name={v.icon} size={22} color={v.tint} />
+                    </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.featureTitle}>{v.title}</Text>
                       <Text style={styles.featureSub}>{v.sub}</Text>
                     </View>
                   </View>
                 ))}
-                <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowNewTrip(true)}>
+                <PressableScale haptic="medium" style={styles.emptyBtn} onPress={() => setShowNewTrip(true)}>
+                  <Icon name="add" size={20} color="#fff" />
                   <Text style={styles.emptyBtnText}>Create a Trip</Text>
-                </TouchableOpacity>
+                </PressableScale>
               </View>
             ) : (
               <>
@@ -668,7 +686,7 @@ export default function HomeScreen({ navigation }) {
                     <TouchableOpacity
                       key={t.k}
                       style={[styles.segBtn, seg === t.k && styles.segBtnActive]}
-                      onPress={() => setSeg(t.k)}
+                      onPress={() => { select(); setSeg(t.k); }}
                       activeOpacity={0.8}
                     >
                       <Text style={[styles.segText, seg === t.k && styles.segTextActive]}>{t.label}</Text>
@@ -706,19 +724,19 @@ export default function HomeScreen({ navigation }) {
       {/* Bottom tab bar */}
       <View style={[styles.tabBar, { paddingBottom: insets.bottom, height: TAB_BAR_HEIGHT + insets.bottom }]}>
         {[
-          { key: 'trips',     label: 'Trips',    icon: '✈️' },
-          { key: 'travelers', label: 'Travelers', icon: '👥' },
+          { key: 'trips',     label: 'Trips',     icon: 'plane' },
+          { key: 'travelers', label: 'Travelers', icon: 'people' },
         ].map(tab => {
           const active = activeTab === tab.key;
           return (
             <TouchableOpacity
               key={tab.key}
               style={styles.tabItem}
-              onPress={() => setActiveTab(tab.key)}
+              onPress={() => { select(); setActiveTab(tab.key); }}
               activeOpacity={0.7}
             >
               {active && <View style={styles.tabIndicator} />}
-              <Text style={[styles.tabIcon, active && styles.tabIconActive]}>{tab.icon}</Text>
+              <Icon name={tab.icon} size={22} color={active ? colors.accent : colors.subtle} />
               <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{tab.label}</Text>
             </TouchableOpacity>
           );
@@ -727,12 +745,14 @@ export default function HomeScreen({ navigation }) {
 
       {/* FAB — only on Trips tab */}
       {activeTab === 'trips' && (
-        <TouchableOpacity
+        <PressableScale
+          haptic="medium"
           style={[styles.fab, { bottom: insets.bottom + TAB_BAR_HEIGHT + 12 }]}
           onPress={() => setShowNewTrip(true)}
         >
-          <Text style={styles.fabText}>+ New Trip</Text>
-        </TouchableOpacity>
+          <Icon name="add" size={20} color="#fff" />
+          <Text style={styles.fabText}>New Trip</Text>
+        </PressableScale>
       )}
 
       <NewTripModal
@@ -790,36 +810,39 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xxl },
 
   // Next-trip spotlight
-  spotCaption: {
-    fontSize: 11, fontWeight: '800', color: colors.muted,
-    letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing.sm,
-  },
+  spotCaption: { ...typography.overline, color: colors.subtle, marginBottom: spacing.sm },
   spotCard: {
     backgroundColor: colors.surface, borderRadius: radius.xl,
-    borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
+    borderWidth: 1, borderColor: colors.hairline, overflow: 'hidden',
     marginBottom: spacing.xl, ...shadow.lg,
   },
   spotBand: {
-    height: 96, alignItems: 'center', justifyContent: 'center',
+    height: 104, alignItems: 'center', justifyContent: 'center',
   },
-  spotEmoji: { fontSize: 44 },
+  spotEmojiWrap: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.28)', alignItems: 'center', justifyContent: 'center',
+  },
+  spotEmoji: { fontSize: 36 },
   spotPill: {
     position: 'absolute', top: 12, right: 12,
-    backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.full,
-    paddingHorizontal: 10, paddingVertical: 4,
+    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: radius.full,
+    paddingHorizontal: 11, paddingVertical: 5,
   },
-  spotPillText: { fontSize: 11, fontWeight: '800', color: '#1a1714' },
+  spotPillText: { fontSize: 11, fontWeight: '800', color: colors.ink },
   spotBody: { padding: spacing.lg },
-  spotName: { ...typography.h3, color: colors.text },
-  spotMeta: { ...typography.small, color: colors.muted, marginTop: 3 },
+  spotName: { ...typography.h3, color: colors.ink, marginBottom: spacing.xs },
+  spotMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
+  spotMeta: { ...typography.small, color: colors.subtle, flexShrink: 1 },
   spotFooter: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginTop: spacing.md,
   },
-  spotPeople: { ...typography.small, color: colors.text, fontWeight: '600', flex: 1 },
+  spotPeople: { ...typography.small, color: colors.body, fontWeight: '600' },
   spotOpen: {
-    backgroundColor: colors.primary, borderRadius: radius.full,
-    paddingHorizontal: 18, paddingVertical: 9,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: colors.accent, borderRadius: radius.full,
+    paddingLeft: 16, paddingRight: 12, paddingVertical: 9, ...shadow.sm,
   },
   spotOpenText: { color: '#fff', fontWeight: '800', fontSize: 14 },
 
@@ -837,17 +860,21 @@ const styles = StyleSheet.create({
   // First-run onboarding (value props)
   onboard: { paddingTop: spacing.sm },
   featureCard: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     backgroundColor: colors.surface, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border,
+    borderWidth: 1, borderColor: colors.hairline,
     padding: spacing.lg, marginBottom: spacing.md, ...shadow.sm,
   },
-  featureIcon: { fontSize: 26 },
-  featureTitle: { ...typography.bodyBold, color: colors.text },
-  featureSub: { ...typography.small, color: colors.muted, marginTop: 2, lineHeight: 18 },
+  featureIconWrap: {
+    width: 46, height: 46, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  featureTitle: { ...typography.bodyBold, color: colors.ink },
+  featureSub: { ...typography.small, color: colors.subtle, marginTop: 2, lineHeight: 18 },
   emptyBtn: {
-    backgroundColor: colors.primary, borderRadius: radius.md,
-    paddingVertical: 15, alignItems: 'center', marginTop: spacing.sm,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: colors.accent, borderRadius: radius.lg,
+    paddingVertical: 15, marginTop: spacing.sm, ...shadow.md,
   },
   emptyBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
 
@@ -860,22 +887,21 @@ const styles = StyleSheet.create({
     flex: 1, alignItems: 'center', justifyContent: 'center',
     paddingTop: 10, paddingBottom: 6, position: 'relative',
   },
-  tabIcon: { fontSize: 20, opacity: 0.4 },
-  tabIconActive: { opacity: 1 },
-  tabLabel: { ...typography.caption, color: colors.muted, marginTop: 3, fontWeight: '600' },
-  tabLabelActive: { color: colors.primary, fontWeight: '800' },
+  tabLabel: { ...typography.caption, color: colors.subtle, marginTop: 3, fontWeight: '600' },
+  tabLabelActive: { color: colors.accent, fontWeight: '800' },
   tabIndicator: {
     position: 'absolute', top: 0, left: '20%', right: '20%',
-    height: 3, backgroundColor: colors.primary,
+    height: 3, backgroundColor: colors.accent,
     borderBottomLeftRadius: 2, borderBottomRightRadius: 2,
   },
 
   fab: {
     position: 'absolute', right: 20,
-    backgroundColor: colors.primary, borderRadius: radius.full,
-    paddingHorizontal: 20, paddingVertical: 14, ...shadow.lg,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: colors.accent, borderRadius: radius.full,
+    paddingLeft: 18, paddingRight: 22, paddingVertical: 14, ...shadow.lg,
   },
-  fabText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  fabText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 });
 
 // ── Travelers tab styles ──────────────────────────────────────────

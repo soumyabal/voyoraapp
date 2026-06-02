@@ -83,7 +83,7 @@ Rules fire per-day. `validateDay(day, dayIndex, families[])` receives the trip's
 ---
 
 #### Rule 2 — Full-Day Venue
-**Severity:** warning
+**Severity:** error
 **Trigger:** Non-transport activity with estimated duration ≥ 6h (theme parks, safaris, etc.) AND 2+ other non-note/non-food activities on the same day.
 **Note:** Transport activities are explicitly excluded — long flights are handled by the trip-level `long_journey_conflict` rule.
 
@@ -149,7 +149,7 @@ Rules fire per-day. `validateDay(day, dayIndex, families[])` receives the trip's
 ---
 
 #### Trip Rule B — Long Journey Conflict *(new — 1 Jun 2026)*
-**Severity:** warning
+**Severity:** error
 **Trigger:** Transport activity with estimated duration ≥ 6h AND other non-note activities exist on the same day.
 **Rationale:** A 20h flight cannot be combined with sightseeing. This replaces the old Rule 2 "full-day venue" warning which was incorrectly firing for flights.
 **Data attached:** `impactedActivities[]` — each affected activity with `suggestedDayIndex` pointing to the next day (or previous if on the last day).
@@ -217,6 +217,38 @@ Each card shows: icon + title + message + 💡 hint.
 
 ---
 
+## Distance Warnings (configurable)
+
+Controlled by `RELEASE_FLAGS.distanceWarnings` in `config.js`. Default: `false`.
+
+**How to enable:**
+```js
+// src/config.js
+distanceWarnings: true,   // requires GOOGLE_PLACES_API_KEY to be set
+```
+
+**Cost:** 1 Google Distance Matrix API call per day that has ≥2 activities with coordinates. Activities only have coordinates when added via Discover (Google Places). Manually entered activities have no coordinates and are skipped.
+
+**What it checks:** For each consecutive pair of located activities on a day, fetches driving time and compares against the scheduled gap.
+
+| Condition | Severity | Type |
+|-----------|----------|------|
+| Travel time > available gap | error | `transit_gap` |
+| Travel time within 15 min of gap | warning | `transit_tight` |
+
+**`countLocatedActivityPairs(trip)`** in `distanceChecker.js` — call this to preview how many API calls will be made before enabling.
+
+**Status bar** in modal (only shown when flag + key are both set):
+- ⬜ "Check travel times between N venue pairs" + **Check** button — first time / after activity changes
+- 🔵 Spinner — while API call is in progress
+- 🔴/🟢 Result count + "Checked X min ago" + **Refresh** button — when cache is fresh
+
+**Cache:** Results stored in `trip.distanceCache` (persisted in Zustand/AsyncStorage). The API is only called when the activity fingerprint changes (i.e. activities are moved, added, or removed). Opening Check Trip on an unchanged itinerary costs nothing.
+
+**File:** `src/utils/distanceChecker.js`
+
+---
+
 ## Changelog
 
 ### 1 Jun 2026 — Session 1
@@ -251,6 +283,42 @@ Each card shows: icon + title + message + 💡 hint.
 - `estimateDuration` checks `activity.durationMins` first before keyword matching
 - Duration picker added to `AddActivityModal` for all activity types — presets up to 48h
 - Pitstop subtype defaults to 15 min
+
+---
+
+### 1 Jun 2026 — Session 7
+
+**Distance check made cost-safe**
+- Replaced auto-fetch on modal open with a manual **Check** button
+- Results cached in `trip.distanceCache` (persisted across sessions via Zustand/AsyncStorage)
+- `activityFingerprint(trip)` — stable string of all located activity coords + times
+- `isCacheFresh(trip)` — returns true when fingerprint matches cached value
+- API only called when user taps Check, or Refresh after activity changes
+- "Checked X min ago · Refresh" shown when cache is fresh
+- `updateDistanceCache(tripId, cache)` + `clearDistanceCache(tripId)` added to store
+- Typical planning session: 3–5 API calls total instead of per-open
+
+---
+
+### 1 Jun 2026 — Session 6
+
+**Distance-based travel time warnings (initial)**
+- New `src/utils/distanceChecker.js` — async `checkDistances(trip)` using Google Distance Matrix API
+- Batches consecutive activity pairs per day into one API call per day
+- `transit_gap` (error): travel time > available gap — impossible to make it
+- `transit_tight` (warning): < 15 min buffer after travel time
+- Both warning types carry `impactedActivities[]` with `suggestedTime` fix button
+- Controlled by `RELEASE_FLAGS.distanceWarnings` in `config.js` (default: `false`)
+- `countLocatedActivityPairs(trip)` helper for previewing API call cost
+
+---
+
+### 1 Jun 2026 — Session 5
+
+**Error severity promoted for two rules**
+- Rule 2 (full-day venue): `warning` → `error` — a theme park + 2 major activities is a definite conflict, not advisory
+- Trip Rule B (long journey conflict): `warning` → `error` — a 20h flight with other activities on the same day is physically impossible
+- Overlap threshold unchanged: errors at ≥ 90 min overlap, warning below that
 
 ---
 

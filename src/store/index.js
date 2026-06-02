@@ -132,6 +132,23 @@ const useStore = create(
         return trip;
       },
 
+      // ── DISTANCE CACHE ──────────────────────────────────────
+      updateDistanceCache: (tripId, cache) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : { ...t, distanceCache: cache }),
+      })),
+
+      clearDistanceCache: (tripId) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : { ...t, distanceCache: null }),
+      })),
+
+      // ── USER PREFERENCES ────────────────────────────────────
+      // distanceCheckEnabled: user-facing toggle (default off — has API cost).
+      // Separate from RELEASE_FLAGS.distanceWarnings which is the dev master switch.
+      preferences: { distanceCheckEnabled: false },
+      setDistanceCheckEnabled: (enabled) => set(s => ({
+        preferences: { ...s.preferences, distanceCheckEnabled: enabled },
+      })),
+
       // ── IGNORED WARNINGS ────────────────────────────────────
       // Key format: `${type}:${dayIndex ?? 'trip'}` — stable per warning type + day
       ignoreWarning: (tripId, warningKey) => set(s => ({

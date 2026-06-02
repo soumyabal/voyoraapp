@@ -13,17 +13,20 @@
  */
 export const CLAUDE_API_KEY          = null;
 export const CLAUDE_MODEL            = 'claude-haiku-4-5-20251001';
-export const GOOGLE_PLACES_API_KEY   = null;
+export const GOOGLE_PLACES_API_KEY   = 'AIzaSyCSNyoh6JVdOi2GxZmvmhTnRTk5SZ0X0SA';
 
 // ─── Release flags ────────────────────────────────────────────────────────────
 // Controls which planning modes are available to users.
 // v1.0 launch: Manual Planner + Family Splitwise only.
 // Flip a flag to true to enable a feature in a future release.
 export const RELEASE_FLAGS = {
-  manualPlanner: true,   // ✅ v1.0 — core launch feature
-  aiPlanner:     false,  // 🔜 v2.0 — requires backend + Claude API server-side
-  expertMode:    false,  // 🔜 v3.0 — requires consultant network
-  aiReview:      false,  // 🔜 v2.0 — in-trip AI chat review
+  manualPlanner:    true,   // ✅ v1.0 — core launch feature
+  aiPlanner:        false,  // 🔜 v2.0 — requires backend + Claude API server-side
+  expertMode:       false,  // 🔜 v3.0 — requires consultant network
+  aiReview:         false,  // 🔜 v2.0 — in-trip AI chat review
+  distanceWarnings: true,   // ✅ feature ready — user-facing toggle controls actual on/off
+                            //    (store.preferences.distanceCheckEnabled)
+                            //    Set false here only to hide the feature entirely in a build.
 };
 export const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 

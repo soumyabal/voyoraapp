@@ -194,7 +194,7 @@ function TripExpenseChart({ trip, currentDay, onSelectDay, compact }) {
 // Left:   TRIP $X,XXX
 // Right:  Day N  $XXX  $XX/p
 // ⓘ tap: slide-up detail sheet (family totals, chart, push button)
-function StickyHeader({ trip, currentDay, onSelectDay, onPush }) {
+function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip }) {
   const [showDetail, setShowDetail] = useState(false);
   const itinTotal = calcTripItineraryTotal(trip);
   const day     = trip.days[currentDay];
@@ -230,6 +230,25 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush }) {
             {dayCost > 0 && <Text style={ch.miniPP}>{fmtM(dayPP)}/p</Text>}
           </View>
         </View>
+
+        {/* Check Trip — severity-colored status chip (tap to open the checker) */}
+        {!!onCheckTrip && (() => {
+          const issues = validateTrip(trip);
+          const ignored = trip.ignoredWarnings || [];
+          const visible = issues.filter(w => !ignored.includes(`${w.type}:${w.dayIndex ?? 'trip'}`));
+          const errs  = visible.filter(w => w.severity === 'error').length;
+          const warns = visible.filter(w => w.severity === 'warning').length;
+          const infos = visible.filter(w => w.severity === 'info').length;
+          const total = visible.length;
+          const color = errs ? colors.danger : warns ? colors.warn : infos ? colors.expert : colors.success;
+          const icon  = errs ? 'close-circle' : warns ? 'warning-outline' : infos ? 'bulb-outline' : 'checkmark-circle';
+          return (
+            <TouchableOpacity style={[ch.checkChip, { backgroundColor: color }]} onPress={onCheckTrip} activeOpacity={0.85}>
+              <Icon name={icon} size={13} color="#fff" />
+              {total > 0 && <Text style={ch.checkChipText}>{total}</Text>}
+            </TouchableOpacity>
+          );
+        })()}
 
         {/* Share day */}
         <TouchableOpacity style={ch.shareBtn} onPress={handleShare} activeOpacity={0.7}>
@@ -437,6 +456,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         currentDay={currentDay}
         onSelectDay={setCurrentDay}
         onPush={handlePush}
+        onCheckTrip={onCheckTrip}
       />
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -682,7 +702,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         </View>
       </ScrollView>
 
-      {/* ── Discover FAB (bottom-left) ── */}
+      {/* ── Discover FAB — single primary action, bottom-right ── */}
       <TouchableOpacity
         style={styles.discoverFab}
         onPress={() => setShowDiscover(true)}
@@ -692,44 +712,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         <Text style={styles.discoverFabText}>Discover</Text>
       </TouchableOpacity>
 
-      {/* ── Check Trip FAB ── */}
-      {!!onCheckTrip && (() => {
-        const issues = validateTrip(trip);
-        const { errors, warnings, infos } = summariseWarnings(issues);
-        // Ignored warnings don't count toward the badge
-        const ignoredKeys = trip.ignoredWarnings || [];
-        const visible = issues.filter(w => !ignoredKeys.includes(`${w.type}:${w.dayIndex ?? 'trip'}`));
-        const total = visible.length;
-        const visErrors   = visible.filter(w => w.severity === 'error').length;
-        const visWarnings = visible.filter(w => w.severity === 'warning').length;
-        const visInfos    = visible.filter(w => w.severity === 'info').length;
-        // Color: red=conflicts, orange=warnings, blue=suggestions only, green=all clear
-        const fabColor = visErrors   > 0 ? colors.red
-                       : visWarnings > 0 ? '#d97706'
-                       : visInfos    > 0 ? '#3b82f6'
-                       : colors.green;
-        const fabIcon  = visErrors   > 0 ? 'close-circle'
-                       : visWarnings > 0 ? 'warning-outline'
-                       : visInfos    > 0 ? 'bulb-outline'
-                       : 'checkmark-circle';
-        return (
-          <TouchableOpacity
-            style={[styles.checkFab, { backgroundColor: fabColor }]}
-            onPress={onCheckTrip}
-            activeOpacity={0.85}
-          >
-            <Icon name={fabIcon} size={17} color="#fff" />
-            <Text style={styles.checkFabText}>Check Trip</Text>
-            {total > 0 && (
-              <View style={styles.checkFabBadge}>
-                <Text style={styles.checkFabBadgeText}>{total}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        );
-      })()}
-
-      {/* Undo toast — appears above the FABs after a done/didn't-do swipe */}
+      {/* Undo toast — appears above the FAB after a done/didn't-do swipe */}
       {snack && (
         <Snackbar
           key={snack.nonce}
@@ -1095,6 +1078,14 @@ const ch = StyleSheet.create({
     fontWeight: '600',
     color: colors.green,
   },
+  checkChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    borderRadius: radius.full,
+    paddingHorizontal: 9, height: 28,
+    marginRight: spacing.sm,
+    ...shadow.sm,
+  },
+  checkChipText: { color: '#fff', fontWeight: '800', fontSize: 12.5 },
   shareBtn: {
     width: 28,
     height: 28,
@@ -1421,7 +1412,7 @@ const styles = StyleSheet.create({
   // ── Discover FAB ────────────────────────────────────────────────
   discoverFab: {
     position: 'absolute',
-    left: 20,
+    right: 20,
     bottom: 24,
     flexDirection: 'row',
     alignItems: 'center',

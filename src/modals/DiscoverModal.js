@@ -82,6 +82,34 @@ function getDietaryBias(families = []) {
 function getFilterBias(af) {
   return af.map(k => FILTER_OPTS.find(f => f.key === k)?.bias).filter(Boolean).join(' ');
 }
+// Split a multi-stop destination ("LA & San Diego", "Los Angeles to San Diego")
+// into individual locations. Comma is NOT a separator ("Florida, United States"
+// is one place). Returns [dest] when there's only one stop.
+function parseLocations(dest) {
+  if (!dest) return [];
+  const parts = dest.split(/\s*(?:&|\/|\+|→|\band\b|\bto\b)\s*/i)
+    .map(s => s.trim()).filter(Boolean);
+  return parts.length > 1 ? parts : [dest];
+}
+// Split a "🏛️ Attractions" label into its leading emoji and the rest, so each
+// can be sized independently — a single mixed Text lets the tall emoji line box
+// clip the label inside small pills on iOS.
+function splitLabel(label) {
+  const i = (label || '').indexOf(' ');
+  return i < 0 ? ['', label || ''] : [label.slice(0, i), label.slice(i + 1)];
+}
+
+// A chip whose emoji and text are separate, vertically-centered elements inside
+// a fixed-height pill — clip-proof regardless of emoji line metrics.
+function Chip({ label, active, activeStyle, activeTextStyle, onPress }) {
+  const [emoji, text] = splitLabel(label);
+  return (
+    <TouchableOpacity style={[s.chip, active && activeStyle]} onPress={onPress} activeOpacity={0.7}>
+      {!!emoji && <Text style={s.chipEmoji} allowFontScaling={false}>{emoji}</Text>}
+      <Text style={[s.chipLabel, active && activeTextStyle]} numberOfLines={1} allowFontScaling={false}>{text}</Text>
+    </TouchableOpacity>
+  );
+}
 const VEG_NAME_RE = /vegetarian|vegan|veggie|plant.based|organic|salad|juice|smoothie|falafel/i;
 const VEG_TYPES   = new Set(['cafe','bakery','juice_bar','health','natural_goods']);
 function isVegFriendly(place) {
@@ -174,9 +202,13 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [pendingPlace,   setPendingPlace]   = useState(null);
   const [pickerDay,      setPickerDay]      = useState(dayIndex ?? 0);
   const [pickerSlot,     setPickerSlot]     = useState('morning');
+  const [activeLocation, setActiveLocation] = useState(null);   // null = all stops
   const searchTimeout = useRef(null);
+  const filterTimeout = useRef(null);
+  const cacheRef      = useRef(new Map());   // query string -> places[] (per-session)
 
   const destination   = trip?.destination ?? '';
+  const locations     = parseLocations(destination);
   const families      = trip?.families ?? [];
   const allDietary    = families.flatMap(f => f.dietary || []);
   const hasVeg        = allDietary.some(d => d==='vegetarian'||d==='vegan');
@@ -186,21 +218,36 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
   useEffect(() => {
     if (!visible) return;
-    setSearchText(''); setAddedNames(new Set());
+    setSearchText(''); setAddedNames(new Set()); setActiveLocation(null);
+    cacheRef.current.clear();
     setActiveFilters(FILTER_OPTS.filter(f => allDietary.includes(f.key)).map(f => f.key));
   }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
-    runSearch(searchText, activeCategory, activeFilters);
+    runSearch(searchText, activeCategory, activeFilters, activeLocation);
   }, [visible, activeCategory]);
 
-  const runSearch = async (text, catKey, filters) => {
+  // One API call per unique query; identical queries (e.g. switching back to a
+  // previously-viewed category/location/filter combo) are served from cache.
+  const runSearch = async (text, catKey, filters, loc = activeLocation) => {
     const cat   = CATEGORIES.find(c => c.key===catKey);
-    const baseQ = text.trim() ? `${text.trim()} near ${destination}` : `${cat?.query??'places'} in ${destination}`;
+    const scope = loc || destination;
+    const baseQ = text.trim() ? `${text.trim()} near ${scope}` : `${cat?.query??'places'} in ${scope}`;
     const bias  = [getDietaryBias(families), getFilterBias(filters)].filter(Boolean).join(' ');
-    setLoading(true); setError(null);
-    const places = await fetchPlaces(bias ? `${baseQ} ${bias}` : baseQ);
+    const fullQ = bias ? `${baseQ} ${bias}` : baseQ;
+
+    setError(null);
+    if (cacheRef.current.has(fullQ)) {
+      const cached = cacheRef.current.get(fullQ);
+      setResults(cached); setLoading(false);
+      if (!cached.length) setError(text.trim() ? `No results for "${text.trim()}".` : 'No results found.');
+      return;
+    }
+
+    setLoading(true);
+    const places = await fetchPlaces(fullQ);
+    cacheRef.current.set(fullQ, places);
     setResults(places); setLoading(false);
     if (!places.length) setError(text.trim() ? `No results for "${text.trim()}".` : 'No results found.');
   };
@@ -214,7 +261,14 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const toggleFilter = key => {
     const next = activeFilters.includes(key) ? activeFilters.filter(k=>k!==key) : [...activeFilters,key];
     setActiveFilters(next);
-    runSearch(searchText, activeCategory, next);
+    // Debounce so toggling several filters quickly results in a single API call.
+    clearTimeout(filterTimeout.current);
+    filterTimeout.current = setTimeout(() => runSearch(searchText, activeCategory, next), 350);
+  };
+
+  const selectLocation = loc => {
+    setActiveLocation(loc);
+    runSearch(searchText, activeCategory, activeFilters, loc);
   };
 
   const handleAdd = place => {
@@ -266,22 +320,31 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             />
           </View>
 
+          {locations.length > 1 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
+              {[{ k: null, label: '\u{1F30D} All stops' }, ...locations.map(l => ({ k: l, label: '\u{1F4CD} ' + l }))].map(opt => (
+                <Chip key={opt.k ?? 'all'} label={opt.label} active={activeLocation===opt.k}
+                  activeStyle={s.locChipActive} activeTextStyle={s.chipTextActive}
+                  onPress={() => selectLocation(opt.k)} />
+              ))}
+            </ScrollView>
+          )}
+
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
             {CATEGORIES.map(cat => (
-              <TouchableOpacity key={cat.key} style={[s.chip, activeCategory===cat.key&&s.chipActive]}
-                onPress={() => { setSearchText(''); setActiveCategory(cat.key); }} activeOpacity={0.7}>
-                <Text style={[s.chipText, activeCategory===cat.key&&s.chipTextActive]}>{cat.label}</Text>
-              </TouchableOpacity>
+              <Chip key={cat.key} label={cat.label} active={activeCategory===cat.key}
+                activeStyle={s.chipActive} activeTextStyle={s.chipTextActive}
+                onPress={() => { setSearchText(''); setActiveCategory(cat.key); }} />
             ))}
           </ScrollView>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterChips} style={s.filterRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
             {FILTER_OPTS.map(f => {
               const on = activeFilters.includes(f.key);
               return (
-                <TouchableOpacity key={f.key} style={[s.filterChip, on&&s.filterChipActive]} onPress={() => toggleFilter(f.key)} activeOpacity={0.7}>
-                  <Text style={[s.filterChipText, on&&s.filterChipTextActive]}>{f.label}</Text>
-                </TouchableOpacity>
+                <Chip key={f.key} label={f.label} active={on}
+                  activeStyle={s.filterChipActive} activeTextStyle={s.filterChipTextActive}
+                  onPress={() => toggleFilter(f.key)} />
               );
             })}
           </ScrollView>
@@ -381,19 +444,20 @@ const s = StyleSheet.create({
   searchRow:{flexDirection:'row',alignItems:'center',marginHorizontal:spacing.xxl,marginBottom:spacing.sm,backgroundColor:colors.surface2,borderRadius:radius.md,paddingHorizontal:spacing.md,paddingVertical:spacing.xs,borderWidth:1,borderColor:colors.border},
   searchIcon:{fontSize:15,marginRight:spacing.xs},
   searchInput:{flex:1,fontSize:15,color:colors.text,paddingVertical:6},
-  chipsScroll:{maxHeight:44,marginBottom:spacing.sm},
-  chips:{paddingHorizontal:spacing.xxl,gap:spacing.xs,alignItems:'center'},
-  chip:{borderWidth:1.5,borderColor:colors.border,borderRadius:radius.full,paddingHorizontal:spacing.md,paddingVertical:6,backgroundColor:'#fff'},
+  // Fixed-height pills with vertically-centered, separately-sized emoji + label.
+  // paddingVertical on the scroll content guarantees the viewport is always
+  // taller than the pill, so glyphs can never be clipped.
+  chipsScroll:{flexGrow:0,marginBottom:spacing.sm},
+  chips:{paddingHorizontal:spacing.xxl,paddingVertical:4,gap:spacing.xs,alignItems:'center'},
+  chip:{height:36,flexDirection:'row',alignItems:'center',justifyContent:'center',borderWidth:1.5,borderColor:colors.border,borderRadius:radius.full,paddingHorizontal:spacing.md,backgroundColor:'#fff'},
+  chipEmoji:{fontSize:14,marginRight:5},
+  chipLabel:{fontSize:13,color:colors.text,fontWeight:'600'},
   chipActive:{backgroundColor:colors.primary,borderColor:colors.primary},
-  chipText:{fontSize:13,color:colors.text,fontWeight:'600'},
   chipTextActive:{color:'#fff'},
-  dietBadge:{fontSize:11,color:'#15803d',fontWeight:'700',marginTop:3},
-  filterRow:{maxHeight:40,marginBottom:spacing.xs},
-  filterChips:{paddingHorizontal:spacing.xxl,gap:spacing.xs,alignItems:'center'},
-  filterChip:{borderWidth:1.5,borderColor:colors.border,borderRadius:radius.full,paddingHorizontal:spacing.md,paddingVertical:5,backgroundColor:'#fff'},
+  locChipActive:{backgroundColor:'#2563eb',borderColor:'#2563eb'},
   filterChipActive:{backgroundColor:'#dcfce7',borderColor:'#16a34a'},
-  filterChipText:{fontSize:12,color:colors.muted,fontWeight:'600'},
   filterChipTextActive:{color:'#15803d',fontWeight:'700'},
+  dietBadge:{fontSize:11,color:'#15803d',fontWeight:'700',marginTop:3},
   lateHint:{marginHorizontal:spacing.xxl,marginBottom:spacing.xs,backgroundColor:'#fef9c3',borderRadius:radius.sm,padding:spacing.sm,borderWidth:1,borderColor:'#fde047'},
   lateHintText:{fontSize:11,color:'#713f12',fontWeight:'600'},
   list:{paddingHorizontal:spacing.xxl,paddingBottom:32},

@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoyVibe — App Flow</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
+
+  /* Header */
+  .top-bar { background: #161b22; border-bottom: 1px solid #30363d; padding: 16px 32px; display: flex; align-items: center; gap: 16px; }
+  .top-bar h1 { font-size: 20px; font-weight: 700; color: #58a6ff; }
+  .top-bar span { font-size: 13px; color: #8b949e; }
+  .legend { margin-left: auto; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .leg { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #8b949e; }
+  .leg-dot { width: 12px; height: 12px; border-radius: 3px; }
+
+  /* Layout */
+  .canvas { display: flex; flex-direction: column; gap: 0; padding: 0 0 80px; overflow-x: auto; }
+
+  /* Layer rows */
+  .layer { display: flex; align-items: flex-start; gap: 0; }
+  .layer-label { writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #484f58; padding: 20px 10px; min-width: 36px; border-right: 1px solid #21262d; }
+  .layer-content { flex: 1; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0; padding: 20px 24px; border-bottom: 1px solid #21262d; min-height: 120px; }
+
+  /* Nodes */
+  .node {
+    position: relative;
+    border-radius: 12px;
+    padding: 14px 18px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    margin: 8px;
+    min-width: 180px;
+    max-width: 260px;
+    user-select: none;
+  }
+  .node:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  .node.active { outline: 2px solid #58a6ff; outline-offset: 2px; }
+
+  .node-screen     { background: #1c2a3a; border: 1.5px solid #2d5a8e; }
+  .node-modal      { background: #1c2e1c; border: 1.5px solid #2d7a3a; border-style: dashed; }
+  .node-store      { background: #2e1c1c; border: 1.5px solid #8e3a2d; }
+  .node-util       { background: #2a1c2e; border: 1.5px solid #7a3a8e; }
+  .node-component  { background: #1c2e2e; border: 1.5px solid #2d7a7a; }
+  .node-action     { background: #2e2a1c; border: 1.5px solid #8e7a2d; }
+
+  .node-icon { font-size: 22px; margin-bottom: 6px; }
+  .node-title { font-size: 14px; font-weight: 700; color: #e6edf3; line-height: 1.3; }
+  .node-sub { font-size: 11px; color: #8b949e; margin-top: 4px; line-height: 1.4; }
+  .node-badge { display: inline-block; margin-top: 6px; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
+
+  .badge-screen   { background: #2d5a8e33; color: #79c0ff; border: 1px solid #2d5a8e; }
+  .badge-modal    { background: #2d7a3a33; color: #7ee787; border: 1px solid #2d7a3a; }
+  .badge-store    { background: #8e3a2d33; color: #ffa198; border: 1px solid #8e3a2d; }
+  .badge-util     { background: #7a3a8e33; color: #d2a8ff; border: 1px solid #7a3a8e; }
+  .badge-component{ background: #2d7a7a33; color: #76e3ea; border: 1px solid #2d7a7a; }
+
+  /* Connector arrows */
+  .connector-group { width: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 4px 8px; }
+  .arrow { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #484f58; }
+  .arrow-line { height: 1px; flex: 1; min-width: 20px; background: linear-gradient(90deg, #30363d, #484f58); }
+  .arrow-label { font-size: 10px; color: #6e7681; white-space: nowrap; }
+
+  /* Detail panel */
+  .detail-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center; }
+  .detail-overlay.open { display: flex; }
+  .detail-panel {
+    background: #161b22; border: 1px solid #30363d; border-radius: 16px;
+    width: 580px; max-width: 95vw; max-height: 85vh; overflow-y: auto;
+    padding: 28px; position: relative; box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  }
+  .detail-close { position: absolute; top: 16px; right: 16px; background: #21262d; border: 1px solid #30363d; border-radius: 8px; padding: 4px 12px; cursor: pointer; font-size: 13px; color: #8b949e; }
+  .detail-close:hover { color: #e6edf3; }
+  .detail-icon { font-size: 40px; margin-bottom: 10px; }
+  .detail-title { font-size: 22px; font-weight: 700; color: #e6edf3; }
+  .detail-file { font-size: 12px; color: #58a6ff; font-family: monospace; margin-top: 4px; margin-bottom: 16px; }
+  .detail-desc { font-size: 14px; color: #8b949e; line-height: 1.7; margin-bottom: 16px; }
+  .detail-section { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #484f58; margin-bottom: 8px; margin-top: 16px; }
+  .detail-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .detail-list li { font-size: 13px; color: #c9d1d9; display: flex; gap: 8px; align-items: flex-start; }
+  .detail-list li::before { content: '→'; color: #58a6ff; flex-shrink: 0; }
+  .detail-list li.store-action::before { content: '⚡'; color: #ffa198; }
+  .detail-list li.note::before { content: '⚠️'; }
+  .pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .pill { font-size: 11px; padding: 3px 10px; border-radius: 99px; font-weight: 600; }
+  .pill-blue { background: #2d5a8e33; color: #79c0ff; border: 1px solid #2d5a8e; }
+  .pill-green { background: #2d7a3a33; color: #7ee787; border: 1px solid #2d7a3a; }
+  .pill-red { background: #8e3a2d33; color: #ffa198; border: 1px solid #8e3a2d; }
+  .pill-purple { background: #7a3a8e33; color: #d2a8ff; border: 1px solid #7a3a8e; }
+  .pill-teal { background: #2d7a7a33; color: #76e3ea; border: 1px solid #2d7a7a; }
+
+  /* Flow arrows between layers */
+  .between-layers { display: flex; justify-content: center; align-items: center; height: 36px; gap: 24px; background: #0d1117; border-bottom: 1px solid #21262d; }
+  .flow-arrow { font-size: 18px; color: #30363d; }
+  .flow-arrow-label { font-size: 11px; color: #484f58; }
+
+  /* Workflow section */
+  .workflow-section { background: #161b22; border-top: 1px solid #30363d; padding: 32px; margin-top: 0; }
+  .workflow-title { font-size: 16px; font-weight: 700; color: #58a6ff; margin-bottom: 20px; }
+  .workflow-steps { display: flex; gap: 0; align-items: stretch; flex-wrap: wrap; }
+  .wstep { flex: 1; min-width: 180px; background: #0d1117; border: 1px solid #21262d; padding: 20px; position: relative; }
+  .wstep:not(:last-child)::after { content: '→'; position: absolute; right: -13px; top: 50%; transform: translateY(-50%); font-size: 20px; color: #30363d; z-index: 1; }
+  .wstep-num { font-size: 10px; font-weight: 700; color: #484f58; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .wstep-who { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; display: inline-block; margin-bottom: 8px; }
+  .who-claude { background: #2d5a8e33; color: #79c0ff; border: 1px solid #2d5a8e; }
+  .who-dev { background: #2d7a3a33; color: #7ee787; border: 1px solid #2d7a3a; }
+  .wstep-title { font-size: 14px; font-weight: 700; color: #e6edf3; margin-bottom: 6px; }
+  .wstep-body { font-size: 12px; color: #8b949e; line-height: 1.5; }
+
+  /* Search */
+  .search-bar { background: #161b22; padding: 12px 32px; border-bottom: 1px solid #30363d; display: flex; align-items: center; gap: 12px; }
+  .search-input { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 8px 14px; color: #e6edf3; font-size: 13px; width: 280px; outline: none; }
+  .search-input:focus { border-color: #58a6ff; }
+  .search-hint { font-size: 12px; color: #484f58; }
+
+  @media (max-width: 700px) {
+    .workflow-steps { flex-direction: column; }
+    .wstep:not(:last-child)::after { display: none; }
+    .layer-label { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div>✈️</div>
+  <h1>VoyVibe — App Flow</h1>
+  <span>Interactive architecture diagram · Click any node for details</span>
+  <div class="legend">
+    <div class="leg"><div class="leg-dot" style="background:#2d5a8e"></div> Screen</div>
+    <div class="leg"><div class="leg-dot" style="background:#2d7a3a;border-style:dashed;border:1.5px dashed #2d7a3a"></div> Modal</div>
+    <div class="leg"><div class="leg-dot" style="background:#8e3a2d"></div> Store Action</div>
+    <div class="leg"><div class="leg-dot" style="background:#7a3a8e"></div> Utility</div>
+    <div class="leg"><div class="leg-dot" style="background:#2d7a7a"></div> Component</div>
+  </div>
+</div>
+
+<div class="search-bar">
+  <input class="search-input" placeholder="Search nodes…" id="searchInput" oninput="filterNodes(this.value)" />
+  <span class="search-hint" id="searchHint">Click any node to inspect it</span>
+</div>
+
+<div class="canvas">
+
+  <!-- LAYER 1: Entry -->
+  <div class="layer">
+    <div class="layer-label">Entry</div>
+    <div class="layer-content">
+      <div class="node node-screen" onclick="showDetail('home')">
+        <div class="node-icon">🏠</div>
+        <div class="node-title">Home Screen</div>
+        <div class="node-sub">Trip list, empty state, create-trip entry</div>
+        <span class="node-badge badge-screen">Screen</span>
+      </div>
+      <div class="node node-modal" onclick="showDetail('newtrip')">
+        <div class="node-icon">➕</div>
+        <div class="node-title">NewTripModal</div>
+        <div class="node-sub">3-step wizard: Mode → Details → Travelers</div>
+        <span class="node-badge badge-modal">Modal</span>
+      </div>
+      <div class="node node-component" onclick="showDetail('daterange')">
+        <div class="node-icon">📅</div>
+        <div class="node-title">DateRangePicker</div>
+        <div class="node-sub">Custom 2-month calendar (no library)</div>
+        <span class="node-badge badge-component">Component</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="between-layers">
+    <span class="flow-arrow">↓</span>
+    <span class="flow-arrow-label">createTrip() → navigate to TripScreen</span>
+  </div>
+
+  <!-- LAYER 2: Trip Hub -->
+  <div class="layer">
+    <div class="layer-label">Trip Hub</div>
+    <div class="layer-content">
+      <div class="node node-screen" onclick="showDetail('tripscreen')">
+        <div class="node-icon">🗂️</div>
+        <div class="node-title">TripScreen</div>
+        <div class="node-sub">Tab shell + ⋮ menu (Edit / Duplicate / Share / Delete)</div>
+        <span class="node-badge badge-screen">Screen</span>
+      </div>
+      <div class="node node-modal" onclick="showDetail('edittrip')">
+        <div class="node-icon">✏️</div>
+        <div class="node-title">EditTripModal</div>
+        <div class="node-sub">Update name, destination, dates</div>
+        <span class="node-badge badge-modal">Modal</span>
+      </div>
+      <div class="node node-action" onclick="showDetail('tripmenu')">
+        <div class="node-icon">⋮</div>
+        <div class="node-title">Trip Menu Actions</div>
+        <div class="node-sub">Alert.alert action sheet with 4 options</div>
+        <span class="node-badge" style="background:#2e2a1c33;color:#d4a72c;border:1px solid #8e7a2d">Actions</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="between-layers">
+    <span class="flow-arrow">↓</span>
+    <span class="flow-arrow-label">3 tabs rendered below TripScreen header</span>
+  </div>
+
+  <!-- LAYER 3: Tabs -->
+  <div class="layer">
+    <div class="layer-label">Tabs</div>
+    <div class="layer-content" style="gap:0">
+
+      <!-- Itinerary column -->
+      <div style="display:flex;flex-direction:column;gap:8px;margin:8px;min-width:220px">
+        <div class="node node-screen" style="margin:0" onclick="showDetail('itinerary')">
+          <div class="node-icon">📋</div>
+          <div class="node-title">Itinerary Tab</div>
+          <div class="node-sub">Day nav · Activities · Expense bar chart</div>
+          <span class="node-badge badge-screen">Screen</span>
+        </div>
+        <div class="node node-modal" style="margin:0" onclick="showDetail('addactivity')">
+          <div class="node-icon">🎯</div>
+          <div class="node-title">AddActivityModal</div>
+          <div class="node-sub">Add activity to a specific day</div>
+          <span class="node-badge badge-modal">Modal</span>
+        </div>
+      </div>
+
+      <!-- Travelers column -->
+      <div style="display:flex;flex-direction:column;gap:8px;margin:8px;min-width:200px">
+        <div class="node node-screen" style="margin:0" onclick="showDetail('travelers')">
+          <div class="node-icon">👨‍👩‍👧‍👦</div>
+          <div class="node-title">Travelers Tab</div>
+          <div class="node-sub">Family roster, member cards, needs</div>
+          <span class="node-badge badge-screen">Screen</span>
+        </div>
+      </div>
+
+      <!-- Splitwise column -->
+      <div style="display:flex;flex-direction:column;gap:8px;margin:8px;min-width:220px">
+        <div class="node node-screen" style="margin:0" onclick="showDetail('splitwise')">
+          <div class="node-icon">💸</div>
+          <div class="node-title">Splitwise Tab</div>
+          <div class="node-sub">Expense list · Balances · Settlements</div>
+          <span class="node-badge badge-screen">Screen</span>
+        </div>
+        <div class="node node-modal" style="margin:0" onclick="showDetail('addexpense')">
+          <div class="node-icon">💰</div>
+          <div class="node-title">AddExpenseModal</div>
+          <div class="node-sub">Log expense with payer + participants</div>
+          <span class="node-badge badge-modal">Modal</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="between-layers">
+    <span class="flow-arrow">↓</span>
+    <span class="flow-arrow-label">All screens read/write via Zustand store</span>
+  </div>
+
+  <!-- LAYER 4: Store -->
+  <div class="layer">
+    <div class="layer-label">Store</div>
+    <div class="layer-content">
+      <div class="node node-store" onclick="showDetail('store')">
+        <div class="node-icon">🗄️</div>
+        <div class="node-title">Zustand Store</div>
+        <div class="node-sub">src/store/index.js · Persisted to AsyncStorage</div>
+        <span class="node-badge badge-store">Store</span>
+      </div>
+      <div class="node node-util" onclick="showDetail('costs')">
+        <div class="node-icon">🧮</div>
+        <div class="node-title">costs.js</div>
+        <div class="node-sub">Split engine: individual vs family mode</div>
+        <span class="node-badge badge-util">Utility</span>
+      </div>
+      <div class="node node-util" onclick="showDetail('helpers')">
+        <div class="node-icon">🔧</div>
+        <div class="node-title">helpers.js</div>
+        <div class="node-sub">uid(), fmt(), fmtM(), getAllMembers(), familyPalette</div>
+        <span class="node-badge badge-util">Utility</span>
+      </div>
+      <div class="node node-util" onclick="showDetail('theme')">
+        <div class="node-icon">🎨</div>
+        <div class="node-title">theme.js</div>
+        <div class="node-sub">Colors, spacing, radius, typography, shadow</div>
+        <span class="node-badge badge-util">Utility</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Dev Workflow -->
+<div class="workflow-section">
+  <div class="workflow-title">🔄 Development Workflow</div>
+  <div class="workflow-steps">
+    <div class="wstep">
+      <div class="wstep-num">Step 1</div>
+      <div class="wstep-who who-dev">👨‍💻 Developer</div>
+      <div class="wstep-title">Start Dev Server</div>
+      <div class="wstep-body">Open VS Code terminal in <code>VoyVibeFresh/</code> and run <code>npx expo start</code></div>
+    </div>
+    <div class="wstep">
+      <div class="wstep-num">Step 2</div>
+      <div class="wstep-who who-dev">📱 Developer</div>
+      <div class="wstep-title">Open Expo Go</div>
+      <div class="wstep-body">Scan the QR code in terminal with Expo Go on iPhone. Same Wi-Fi required.</div>
+    </div>
+    <div class="wstep">
+      <div class="wstep-num">Step 3</div>
+      <div class="wstep-who who-claude">🤖 Claude</div>
+      <div class="wstep-title">Edit Source Files</div>
+      <div class="wstep-body">Claude reads and writes .js files directly via Cowork file access. No terminal needed.</div>
+    </div>
+    <div class="wstep">
+      <div class="wstep-num">Step 4</div>
+      <div class="wstep-who who-dev">🔁 Auto</div>
+      <div class="wstep-title">Hot Reload</div>
+      <div class="wstep-body">Expo Go auto-reloads when files change. Shake phone → Reload if stuck.</div>
+    </div>
+    <div class="wstep">
+      <div class="wstep-num">Step 5</div>
+      <div class="wstep-who who-dev">👨‍💻 Developer</div>
+      <div class="wstep-title">Review & Commit</div>
+      <div class="wstep-body"><code>git add -A && git commit -m "feat: …" && git push</code> from VS Code terminal.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Detail overlay -->
+<div class="detail-overlay" id="detailOverlay" onclick="closeDetailIfBg(event)">
+  <div class="detail-panel" id="detailPanel">
+    <button class="detail-close" onclick="closeDetail()">✕ Close</button>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<script>
+const nodes = {
+  home: {
+    icon: '🏠', title: 'Home Screen', file: 'src/screens/HomeScreen.js', badge: 'Screen',
+    desc: 'The app entry point. Shows a scrollable list of trip cards with gradient backgrounds. Includes an empty state and a "+" button to open NewTripModal.',
+    items: [
+      'Renders trip cards using trip.bgColors gradient pairs',
+      'Tapping a card calls setCurrentTrip(tripId) then navigates to TripScreen',
+      'Long-press or swipe to reveal delete on some versions',
+    ],
+    actions: [],
+    pills: ['setCurrentTrip', 'navigation.navigate'],
+    pillType: 'blue',
+  },
+  newtrip: {
+    icon: '➕', title: 'NewTripModal', file: 'src/modals/NewTripModal.js', badge: 'Modal',
+    desc: 'A 3-step full-screen modal (pageSheet presentation). Collects all data needed to create a trip.',
+    items: [
+      'Step 1 — Mode: AI Planned / Expert (Coming Soon badge) / Manual',
+      'Step 2 — Name, destination, and date range via DateRangePicker',
+      'Step 3 — Families (collapsible boxes) and member names/ages',
+      'Validation: name + destination required, at least one family with one member',
+      'On submit: calls createTrip() then immediately navigates into the new trip',
+    ],
+    actions: ['createTrip({ name, destination, startDate, endDate, mode, familyForms })'],
+    pills: ['DateRangePicker', 'FormField', 'ModalHeader'],
+    pillType: 'green',
+  },
+  daterange: {
+    icon: '📅', title: 'DateRangePicker', file: 'src/components/ui/DateRangePicker.js', badge: 'Component',
+    desc: 'Custom-built 2-month scroll calendar for selecting a start and end date. Built entirely with RN Views — no third-party date library.',
+    items: [
+      'Renders two months side by side in a horizontal ScrollView',
+      'First tap sets startDate, second tap sets endDate',
+      'Tapping before the current startDate resets and starts over',
+      'Date range highlighted between start and end with accent color',
+      'onConfirm(startDate, endDate) called when user hits Confirm',
+    ],
+    actions: [],
+    pills: ['visible', 'startDate', 'endDate', 'onConfirm', 'onClose'],
+    pillType: 'teal',
+  },
+  tripscreen: {
+    icon: '🗂️', title: 'TripScreen', file: 'src/screens/TripScreen.js', badge: 'Screen',
+    desc: 'The main trip container. Renders the trip header, tab bar, and the active tab\'s screen. Also hosts the ⋮ menu and EditTripModal.',
+    items: [
+      'Header: emoji, trip name, destination, dates, mode tag, accessibility tag',
+      '⋮ button top-right opens an Alert.alert action sheet',
+      'Expert-mode trips show a "Coming Soon" placeholder for Itinerary + Splitwise',
+      'Travelers tab always active regardless of mode',
+      'EditTripModal overlaid here, receives current trip as prop',
+    ],
+    actions: ['deleteTrip(tripId)', 'duplicateTrip(tripId)', 'setCurrentTrip(null)'],
+    pills: ['Alert.alert', 'Share (RN built-in)', 'EditTripModal'],
+    pillType: 'blue',
+  },
+  edittrip: {
+    icon: '✏️', title: 'EditTripModal', file: 'src/modals/EditTripModal.js', badge: 'Modal',
+    desc: 'A lightweight edit modal seeded from the current trip. Lets the user update name, destination, and travel dates without touching the existing itinerary days.',
+    items: [
+      'useEffect seeds fields from trip prop whenever modal opens',
+      'Shows an info banner if trip already has itinerary days',
+      'Dates edited via the same DateRangePicker used in NewTripModal',
+      'Save button disabled until name + destination are non-empty',
+    ],
+    actions: ['updateTrip(tripId, { name, destination, startDate, endDate })'],
+    pills: ['FormField', 'DateRangePicker', 'ModalHeader'],
+    pillType: 'green',
+  },
+  tripmenu: {
+    icon: '⋮', title: 'Trip Menu Actions', file: 'src/screens/TripScreen.js', badge: 'Actions',
+    desc: 'The ⋮ kebab menu in the TripScreen header opens a native Alert.alert action sheet with four options.',
+    items: [
+      'Edit Trip → opens EditTripModal',
+      'Duplicate → Alert confirm → duplicateTrip() → success toast',
+      'Share → native Share.share() with formatted trip summary text',
+      'Delete Trip → destructive Alert confirm → deleteTrip() → navigate back',
+    ],
+    actions: ['duplicateTrip(tripId)', 'deleteTrip(tripId)', 'Share.share()'],
+    pills: ['Alert.alert', 'Share API'],
+    pillType: 'teal',
+  },
+  itinerary: {
+    icon: '📋', title: 'Itinerary Screen', file: 'src/screens/ItineraryScreen.js', badge: 'Screen',
+    desc: 'Day-by-day trip planner. Shows a cost banner, bar chart, day navigation strip, and activity cards for the selected day.',
+    items: [
+      'Cost banner: total estimate, per-family breakdown, Move to Splitwise button',
+      'Bar chart: per-day spend, active day green, tap bar to jump to day',
+      'Day nav: horizontal scroll of day chips with mini cost labels',
+      'Activity cards: time, type icon, cost/person, accessibility info',
+      '"Move to Splitwise" calls pushItineraryToSplitwise() and switches tab',
+    ],
+    actions: ['setCurrentDay(i)', 'deleteActivity(tripId, actId)', 'pushItineraryToSplitwise(tripId)'],
+    pills: ['AddActivityModal', 'calcTripItineraryTotal', 'calcDayCostForTrip'],
+    pillType: 'blue',
+  },
+  addactivity: {
+    icon: '🎯', title: 'AddActivityModal', file: 'src/modals/AddActivityModal.js', badge: 'Modal',
+    desc: 'Modal to add a new activity to a specific itinerary day.',
+    items: [
+      'Fields: type (food/transport/stay/activity), time picker, name, detail, cost/person, accessibility',
+      'Added to the selected day index via addActivity()',
+      'Existing activities sorted by time on display',
+    ],
+    actions: ['addActivity(tripId, dayIndex, activity)'],
+    pills: ['FormField', 'ModalHeader'],
+    pillType: 'green',
+  },
+  travelers: {
+    icon: '👨‍👩‍👧‍👦', title: 'Travelers Screen', file: 'src/screens/TravelersScreen.js', badge: 'Screen',
+    desc: 'Shows all families and their members. Supports adding new families and travelers.',
+    items: [
+      'Family cards with color-coded avatars',
+      'Member list with age, accessibility needs tags',
+      'Add Family and Add Traveler buttons',
+      'Always accessible even in Expert mode trips',
+    ],
+    actions: ['addFamily(tripId, { name, members })', 'addTraveler(tripId, famId, member)'],
+    pills: [],
+    pillType: 'blue',
+  },
+  splitwise: {
+    icon: '💸', title: 'Splitwise Screen', file: 'src/screens/SplitwiseScreen.js', badge: 'Screen',
+    desc: 'Full expense splitting engine. Supports dual modes, per-expense overrides, exclusion, editable amounts, and settlement calculation.',
+    items: [
+      'Mode toggle: By Person (individual) | By Group (family/insurance)',
+      'Expense cards: expandable, show payer, split chips, exclude toggle',
+      'Excluded expenses shown as strikethrough / dashed — not deleted',
+      'Actual amount editable; estimatedAmount shown as reference',
+      'Summary section shows per-family or per-member totals',
+      'Balances: net paid − owed; settlements shown as transfer arrows',
+    ],
+    actions: ['setTripSplitMode', 'toggleExpenseExcluded', 'updateExpenseAmount', 'updateExpenseSplitMode', 'toggleFamilySplit', 'toggleExpenseMember', 'deleteExpense'],
+    pills: ['calcBalances', 'calcSettlements', 'famExpenseShare', 'memberExpenseShare'],
+    pillType: 'purple',
+  },
+  addexpense: {
+    icon: '💰', title: 'AddExpenseModal', file: 'src/modals/AddExpenseModal.js', badge: 'Modal',
+    desc: 'Log a real (non-itinerary) expense. Supports full participant customization per expense.',
+    items: [
+      'Fields: name, amount, category emoji, payer (avatar picker)',
+      'Split mode: inherit trip mode / override to Individual or Family',
+      'Family mode: toggle each family in/out with Switch',
+      'Individual mode: toggle per-member grouped by family',
+      '"Add all / Remove all" helpers per family in individual mode',
+      'Summary pill shows /group or /person share preview',
+    ],
+    actions: ['addExpense(tripId, expense)'],
+    pills: ['resolveMode', 'getEffectiveMembers'],
+    pillType: 'green',
+  },
+  store: {
+    icon: '🗄️', title: 'Zustand Store', file: 'src/store/index.js', badge: 'Store',
+    desc: 'Single source of truth. Persisted to AsyncStorage under the key "voyvibe-storage". Seeds from sampleData.js on first run.',
+    items: [
+      'trips[] — array of all trip objects',
+      'currentTripId — which trip is open in TripScreen',
+      'currentDay — active day index for ItineraryScreen',
+      'account — loggedIn, name, email, credits, history',
+      'Persistence: zustand/middleware persist + createJSONStorage(AsyncStorage)',
+    ],
+    actions: ['createTrip', 'updateTrip', 'deleteTrip', 'duplicateTrip', 'addActivity', 'deleteActivity', 'addFamily', 'addTraveler', 'addExpense', 'deleteExpense', 'pushItineraryToSplitwise', 'setTripSplitMode', 'toggleExpenseExcluded', 'updateExpenseAmount'],
+    pills: ['zustand', 'AsyncStorage', 'persist middleware'],
+    pillType: 'red',
+  },
+  costs: {
+    icon: '🧮', title: 'costs.js', file: 'src/utils/costs.js', badge: 'Utility',
+    desc: 'The entire expense splitting engine. Mode resolution, participant resolution, per-unit shares, balance calculation, and settlement algorithm.',
+    items: [
+      'resolveMode(exp, trip) → exp.splitMode || trip.splitMode || "individual"',
+      'getEffectiveFamilies — defaults to all families if participatingFamilies not set',
+      'getEffectiveMembers — respects mode + participatingMembers override',
+      'famExpenseShare — family mode: per-family; individual: pp × family members in list',
+      'memberExpenseShare — family mode: only head owes; individual: pp if in list',
+      'calcBalances — net = paid − owed, skips excluded expenses',
+      'calcSettlements — greedy min-transfer algorithm',
+    ],
+    actions: [],
+    pills: ['resolveMode', 'getEffectiveFamilies', 'getEffectiveMembers', 'calcBalances', 'calcSettlements'],
+    pillType: 'purple',
+  },
+  helpers: {
+    icon: '🔧', title: 'helpers.js', file: 'src/utils/helpers.js', badge: 'Utility',
+    desc: 'General-purpose utility functions used across the whole app.',
+    items: [
+      'uid() — generates a short random unique ID for trips, families, members, expenses',
+      'fmt(dateStr) — formats ISO date to "Jun 12" display format',
+      'fmtM(amount) — formats number as "$1,234" currency string',
+      'getAllMembers(trip) — flattens trip.families[].members into one array',
+      'familyPalette — array of 8 color strings for family color assignment',
+      'TRIP_EMOJIS, TRIP_BG_COLORS — random assignment on trip creation',
+    ],
+    actions: [],
+    pills: ['uid', 'fmt', 'fmtM', 'getAllMembers', 'familyPalette'],
+    pillType: 'purple',
+    notes: ['familyPalette must be exported — missing export caused the createTrip crash in early development'],
+  },
+  theme: {
+    icon: '🎨', title: 'theme.js', file: 'src/theme.js', badge: 'Utility',
+    desc: 'All design tokens. Never hardcode colors, spacing, or font sizes in component files — always import from here.',
+    items: [
+      'colors — primary, green, yellow, bg, surface, surface2, border, text, muted, ai, expert, …',
+      'spacing — xs (4), sm (8), md (12), lg (16), xl (20), xxl (24)',
+      'radius — sm (8), md (12), lg (16), full (999)',
+      'typography — h1–h4, body, bodyBold, small, smallBold, tiny, tinyBold',
+      'shadow — sm, md preset shadowOffset/shadowOpacity/elevation',
+      'activityColors, activityIcons — keyed by activity type',
+    ],
+    actions: [],
+    pills: ['colors', 'spacing', 'radius', 'typography', 'shadow'],
+    pillType: 'purple',
+  },
+};
+
+function showDetail(id) {
+  const d = nodes[id];
+  if (!d) return;
+  const content = document.getElementById('detailContent');
+
+  const actionItems = d.actions.length
+    ? `<div class="detail-section">Store Actions Called</div>
+       <ul class="detail-list">
+         ${d.actions.map(a => `<li class="store-action">${a}</li>`).join('')}
+       </ul>` : '';
+
+  const noteItems = (d.notes || []).length
+    ? `<div class="detail-section">Gotchas & Notes</div>
+       <ul class="detail-list">
+         ${d.notes.map(n => `<li class="note">${n}</li>`).join('')}
+       </ul>` : '';
+
+  const pillHtml = d.pills.length
+    ? `<div class="detail-section">Key Dependencies / Functions</div>
+       <div class="pill-row">
+         ${d.pills.map(p => `<span class="pill pill-${d.pillType}">${p}</span>`).join('')}
+       </div>` : '';
+
+  content.innerHTML = `
+    <div class="detail-icon">${d.icon}</div>
+    <div class="detail-title">${d.title}</div>
+    <div class="detail-file">${d.file}</div>
+    <div class="detail-desc">${d.desc}</div>
+    ${d.items.length ? `<div class="detail-section">Key Behaviour</div>
+    <ul class="detail-list">
+      ${d.items.map(i => `<li>${i}</li>`).join('')}
+    </ul>` : ''}
+    ${actionItems}
+    ${noteItems}
+    ${pillHtml}
+  `;
+  document.getElementById('detailOverlay').classList.add('open');
+
+  // Highlight the clicked node
+  document.querySelectorAll('.node').forEach(n => n.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+
+function closeDetail() {
+  document.getElementById('detailOverlay').classList.remove('open');
+  document.querySelectorAll('.node').forEach(n => n.classList.remove('active'));
+}
+
+function closeDetailIfBg(e) {
+  if (e.target === document.getElementById('detailOverlay')) closeDetail();
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+
+function filterNodes(q) {
+  const hint = document.getElementById('searchHint');
+  if (!q) {
+    document.querySelectorAll('.node').forEach(n => { n.style.opacity = '1'; n.style.pointerEvents = ''; });
+    hint.textContent = 'Click any node to inspect it';
+    return;
+  }
+  const lower = q.toLowerCase();
+  let count = 0;
+  document.querySelectorAll('.node').forEach(n => {
+    const text = n.innerText.toLowerCase();
+    const match = text.includes(lower);
+    n.style.opacity = match ? '1' : '0.2';
+    n.style.pointerEvents = match ? '' : 'none';
+    if (match) count++;
+  });
+  hint.textContent = `${count} node${count !== 1 ? 's' : ''} matched`;
+}
+</script>
+</body>
+</html>

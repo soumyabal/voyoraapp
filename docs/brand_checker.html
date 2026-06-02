@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brand Name Checker</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; padding: 32px 16px; }
+  .container { max-width: 780px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .subtitle { font-size: 14px; color: #64748b; margin-bottom: 28px; }
+
+  .search-row { display: flex; gap: 10px; margin-bottom: 32px; }
+  input[type="text"] { flex: 1; background: #1e2130; border: 1.5px solid #2d3348; border-radius: 10px; padding: 12px 16px; font-size: 15px; color: #e2e8f0; outline: none; transition: border-color 0.2s; }
+  input[type="text"]:focus { border-color: #6366f1; }
+  input[type="text"]::placeholder { color: #475569; }
+  button.check-btn { background: #6366f1; color: #fff; border: none; border-radius: 10px; padding: 12px 22px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+  button.check-btn:hover { background: #4f46e5; }
+  button.check-btn:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+
+  .results { display: flex; flex-direction: column; gap: 16px; }
+
+  .section { background: #1e2130; border: 1px solid #2d3348; border-radius: 14px; overflow: hidden; }
+  .section-header { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid #2d3348; background: #191c2a; }
+  .section-icon { font-size: 18px; }
+  .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #94a3b8; }
+
+  .check-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 18px; border-bottom: 1px solid #1a1d2e; }
+  .check-row:last-child { border-bottom: none; }
+  .check-label { font-size: 14px; color: #cbd5e1; display: flex; align-items: center; gap: 8px; }
+  .check-label a { color: #6366f1; text-decoration: none; }
+  .check-label a:hover { text-decoration: underline; }
+
+  .badge { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+  .badge.available { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+  .badge.taken { background: #2d0a0a; color: #f87171; border: 1px solid #7f1d1d; }
+  .badge.loading { background: #1e293b; color: #64748b; border: 1px solid #334155; }
+  .badge.manual { background: #1c1a06; color: #fbbf24; border: 1px solid #78350f; }
+  .badge.similar { background: #1c1205; color: #fb923c; border: 1px solid #7c2d12; }
+
+  .manual-links { display: flex; flex-direction: column; gap: 0; }
+  .manual-link-row { display: flex; align-items: flex-start; gap: 12px; padding: 13px 18px; border-bottom: 1px solid #1a1d2e; }
+  .manual-link-row:last-child { border-bottom: none; }
+  .manual-link-icon { font-size: 16px; margin-top: 2px; flex-shrink: 0; }
+  .manual-link-content { flex: 1; }
+  .manual-link-title { font-size: 13px; font-weight: 600; color: #cbd5e1; margin-bottom: 4px; }
+  .manual-link-desc { font-size: 12px; color: #64748b; }
+  .manual-link-btn { display: inline-block; margin-top: 6px; font-size: 12px; color: #6366f1; text-decoration: none; border: 1px solid #3730a3; border-radius: 6px; padding: 4px 10px; }
+  .manual-link-btn:hover { background: #1e1b4b; }
+
+  .spinner { width: 14px; height: 14px; border: 2px solid #334155; border-top-color: #6366f1; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; margin-right: 4px; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .tip { font-size: 12px; color: #475569; padding: 10px 18px; border-top: 1px solid #2d3348; background: #191c2a; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>✈ Brand Name Checker</h1>
+  <p class="subtitle">Check domain, App Store, social handles, and trademark links — all in one place.</p>
+
+  <div class="search-row">
+    <input type="text" id="nameInput" placeholder="Enter a brand name, e.g. voykin" value="voykin" />
+    <button class="check-btn" id="checkBtn" onclick="runChecks()">Check →</button>
+  </div>
+
+  <div class="results" id="results"></div>
+</div>
+
+<script>
+const DOMAINS = ['com', 'app', 'io', 'travel'];
+const RDAP = {
+  com:    n => `https://rdap.verisign.com/com/v1/domain/${n}.com`,
+  app:    n => `https://rdap.nic.google/v1/domain/${n}.app`,
+  io:     n => `https://rdap.nic.io/domain/${n}.io`,
+  travel: n => `https://rdap.org/domain/${n}.travel`,
+};
+
+function badge(status, text) {
+  return `<span class="badge ${status}">${text}</span>`;
+}
+
+function spinner() {
+  return `<span class="badge loading"><span class="spinner"></span>Checking…</span>`;
+}
+
+function renderResults(name) {
+  const r = document.getElementById('results');
+  r.innerHTML = `
+    <div class="section">
+      <div class="section-header"><span class="section-icon">📡</span><span class="section-title">Domains</span></div>
+      ${DOMAINS.map(tld => `
+        <div class="check-row" id="domain-${tld}">
+          <span class="check-label">${name}.${tld}</span>
+          ${spinner()}
+        </div>`).join('')}
+    </div>
+
+    <div class="section">
+      <div class="section-header"><span class="section-icon">🍎</span><span class="section-title">App Store (iOS)</span></div>
+      <div class="check-row" id="appstore">
+        <span class="check-label">Search: "${name}"</span>
+        ${spinner()}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header"><span class="section-icon">📲</span><span class="section-title">Social handles — open to verify</span></div>
+      ${[
+        { id: 'tw', label: `@${name} on X / Twitter`, url: `https://twitter.com/${name}` },
+        { id: 'ig', label: `@${name} on Instagram`,   url: `https://www.instagram.com/${name}/` },
+        { id: 'tt', label: `@${name} on TikTok`,      url: `https://www.tiktok.com/@${name}` },
+      ].map(s => `
+        <div class="check-row">
+          <span class="check-label"><a href="${s.url}" target="_blank">${s.label} ↗</a></span>
+          <span class="badge manual">Open to check</span>
+        </div>`).join('')}
+    </div>
+
+    <div class="section">
+      <div class="section-header"><span class="section-icon">🔗</span><span class="section-title">Manual checks</span></div>
+      <div class="manual-links">
+        <div class="manual-link-row">
+          <span class="manual-link-icon">📋</span>
+          <div class="manual-link-content">
+            <div class="manual-link-title">USPTO Trademark Search</div>
+            <div class="manual-link-desc">Search for "${name}" in Classes 39 (transportation/travel) and 42 (software/tech). Look for exact and phonetically similar marks.</div>
+            <a class="manual-link-btn" href="https://tmsearch.uspto.gov/search/search-information" target="_blank">Open USPTO search ↗</a>
+          </div>
+        </div>
+        <div class="manual-link-row">
+          <span class="manual-link-icon">🤖</span>
+          <div class="manual-link-content">
+            <div class="manual-link-title">Google Play Store</div>
+            <div class="manual-link-desc">Check if an Android app with this name already exists.</div>
+            <a class="manual-link-btn" href="https://play.google.com/store/search?q=${encodeURIComponent(name)}&c=apps" target="_blank">Search Play Store ↗</a>
+          </div>
+        </div>
+        <div class="manual-link-row">
+          <span class="manual-link-icon">🌐</span>
+          <div class="manual-link-content">
+            <div class="manual-link-title">Namecheap — all domain extensions</div>
+            <div class="manual-link-desc">See every available TLD for "${name}" with pricing.</div>
+            <a class="manual-link-btn" href="https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(name)}" target="_blank">Check all domains ↗</a>
+          </div>
+        </div>
+        <div class="manual-link-row">
+          <span class="manual-link-icon">🐦</span>
+          <div class="manual-link-content">
+            <div class="manual-link-title">GitHub</div>
+            <div class="manual-link-desc">Check if the org/repo name is available.</div>
+            <a class="manual-link-btn" href="https://github.com/${encodeURIComponent(name)}" target="_blank">github.com/${name} ↗</a>
+          </div>
+        </div>
+      </div>
+      <div class="tip">💡 Tip: Even if all checks pass, always confirm USPTO trademark with a licensed attorney before filing or launching publicly.</div>
+    </div>
+  `;
+}
+
+async function checkDomain(name, tld) {
+  const el = document.getElementById(`domain-${tld}`);
+  if (!el) return;
+  const url = RDAP[tld]?.(name);
+  if (!url) {
+    el.querySelector('.badge, .badge.loading') && (el.lastElementChild.outerHTML = badge('manual', 'Check manually'));
+    return;
+  }
+  try {
+    const res = await fetch(url, { headers: { Accept: 'application/rdap+json' } });
+    const b = res.status === 404
+      ? badge('available', '✅ Available')
+      : res.status === 200
+        ? badge('taken', '❌ Taken')
+        : badge('manual', '❓ Check manually');
+    el.lastElementChild.outerHTML = b;
+  } catch {
+    el.lastElementChild.outerHTML = badge('manual', '❓ Check manually');
+  }
+}
+
+async function checkAppStore(name) {
+  const el = document.getElementById('appstore');
+  try {
+    const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(name)}&entity=software&limit=20`);
+    const data = await res.json();
+    const exact = data.results.filter(r => r.trackName.toLowerCase() === name.toLowerCase());
+    const similar = data.results
+      .filter(r => r.trackName.toLowerCase().includes(name.toLowerCase()) && r.trackName.toLowerCase() !== name.toLowerCase())
+      .slice(0, 2).map(r => r.trackName);
+
+    let b;
+    if (exact.length > 0) {
+      b = badge('taken', `❌ Taken — "${exact[0].trackName}"`);
+    } else if (similar.length > 0) {
+      b = badge('similar', `⚠️ Similar: ${similar.join(', ')}`);
+      el.querySelector('.check-label').textContent = `No exact match for "${name}"`;
+    } else {
+      b = badge('available', '✅ No exact match');
+    }
+    el.lastElementChild.outerHTML = b;
+  } catch {
+    el.lastElementChild.outerHTML = badge('manual', '❓ Check manually');
+  }
+}
+
+async function runChecks() {
+  const name = document.getElementById('nameInput').value.trim().toLowerCase();
+  if (!name) return;
+  const btn = document.getElementById('checkBtn');
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+
+  renderResults(name);
+
+  await Promise.all([
+    ...DOMAINS.map(tld => checkDomain(name, tld)),
+    checkAppStore(name),
+  ]);
+
+  btn.disabled = false;
+  btn.textContent = 'Check →';
+}
+
+window.addEventListener('load', runChecks);
+document.getElementById('nameInput').addEventListener('keydown', e => { if (e.key === 'Enter') runChecks(); });
+</script>
+</body>
+</html>

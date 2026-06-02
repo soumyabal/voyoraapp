@@ -53,6 +53,12 @@ function parseLocations(dest) {
     .map(s => s.trim()).filter(Boolean);
   return parts.length > 1 ? parts : [dest];
 }
+// Short, normalised city name from a fuller string ("Orlando, Florida, USA" → "Orlando").
+// Used as both the chip label and the per-activity city tag so search scope and
+// the Trip-Check city comparison stay consistent.
+function cityLabel(c) {
+  return (c || '').split(',')[0].trim();
+}
 // Split a "🏛️ Attractions" label into its leading emoji and the rest, so each
 // can be sized independently — a single mixed Text lets the tall emoji line box
 // clip the label inside small pills on iOS.
@@ -164,13 +170,15 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [pendingPlace,   setPendingPlace]   = useState(null);
   const [pickerDay,      setPickerDay]      = useState(dayIndex ?? 0);
   const [pickerSlot,     setPickerSlot]     = useState('morning');
-  const [activeLocation, setActiveLocation] = useState(null);   // null = all stops
+  const [cities,         setCities]         = useState([]);     // searchable cities (chips)
+  const [activeCity,     setActiveCity]     = useState('');     // current search city
+  const [addingCity,     setAddingCity]     = useState(false);  // custom-city input open?
+  const [newCity,        setNewCity]        = useState('');
   const searchTimeout = useRef(null);
   const filterTimeout = useRef(null);
   const cacheRef      = useRef(new Map());   // query string -> places[] (per-session)
 
   const destination   = trip?.destination ?? '';
-  const locations     = parseLocations(destination);
   const families      = trip?.families ?? [];
   const allDietary    = families.flatMap(f => f.dietary || []);
   const hasVeg        = allDietary.some(d => d==='vegetarian'||d==='vegan');
@@ -180,19 +188,24 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
   useEffect(() => {
     if (!visible) return;
-    setSearchText(''); setAddedNames(new Set()); setActiveLocation(null);
+    const parsed = parseLocations(destination);
+    const start  = parsed[0] || destination;
+    setSearchText(''); setAddedNames(new Set());
+    setCities(parsed.length ? parsed : (destination ? [destination] : []));
+    setActiveCity(start);
+    setAddingCity(false); setNewCity('');
     cacheRef.current.clear();
     setActiveFilters(FILTER_OPTS.filter(f => allDietary.includes(f.key)).map(f => f.key));
   }, [visible]);
 
   useEffect(() => {
-    if (!visible) return;
-    runSearch(searchText, activeCategory, activeFilters, activeLocation);
-  }, [visible, activeCategory]);
+    if (!visible || !activeCity) return;
+    runSearch(searchText, activeCategory, activeFilters, activeCity);
+  }, [visible, activeCategory, activeCity]);
 
   // One API call per unique query; identical queries (e.g. switching back to a
-  // previously-viewed category/location/filter combo) are served from cache.
-  const runSearch = async (text, catKey, filters, loc = activeLocation) => {
+  // previously-viewed category/city/filter combo) are served from cache.
+  const runSearch = async (text, catKey, filters, loc = activeCity) => {
     const cat   = CATEGORIES.find(c => c.key===catKey);
     const scope = loc || destination;
     const baseQ = text.trim() ? `${text.trim()} near ${scope}` : `${cat?.query??'places'} in ${scope}`;
@@ -228,9 +241,16 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     filterTimeout.current = setTimeout(() => runSearch(searchText, activeCategory, next), 350);
   };
 
-  const selectLocation = loc => {
-    setActiveLocation(loc);
-    runSearch(searchText, activeCategory, activeFilters, loc);
+  // Selecting a city re-runs the search via the activeCity effect.
+  const selectCity = c => { setAddingCity(false); setActiveCity(c); };
+
+  // Commit a freely-typed city (need not be in the trip's destination).
+  const commitNewCity = () => {
+    const c = newCity.trim();
+    setAddingCity(false); setNewCity('');
+    if (!c) return;
+    setCities(prev => prev.some(x => cityLabel(x) === cityLabel(c)) ? prev : [...prev, c]);
+    setActiveCity(c);
   };
 
   const handleAdd = place => {
@@ -250,6 +270,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
       costAmount:pendingPlace.costPerPerson,
       address:pendingPlace.address, url:pendingPlace.url,
       rating:pendingPlace.rating, lat:pendingPlace.lat, lng:pendingPlace.lng,
+      city:cityLabel(activeCity),   // tag the source city → Trip Check flags multi-city days
       note:null, status:null,
     });
     setAddedNames(prev => new Set([...prev, pendingPlace.name]));
@@ -276,21 +297,34 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <Text style={s.searchIcon}>{'\u{1F50D}'}</Text>
             <TextInput
               style={s.searchInput} value={searchText} onChangeText={handleSearchChange}
-              placeholder={`Search in ${destination}…`} placeholderTextColor={colors.muted}
+              placeholder={`Search in ${cityLabel(activeCity) || destination}…`} placeholderTextColor={colors.muted}
               returnKeyType="search" onSubmitEditing={() => runSearch(searchText,activeCategory,activeFilters)}
               clearButtonMode="while-editing"
             />
           </View>
 
-          {locations.length > 1 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
-              {[{ k: null, label: '\u{1F30D} All stops' }, ...locations.map(l => ({ k: l, label: '\u{1F4CD} ' + l }))].map(opt => (
-                <Chip key={opt.k ?? 'all'} label={opt.label} active={activeLocation===opt.k}
-                  activeStyle={s.locChipActive} activeTextStyle={s.chipTextActive}
-                  onPress={() => selectLocation(opt.k)} />
-              ))}
-            </ScrollView>
-          )}
+          {/* City selector — always shown; search any city, not just the destination */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
+            {cities.map(c => (
+              <Chip key={c} label={'\u{1F4CD} ' + cityLabel(c)} active={activeCity === c}
+                activeStyle={s.locChipActive} activeTextStyle={s.chipTextActive}
+                onPress={() => selectCity(c)} />
+            ))}
+            {addingCity ? (
+              <View style={s.addCityWrap}>
+                <TextInput
+                  style={s.addCityInput} value={newCity} onChangeText={setNewCity}
+                  placeholder="City name…" placeholderTextColor={colors.muted}
+                  autoFocus returnKeyType="search"
+                  onSubmitEditing={commitNewCity} onBlur={commitNewCity}
+                />
+              </View>
+            ) : (
+              <Chip label="＋ City" active={false}
+                activeStyle={s.locChipActive} activeTextStyle={s.chipTextActive}
+                onPress={() => setAddingCity(true)} />
+            )}
+          </ScrollView>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
             {CATEGORIES.map(cat => (
@@ -417,6 +451,8 @@ const s = StyleSheet.create({
   chipActive:{backgroundColor:colors.primary,borderColor:colors.primary},
   chipTextActive:{color:'#fff'},
   locChipActive:{backgroundColor:'#2563eb',borderColor:'#2563eb'},
+  addCityWrap:{height:36,justifyContent:'center',borderWidth:1.5,borderColor:'#2563eb',borderRadius:radius.full,paddingHorizontal:spacing.md,backgroundColor:'#fff',minWidth:120},
+  addCityInput:{fontSize:13,color:colors.text,fontWeight:'600',padding:0},
   filterChipActive:{backgroundColor:'#dcfce7',borderColor:'#16a34a'},
   filterChipTextActive:{color:'#15803d',fontWeight:'700'},
   dietBadge:{fontSize:11,color:'#15803d',fontWeight:'700',marginTop:3},

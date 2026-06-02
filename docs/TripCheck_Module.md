@@ -146,6 +146,15 @@ Rules fire per-day. `validateDay(day, dayIndex, families[])` receives the trip's
 
 ---
 
+#### Rule 12 — Multiple Cities in One Day *(new — 2 Jun 2026)*
+**Severity:** warning
+**Trigger:** A day has activities tagged with 2+ distinct cities.
+- Relies on the `activity.city` tag set when a place is added from **Discover** (the city the user was searching). Manually-added activities are untagged and never trip this.
+- Excludes `transport` — the inter-city drive/flight is the legitimate way to bridge two cities.
+- **Rationale:** Supports multi-city / road-trip planning. Discover lets you search *any* city (not just the trip destination); this rule catches a day that accidentally mixes, say, Los Angeles and San Diego activities.
+
+---
+
 ### Trip-level rules (run in `validateTrip` with access to full `trip.days[]`)
 
 ---

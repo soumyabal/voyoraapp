@@ -408,6 +408,24 @@ function validateDay(day, dayIndex, families = []) {
     }
   });
 
+  // ── Rule 12: Activities span multiple cities in one day ──
+  // Uses the `city` tag set when a place is added from Discover. Transport is
+  // excluded — the drive between cities is exactly how you'd bridge them.
+  const cityTagged = acts.filter(a => a.city && a.type !== 'transport');
+  const distinctCities = [...new Set(cityTagged.map(a => a.city))];
+  if (distinctCities.length >= 2) {
+    warnings.push({
+      type:     'multi_city_day',
+      severity: 'warning',
+      icon:     '🗺️',
+      title:    'Activities in multiple cities',
+      message:  `This day mixes ${distinctCities.join(' and ')}. Travelling between cities mid-day can eat hours.`,
+      hint:     'Keep each city to its own day, or add the inter-city transport.',
+      dayIndex,
+      actIds:   cityTagged.map(a => a.id),
+    });
+  }
+
   return warnings;
 }
 

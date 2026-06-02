@@ -18,6 +18,7 @@ import AddTravelerModal from '../modals/AddTravelerModal';
 import AddFamilyModal from '../modals/AddFamilyModal';
 import SelectTravelersModal from '../modals/SelectTravelersModal';
 import { colors, spacing, radius, typography, shadow } from '../theme';
+import Icon from '../components/ui/Icon';
 import { avatarColor, effectiveMember, NEEDS_OPTIONS } from '../utils/helpers';
 import { ChipSelector } from '../components/ui';
 import { useKeyboardOffset } from '../utils/useKeyboardOffset';
@@ -251,7 +252,7 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
           activeOpacity={hasLibrary ? 0.8 : 1}
         >
           <View style={styles.selectCtaLeft}>
-            <Text style={styles.selectCtaIcon}>👥</Text>
+            <Icon name="people" size={22} color="#fff" style={{ marginRight: spacing.sm }} />
             <View>
               <Text style={styles.selectCtaTitle}>Select from Saved Travelers</Text>
               <Text style={styles.selectCtaSub}>
@@ -261,13 +262,13 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
               </Text>
             </View>
           </View>
-          <Text style={styles.selectCtaArrow}>›</Text>
+          <Icon name="forward" size={18} color="rgba(255,255,255,0.85)" />
         </TouchableOpacity>
 
         {/* ── Trip groups ─────────────────────────────────── */}
         {trip.families.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>✈️</Text>
+            <Icon name="people" size={40} color={colors.subtle} style={{ marginBottom: spacing.md }} />
             <Text style={styles.emptyTitle}>No one added yet</Text>
             <Text style={styles.emptyBody}>
               Select from your saved travelers, or create a new group manually.
@@ -303,23 +304,23 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       style={styles.iconBtn}
                     >
-                      <Text style={styles.iconBtnText}>➕</Text>
+                      <Icon name="add" size={18} color={colors.subtle} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={e => { e.stopPropagation?.(); setEditFamily({ famId: fam.id, name: fam.name }); }}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       style={styles.iconBtn}
                     >
-                      <Text style={styles.iconBtnText}>✏️</Text>
+                      <Icon name="create-outline" size={16} color={colors.subtle} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={e => { e.stopPropagation?.(); confirmDeleteFamily(fam); }}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       style={styles.iconBtn}
                     >
-                      <Text style={styles.iconBtnText}>🗑️</Text>
+                      <Icon name="trash-outline" size={16} color={colors.danger} />
                     </TouchableOpacity>
-                    <Text style={[styles.chevron, isCollapsed && styles.chevronUp]}>▾</Text>
+                    <Icon name={isCollapsed ? 'chevron-down' : 'chevron-up'} size={16} color={colors.subtle} />
                   </View>
                 </TouchableOpacity>
 
@@ -438,7 +439,7 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
       {onUpdatePlan && travelersChanged && (
         <View style={styles.updateBanner}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.updateBannerTitle}>👥 Travelers updated</Text>
+            <Text style={styles.updateBannerTitle}>Travelers updated</Text>
             <Text style={styles.updateBannerSub}>Regenerate the plan to reflect your group changes.</Text>
           </View>
           <TouchableOpacity

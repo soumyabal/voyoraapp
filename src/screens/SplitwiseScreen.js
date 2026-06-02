@@ -7,6 +7,7 @@ import useStore from '../store';
 import AddExpenseModal from '../modals/AddExpenseModal';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { fmtM, getAllMembers, findMember, findMemberFamily, avatarColor } from '../utils/helpers';
+import Icon from '../components/ui/Icon';
 import {
   resolveMode, getEffectiveFamilies, getEffectiveMembers,
   expSharePerFamily, expSharePerPerson,
@@ -54,16 +55,18 @@ export default function SplitwiseScreen({ trip }) {
               style={[styles.modeBtn, tripMode === 'individual' && styles.modeBtnActive]}
               onPress={() => setTripSplitMode(trip.id, 'individual')}
             >
+              <Icon name="person" size={14} color={tripMode === 'individual' ? colors.accent : colors.subtle} />
               <Text style={[styles.modeBtnText, tripMode === 'individual' && styles.modeBtnTextActive]}>
-                👤 By Person
+                By Person
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modeBtn, tripMode === 'family' && styles.modeBtnActive]}
               onPress={() => setTripSplitMode(trip.id, 'family')}
             >
+              <Icon name="people" size={15} color={tripMode === 'family' ? colors.accent : colors.subtle} />
               <Text style={[styles.modeBtnText, tripMode === 'family' && styles.modeBtnTextActive]}>
-                👨‍👩‍👧 By Group
+                By Group
               </Text>
             </TouchableOpacity>
           </View>
@@ -74,20 +77,21 @@ export default function SplitwiseScreen({ trip }) {
         {tripMode === 'family' && !headTipDismissed && (
           <View style={styles.headTip}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headTipTitle}>👑 How "By Group" works</Text>
+              <Text style={styles.headTipTitle}>How "By Group" works</Text>
               <Text style={styles.headTipBody}>
                 Each family pays an equal share regardless of size. The family head (first member) carries the balance — others in the family show $0 owed. Change the head in the People tab or by tapping a member in Balances below.
               </Text>
             </View>
             <TouchableOpacity onPress={() => setHeadTipDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.headTipClose}>✕</Text>
+              <Icon name="close" size={16} color="#b45309" />
             </TouchableOpacity>
           </View>
         )}
 
         {/* ── From Itinerary ── */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>📅 From Itinerary</Text>
+          <Icon name="calendar" size={16} color={colors.ink} />
+          <Text style={styles.sectionTitle}>From Itinerary</Text>
           {itinExpenses.length > 0 && (
             <View style={[styles.badge, { backgroundColor: colors.greenLight }]}>
               <Text style={[styles.badgeText, { color: colors.green }]}>{fmtM(itinTotal)}</Text>
@@ -102,7 +106,7 @@ export default function SplitwiseScreen({ trip }) {
 
         {itinExpenses.length === 0 ? (
           <View style={styles.pushPrompt}>
-            <Text style={styles.pushPromptIcon}>📅</Text>
+            <Icon name="calendar" size={32} color={colors.subtle} style={{ marginBottom: 12 }} />
             <Text style={styles.pushPromptText}>
               Your itinerary has{' '}
               <Text style={{ fontWeight: '700' }}>
@@ -113,7 +117,8 @@ export default function SplitwiseScreen({ trip }) {
               Push them here, then edit actuals and skip what you didn't do.
             </Text>
             <TouchableOpacity style={styles.pushBtn} onPress={() => pushItineraryToSplitwise(trip.id)}>
-              <Text style={styles.pushBtnText}>➡️ Move Itinerary to Splitwise</Text>
+              <Icon name="open" size={15} color="#fff" />
+              <Text style={styles.pushBtnText}>Move Itinerary to Splitwise</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -144,7 +149,8 @@ export default function SplitwiseScreen({ trip }) {
 
         {/* ── Manual / Additional Expenses ── */}
         <View style={[styles.sectionHeader, { marginTop: spacing.xl }]}>
-          <Text style={styles.sectionTitle}>🧾 Additional Expenses</Text>
+          <Icon name="receipt-outline" size={16} color={colors.ink} />
+          <Text style={styles.sectionTitle}>Additional Expenses</Text>
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{manualTotal > 0 ? fmtM(manualTotal) : '$0'}</Text>
           </View>
@@ -237,7 +243,10 @@ export default function SplitwiseScreen({ trip }) {
         {/* ── Balances & Settlements ── */}
         {balances.some(b => Math.abs(b.net) > 0.5) && (
           <View style={[styles.summaryCard, { marginTop: spacing.lg }]}>
-            <Text style={styles.balanceTitle}>⚖️ Balances</Text>
+            <View style={styles.balanceTitleRow}>
+              <Icon name="git-compare-outline" size={16} color={colors.ink} />
+              <Text style={styles.balanceTitleText}>Balances</Text>
+            </View>
             {balances
               .filter(b => Math.abs(b.net) > 0.5)
               .map(({ member, net }) => {
@@ -305,7 +314,7 @@ export default function SplitwiseScreen({ trip }) {
                       <Text style={[styles.settleName, isPaid && styles.settleNamePaid]}>{s.from.name.split(' ')[0]}</Text>
                       {fromFam && <Text style={[styles.settleFam, { color: fromFam.color }]}>{fromFam.name}</Text>}
                     </View>
-                    <Text style={[styles.settleArrow, isPaid && { opacity: 0.4 }]}>→</Text>
+                    <Icon name="open" size={14} color={colors.subtle} style={isPaid && { opacity: 0.4 }} />
                     <View style={[styles.memberAvatar, { backgroundColor: avatarColor(s.to.name), opacity: isPaid ? 0.5 : 1 }]}>
                       <Text style={styles.memberAvatarText}>{s.to.name[0]}</Text>
                     </View>
@@ -318,7 +327,7 @@ export default function SplitwiseScreen({ trip }) {
                         {fmtM(s.amount)}
                       </Text>
                       <View style={[styles.settleCheck, isPaid && styles.settleCheckDone]}>
-                        {isPaid && <Text style={styles.settleCheckText}>✓</Text>}
+                        {isPaid && <Icon name="check" size={11} color="#fff" />}
                       </View>
                     </View>
                   </TouchableOpacity>
@@ -542,7 +551,7 @@ function ExpenseCard({
                   }}
                 >
                   <Text style={[styles.overrideChipText, !isUneven && styles.overrideChipTextActive]}>
-                    ⚖️ Even
+                    Even
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -560,7 +569,7 @@ function ExpenseCard({
                   }}
                 >
                   <Text style={[styles.overrideChipText, isUneven && styles.unevenChipTextActive]}>
-                    ✏️ Custom
+                    Custom
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -799,7 +808,7 @@ const styles = StyleSheet.create({
   },
   modeCardLabel: { fontSize: 10, fontWeight: '800', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 },
   modeToggle: { flexDirection: 'row', backgroundColor: colors.surface2, borderRadius: radius.md, padding: 3, marginBottom: 8 },
-  modeBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: radius.sm },
+  modeBtn: { flex: 1, flexDirection: 'row', gap: 5, paddingVertical: 8, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
   modeBtnActive: { backgroundColor: colors.primary, elevation: 2 },
   modeBtnText: { ...typography.smallBold, color: colors.muted },
   modeBtnTextActive: { color: '#fff' },
@@ -825,7 +834,7 @@ const styles = StyleSheet.create({
   pushPrompt: { backgroundColor: colors.surface2, borderWidth: 2, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.xxl, alignItems: 'center', marginBottom: spacing.md },
   pushPromptIcon: { fontSize: 36, marginBottom: 12 },
   pushPromptText: { ...typography.small, color: colors.muted, textAlign: 'center', lineHeight: 20 },
-  pushBtn: { backgroundColor: colors.green, borderRadius: radius.md, paddingHorizontal: 16, paddingVertical: 10, marginTop: 12 },
+  pushBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.green, borderRadius: radius.md, paddingHorizontal: 16, paddingVertical: 10, marginTop: 12 },
   pushBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   clearRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   clearHint: { ...typography.tiny, color: colors.muted },
@@ -938,7 +947,8 @@ const styles = StyleSheet.create({
   grandTotalAmt: { fontSize: 22, fontWeight: '900', color: colors.text },
 
   // Balances
-  balanceTitle: { ...typography.bodyBold, color: colors.text, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  balanceTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  balanceTitleText: { ...typography.bodyBold, color: colors.ink },
   balanceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   balanceName: { ...typography.smallBold, color: colors.text },
   balanceFam:  { fontSize: 10, fontWeight: '600' },

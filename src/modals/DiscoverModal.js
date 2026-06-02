@@ -187,10 +187,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
   const destination   = trip?.destination ?? '';
   const families      = trip?.families ?? [];
-  const allDietary    = families.flatMap(f => f.dietary || []);
-  const hasVeg        = allDietary.some(d => d==='vegetarian'||d==='vegan');
-  const hasNoAlco     = allDietary.includes('no-alcohol');
-  const dietBadge     = [hasVeg&&'\u{1F966} Veg', hasNoAlco&&'\u{1F37A} No Alcohol'].filter(Boolean);
+  const allDietary    = families.flatMap(f => f.dietary || []);  // seeds the dietary filter chips below
 
   useEffect(() => {
     if (!visible) return;
@@ -346,8 +343,6 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
           <View style={s.header}>
             <View style={{flex:1}}>
               <Text style={s.title}>Discover</Text>
-              <Text style={s.subtitle} numberOfLines={1}>{'\u{1F4CD}'} {destination}</Text>
-              {dietBadge.length>0 && <Text style={s.dietBadge}>{dietBadge.join(' · ')} · filtered</Text>}
             </View>
             <View style={s.headerActions}>
               <TouchableOpacity style={[s.modeBtn, selectMode&&s.modeBtnOn]} onPress={() => setSelectMode(m => !m)} activeOpacity={0.8}>

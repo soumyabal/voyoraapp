@@ -161,6 +161,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [selectMode, setSelectMode] = useState(false);  // basket multi-select
   const [basket,     setBasket]     = useState([]);      // chosen places (city-tagged)
   const [preview,    setPreview]    = useState(null);    // autoArrange draft + editable placements
+  const [arrangeHints, setArrangeHints] = useState({});  // placeName → { pinDay?, dayCount? }
+  const [editingRow,   setEditingRow]   = useState(null);// draftId whose edit panel is open
   const [activeCategory, setActiveCategory] = useState('attractions');
   const [searchText,     setSearchText]     = useState('');
   const [results,        setResults]        = useState([]);
@@ -191,7 +193,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     const parsed = parseLocations(destination);
     const start  = parsed[0] || destination;
     setSearchText(''); setAddedNames(new Set());
-    setSelectMode(false); setBasket([]); setPreview(null);
+    setSelectMode(false); setBasket([]); setPreview(null); setArrangeHints({}); setEditingRow(null);
     setCities(parsed.length ? parsed : (destination ? [destination] : []));
     setActiveCity(start);
     setCityPickerOpen(false); setNewCity('');
@@ -285,9 +287,39 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
       ? prev.filter(p => p.name !== place.name)
       : [...prev, { ...place, city: cityLabel(activeCity) }]);  // tag source city for clustering
   };
+  // Run the engine with the current per-event hints attached.
+  const rerun = (hints) => {
+    setArrangeHints(hints);
+    const hinted = basket.map(p => hints[p.name] ? { ...p, _hint: hints[p.name] } : p);
+    setPreview(autoArrange(hinted, trip));
+  };
   const runArrange = () => {
     if (!basket.length) return;
-    setPreview(autoArrange(basket, trip));
+    setEditingRow(null);
+    rerun({});   // fresh arrange — clear any prior hints
+  };
+  // Move one item to a specific day. To keep the move LOCAL, first pin every
+  // currently-placed single-instance item to the day it's on, then override
+  // this one — so re-running the engine doesn't reshuffle everything else.
+  const moveToDay = (draft, dayIdx) => {
+    const snap = { ...arrangeHints };
+    (preview?.placements || []).forEach((acts, i) => acts.forEach(a => {
+      const multi = (arrangeHints[a.name]?.dayCount || 1) > 1 || a.repeatIntent;
+      if (!multi) snap[a.name] = { ...(snap[a.name] || {}), pinDay: i };
+    }));
+    snap[draft.name] = { ...(snap[draft.name] || {}), pinDay: dayIdx };
+    setEditingRow(null);
+    rerun(snap);
+  };
+  // Set how many days a (big) venue spans. dayCount > 1 and pinDay conflict,
+  // so clear pinDay when spanning.
+  const setSpan = (draft, n) => {
+    const next = { ...arrangeHints };
+    const cur = { ...(next[draft.name] || {}) };
+    if (n <= 1) delete cur.dayCount; else { cur.dayCount = n; delete cur.pinDay; }
+    next[draft.name] = cur;
+    setEditingRow(null);
+    rerun(next);
   };
   const removeFromPreview = (dayIdx, draftId) => {
     setPreview(prev => prev && ({
@@ -298,7 +330,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const applyPreview = () => {
     if (!preview) return;
     applyArrangedActivities(trip.id, preview.placements);
-    setPreview(null); setBasket([]); setSelectMode(false);
+    setPreview(null); setBasket([]); setSelectMode(false); setArrangeHints({}); setEditingRow(null);
     onClose();
   };
 
@@ -467,20 +499,57 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
                 return (
                   <View key={d.date} style={pv.dayCard}>
                     <Text style={pv.dayTitle}>{d.label} · {d.date?.slice(5)}</Text>
-                    {acts.map(a => (
-                      <View key={a._draftId} style={pv.row}>
-                        <Text style={pv.time}>{a.time}</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={pv.name} numberOfLines={1}>
-                            {a.type === 'food' ? '\u{1F37D}️' : a.type === 'stay' ? '\u{1F3E8}' : '\u{1F3AF}'} {a.name}
-                          </Text>
-                          {!!a.city && <Text style={pv.city} numberOfLines={1}>{'\u{1F4CD}'} {a.city}</Text>}
+                    {acts.map(a => {
+                      const span = arrangeHints[a.name]?.dayCount || 1;
+                      const editing = editingRow === a._draftId;
+                      return (
+                      <View key={a._draftId}>
+                        <View style={pv.row}>
+                          <Text style={pv.time}>{a.time}</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={pv.name} numberOfLines={1}>
+                              {a.type === 'food' ? '\u{1F37D}️' : a.type === 'stay' ? '\u{1F3E8}' : '\u{1F3AF}'} {a.name}
+                              {a.repeatIntent ? '  \u{1F501}' : ''}
+                            </Text>
+                            <View style={pv.metaRow}>
+                              {!!a.city && <Text style={pv.city} numberOfLines={1}>{'\u{1F4CD}'} {a.city}</Text>}
+                              {a.type !== 'food' && (
+                                <TouchableOpacity onPress={() => setEditingRow(editing ? null : a._draftId)} hitSlop={6}>
+                                  <Text style={pv.editLink}>{editing ? 'Done' : 'Move / multi-day ▾'}</Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          </View>
+                          <TouchableOpacity onPress={() => removeFromPreview(i, a._draftId)} style={pv.remove} hitSlop={8}>
+                            <Text style={pv.removeText}>✕</Text>
+                          </TouchableOpacity>
                         </View>
-                        <TouchableOpacity onPress={() => removeFromPreview(i, a._draftId)} style={pv.remove} hitSlop={8}>
-                          <Text style={pv.removeText}>✕</Text>
-                        </TouchableOpacity>
+
+                        {editing && (
+                          <View style={pv.editPanel}>
+                            <Text style={pv.editLabel}>Move to day</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={pv.chipRow}>
+                              {(trip.days || []).map((dd, di) => (
+                                <TouchableOpacity key={dd.date} style={[pv.dayChip, di === i && pv.dayChipOn]}
+                                  onPress={() => moveToDay(a, di)} activeOpacity={0.7}>
+                                  <Text style={[pv.dayChipText, di === i && pv.dayChipTextOn]}>{dd.label}</Text>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                            <Text style={pv.editLabel}>Stay for</Text>
+                            <View style={pv.chipRow}>
+                              {[1, 2, 3].map(n => (
+                                <TouchableOpacity key={n} style={[pv.spanBtn, span === n && pv.spanBtnOn]}
+                                  onPress={() => setSpan(a, n)} activeOpacity={0.7}>
+                                  <Text style={[pv.spanBtnText, span === n && pv.spanBtnTextOn]}>{n} day{n > 1 ? 's' : ''}</Text>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          </View>
+                        )}
                       </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 );
               })}
@@ -667,7 +736,20 @@ const pv = StyleSheet.create({
   row:{flexDirection:'row',alignItems:'center',gap:spacing.sm,paddingVertical:6,borderTopWidth:1,borderTopColor:colors.border},
   time:{fontSize:13,fontWeight:'800',color:'#4f46e5',width:48},
   name:{...typography.body,color:colors.text},
-  city:{fontSize:11,color:colors.muted,marginTop:1},
+  metaRow:{flexDirection:'row',alignItems:'center',gap:spacing.md,marginTop:1,flexWrap:'wrap'},
+  city:{fontSize:11,color:colors.muted},
+  editLink:{fontSize:11,fontWeight:'800',color:'#4f46e5'},
+  editPanel:{backgroundColor:'#f5f3ff',borderRadius:radius.md,padding:spacing.sm,marginTop:spacing.xs,marginBottom:spacing.xs,gap:spacing.xs},
+  editLabel:{fontSize:10,fontWeight:'800',color:'#6d28d9',textTransform:'uppercase',letterSpacing:0.6},
+  chipRow:{flexDirection:'row',gap:spacing.xs,alignItems:'center',paddingVertical:2},
+  dayChip:{borderWidth:1.5,borderColor:colors.border,borderRadius:radius.full,paddingHorizontal:spacing.md,paddingVertical:6,backgroundColor:'#fff'},
+  dayChipOn:{borderColor:'#6366f1',backgroundColor:'#e0e7ff'},
+  dayChipText:{fontSize:12,fontWeight:'700',color:colors.text},
+  dayChipTextOn:{color:'#4338ca'},
+  spanBtn:{borderWidth:1.5,borderColor:colors.border,borderRadius:radius.full,paddingHorizontal:spacing.md,paddingVertical:6,backgroundColor:'#fff'},
+  spanBtnOn:{borderColor:'#6366f1',backgroundColor:'#e0e7ff'},
+  spanBtnText:{fontSize:12,fontWeight:'700',color:colors.text},
+  spanBtnTextOn:{color:'#4338ca'},
   remove:{width:28,height:28,borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:'#fef2f2'},
   removeText:{fontSize:14,fontWeight:'800',color:'#dc2626'},
   unplacedCard:{backgroundColor:'#fffbeb',borderRadius:radius.lg,borderWidth:1,borderColor:'#fde68a',padding:spacing.md,marginBottom:spacing.md},

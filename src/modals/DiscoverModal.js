@@ -12,46 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GOOGLE_PLACES_API_KEY } from '../config';
 import useStore from '../store';
 import { uid } from '../utils/helpers';
-import { estimateDuration } from '../utils/tripValidator';
 import { colors, spacing, radius, typography, shadow } from '../theme';
-
-const SLOTS = [
-  { key: 'morning',   emoji: '\u{1F305}', label: 'Morning',   defaultTime: '09:00', range: [0,    720]  },
-  { key: 'afternoon', emoji: '☀️',  label: 'Afternoon', defaultTime: '13:00', range: [720,  1020] },
-  { key: 'evening',   emoji: '\u{1F306}', label: 'Evening',    defaultTime: '18:00', range: [1020, 1260] },
-  { key: 'night',     emoji: '\u{1F319}', label: 'Night',      defaultTime: '21:00', range: [1260, 1440] },
-];
-
-function timeToMin(t) {
-  const [h, m] = (t || '00:00').split(':').map(Number);
-  return (h || 0) * 60 + (m || 0);
-}
-function minToTime(totalMin) {
-  const h = Math.floor(Math.max(0, totalMin) / 60) % 24;
-  const m = Math.max(0, totalMin) % 60;
-  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
-}
-function getSlotKey(timeStr) {
-  const m = timeToMin(timeStr);
-  if (m < 720)  return 'morning';
-  if (m < 1020) return 'afternoon';
-  if (m < 1260) return 'evening';
-  return 'night';
-}
-function getSmartTime(trip, dayIndex, slotKey) {
-  const slot = SLOTS.find(s => s.key === slotKey);
-  if (!slot) return null;
-  const day = trip.days?.[dayIndex];
-  if (!day) return slot.defaultTime;
-  const slotActs = (day.activities || [])
-    .filter(a => a.status !== 'skipped' && getSlotKey(a.time) === slotKey)
-    .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
-  if (slotActs.length === 0) return slot.defaultTime;
-  const last   = slotActs[slotActs.length - 1];
-  const endMin = timeToMin(last.time) + estimateDuration(last) + 15;
-  if (endMin >= slot.range[1] - 30) return null;
-  return minToTime(Math.max(slot.range[0], endMin));
-}
+import { SLOTS, getSlotKey, getSmartTime } from '../utils/slots';
 
 const CATEGORIES = [
   { key: 'attractions', label: '\u{1F3DB}️ Attractions', query: 'top tourist attractions and landmarks' },

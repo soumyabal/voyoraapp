@@ -383,6 +383,31 @@ function validateDay(day, dayIndex, families = []) {
     });
   }
 
+  // ── Rule 11: Duplicate activity (same event added more than once today) ──
+  // Transport (drives, pit stops) can legitimately repeat; notes are free-form.
+  const byName = new Map();
+  acts.forEach(a => {
+    if (a.type === 'transport' || a.type === 'note') return;
+    const key = (a.name || '').trim().toLowerCase();
+    if (!key) return;
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push(a);
+  });
+  byName.forEach(group => {
+    if (group.length > 1) {
+      warnings.push({
+        type:     'duplicate_activity',
+        severity: 'warning',
+        icon:     '🔁',
+        title:    'Added more than once',
+        message:  `"${group[0].name}" appears ${group.length} times on this day.`,
+        hint:     'Remove the extra copy unless the repeat is intentional.',
+        dayIndex,
+        actIds:   group.map(a => a.id),
+      });
+    }
+  });
+
   return warnings;
 }
 

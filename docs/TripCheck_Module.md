@@ -137,6 +137,15 @@ Rules fire per-day. `validateDay(day, dayIndex, families[])` receives the trip's
 
 ---
 
+#### Rule 11 — Duplicate Activity *(new — 2 Jun 2026)*
+**Severity:** warning
+**Trigger:** The same activity name (case-insensitive, trimmed) appears more than once on a single day.
+- Excludes `transport` (drives, pit stops can legitimately repeat) and `note` (free-form).
+- `actIds[]` lists every copy so Check Trip can highlight them all.
+- **Rationale:** Catches accidentally adding the same discovered place twice in a day. Adding the same activity to *different* days (e.g. "All days" add) does not trigger this — it's per-day.
+
+---
+
 ### Trip-level rules (run in `validateTrip` with access to full `trip.days[]`)
 
 ---

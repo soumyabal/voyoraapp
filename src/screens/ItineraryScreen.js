@@ -331,7 +331,6 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const [movingAct,             setMovingAct]             = useState(null);
   const [reorderHint,           setReorderHint]           = useState(false);
   const [collapsedSlots,        setCollapsedSlots]        = useState({});
-  const [groupProfileDismissed, setGroupProfileDismissed] = useState(false);
   const [mustDosDismissed,      setMustDosDismissed]      = useState(false);
   const [mustDosChecked,        setMustDosChecked]        = useState({});
 
@@ -426,40 +425,6 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             );
           })}
         </ScrollView>
-
-        {/* ── Group compatibility summary card ── */}
-        {(() => {
-          const families = trip.families || [];
-          const hasDietary  = families.some(f => (f.dietary || []).length > 0);
-          const hasWakeTime = families.some(f => f.wakeTime && f.wakeTime !== 'regular');
-          const hasMustDos  = !!(trip.mustDos?.trim());
-          if ((!hasDietary && !hasWakeTime) || groupProfileDismissed) return null;
-          return (
-            <View style={styles.groupCard}>
-              <View style={styles.groupCardHeader}>
-                <Text style={styles.groupCardTitle}>👥 Group Profile</Text>
-                <TouchableOpacity onPress={() => setGroupProfileDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={styles.groupCardDismiss}>✕ Hide</Text>
-                </TouchableOpacity>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.groupCardRow}>
-                {families.map(fam => (
-                  <View key={fam.id} style={[styles.groupFamChip, { borderColor: fam.color }]}>
-                    <View style={[styles.groupFamDot, { backgroundColor: fam.color }]} />
-                    <View>
-                      <Text style={[styles.groupFamName, { color: fam.color }]}>{fam.name.split(' ')[0]}</Text>
-                      {(fam.dietary || []).length > 0 && (
-                        <Text style={styles.groupFamDiet}>{fam.dietary.join(' · ')}</Text>
-                      )}
-                      {fam.wakeTime === 'late'  && <Text style={styles.groupFamWake}>🦉 Late riser</Text>}
-                      {fam.wakeTime === 'early' && <Text style={styles.groupFamWake}>🌅 Early bird</Text>}
-                    </View>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          );
-        })()}
 
         {/* ── Must-dos strip ── */}
         {(() => {
@@ -1340,31 +1305,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,184,148,0.35)',
   },
   syncedBadgeText: { ...typography.caption, color: colors.green, fontWeight: '700' },
-
-  // ── Group compatibility card ─────────────────────────────────────
-  groupCard: {
-    marginHorizontal: spacing.xxl,
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
-    backgroundColor: '#f0f9ff',
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: '#bae6fd',
-  },
-  groupCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
-  groupCardTitle:  { fontSize: 12, fontWeight: '700', color: '#0369a1' },
-  groupCardDismiss:{ fontSize: 11, color: colors.muted },
-  groupCardRow:    { gap: spacing.sm, paddingBottom: 2 },
-  groupFamChip: {
-    borderWidth: 1.5, borderRadius: radius.lg, padding: spacing.sm,
-    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
-    backgroundColor: '#fff',
-  },
-  groupFamDot:  { width: 8, height: 8, borderRadius: 4, marginTop: 3 },
-  groupFamName: { fontSize: 12, fontWeight: '700' },
-  groupFamDiet: { fontSize: 10, color: colors.muted, marginTop: 1 },
-  groupFamWake: { fontSize: 10, color: '#d97706', marginTop: 1 },
 
   // ── Must-dos strip ───────────────────────────────────────────────
   mustDosStrip: {

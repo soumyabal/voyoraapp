@@ -20,6 +20,7 @@ import useStore from '../store';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { uid } from '../utils/helpers';
 import { estimateDuration, formatDuration } from '../utils/tripValidator';
+import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
 import { ModalHeader } from '../components/ui';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -327,6 +328,11 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
   const [arriveTime, setArriveTime] = useState('');
   const [detail, setDetail]       = useState('');
 
+  // Scheduling (Add mode only) — which day(s) + which smart slot
+  const [dayIdx, setDayIdx]       = useState(currentDay ?? 0);
+  const [allDays, setAllDays]     = useState(false);
+  const [slotKey, setSlotKey]     = useState(getSlotKey(defaultTime || '09:00'));
+
 
   // Cost
   const [costMode, setCostMode]   = useState('per_person'); // 'per_person' | 'per_family'
@@ -369,8 +375,11 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setMemo('');
       setReminder('');
       setShowMore(false);
+      setDayIdx(currentDay ?? 0);
+      setAllDays(false);
+      setSlotKey(getSlotKey(defaultTime || '09:00'));
     }
-  }, [visible, editActivity, defaultTime]);
+  }, [visible, editActivity, defaultTime, currentDay]);
 
   // ── Cost calculations ──────────────────────────────────────────────────────
   const totalMembers  = trip.families.reduce((s, f) => s + f.members.length, 0);
@@ -405,15 +414,16 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
   // Auto-estimate based on current name + type — shown in picker as "Auto (Xh)"
   const autoEstimateMins  = estimateDuration({ type: tile.type, subtype: tile.subtype, name, detail });
   const autoEstimateLabel = formatDuration(autoEstimateMins);
+  // How much room this activity needs — drives smart placement + Full detection.
+  const needMins = durationMins > 0 ? durationMins : autoEstimateMins;
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = () => {
     if (!name.trim()) return;
-    const payload = {
+    const base = {
       type:         tile.type,
       subtype:      tile.subtype || null,
       name:         name.trim(),
-      time,
       arriveTime:   tile.type === 'transport' && tile.subtype !== 'pitstop' && arriveTime ? arriveTime : null,
       durationMins: durationMins > 0 ? durationMins : null,
       detail:       detail.trim(),
@@ -424,10 +434,17 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       reminder:     reminder.trim() || null,
       access:       '',
     };
+
     if (isEdit) {
-      updateActivity(trip.id, editActivity.id, payload);
+      updateActivity(trip.id, editActivity.id, { ...base, time });
+    } else if (allDays) {
+      // Add to every day, smart-placing in the chosen slot so it fits each day.
+      (trip.days || []).forEach((_, i) => {
+        const t = getSuggestedTime(trip, i, slotKey, needMins);
+        addActivity(trip.id, i, { ...base, time: t, id: uid() });
+      });
     } else {
-      addActivity(trip.id, currentDay, { ...payload, id: uid() });
+      addActivity(trip.id, dayIdx, { ...base, time, id: uid() });
     }
     onClose();
   };
@@ -441,7 +458,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
             title={isEdit ? 'Edit Activity' : 'Add Activity'}
             onClose={onClose}
             onAction={handleSave}
-            actionLabel={isEdit ? 'Save' : 'Add'}
+            actionLabel={isEdit ? 'Save' : allDays ? `Add ×${(trip.days || []).length}` : 'Add'}
             actionDisabled={!name.trim()}
           />
 
@@ -483,8 +500,85 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               returnKeyType="next"
             />
 
-            {/* ── Time / Departs + Arrives ── */}
-            {tile.type === 'transport' && tile.subtype !== 'pitstop' ? (
+            {/* ── Day + smart When picker (Add mode only) ── */}
+            {!isEdit && (trip.days || []).length > 0 && (
+              <>
+                <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>DAY</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.dayRow}>
+                  {(trip.days || []).length > 1 && (
+                    <TouchableOpacity
+                      style={[s.dayBtn, s.dayBtnAll, allDays && s.dayBtnActive]}
+                      onPress={() => setAllDays(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[s.dayBtnLabel, allDays && s.dayBtnLabelActive]}>🗓 ALL</Text>
+                      <Text style={[s.dayBtnDate, allDays && { color: colors.primary }]}>{(trip.days || []).length} days</Text>
+                    </TouchableOpacity>
+                  )}
+                  {(trip.days || []).map((d, i) => {
+                    const active = !allDays && dayIdx === i;
+                    return (
+                      <TouchableOpacity
+                        key={d.date || i}
+                        style={[s.dayBtn, active && s.dayBtnActive]}
+                        onPress={() => {
+                          setAllDays(false);
+                          setDayIdx(i);
+                          setTime(getSuggestedTime(trip, i, slotKey, needMins));
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[s.dayBtnLabel, active && s.dayBtnLabelActive]}>{d.label}</Text>
+                        <Text style={[s.dayBtnDate, active && { color: colors.primary }]}>{d.date?.slice(5)}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>WHEN</Text>
+                <View style={s.slotGrid}>
+                  {SLOTS.map(slot => {
+                    const count    = allDays ? 0 : getSlotCount(trip, dayIdx, slot.key);
+                    const suggested= allDays ? slot.defaultTime : getSuggestedTime(trip, dayIdx, slot.key, needMins);
+                    const isActive = slotKey === slot.key;
+                    const isLate   = (trip.families || []).some(f => f.wakeTime === 'late') && slot.key === 'morning';
+                    // Fullness hint only — never blocks. Trip Checker flags real conflicts.
+                    const fill     = allDays ? s.slotFree : count === 0 ? s.slotFree : count <= 2 ? s.slotSome : s.slotBusy;
+                    return (
+                      <TouchableOpacity
+                        key={slot.key}
+                        style={[s.slotBtn, fill, isActive && s.slotBtnActive]}
+                        onPress={() => {
+                          setSlotKey(slot.key);
+                          setTime(suggested);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={s.slotBtnTop}>
+                          <Text style={s.slotEmoji}>{slot.emoji}</Text>
+                          <Text style={[s.slotLabel, isActive && { color: colors.primary }]}>{slot.label}</Text>
+                          {isLate && <Text style={s.slotOwl}>🦉</Text>}
+                        </View>
+                        <Text style={s.slotMeta}>{allDays ? `~${slot.defaultTime}` : `Add at ${suggested}`}</Text>
+                        {!allDays && (
+                          <Text style={s.slotCount}>
+                            {count === 0 ? 'Open' : `${count} ${count === 1 ? 'activity' : 'activities'}`}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {allDays && (
+                  <Text style={s.allDaysHint}>
+                    Adds “{name.trim() || 'this activity'}” to all {(trip.days || []).length} days at the best open time in {SLOTS.find(sl => sl.key === slotKey)?.label?.toLowerCase()} each day.
+                  </Text>
+                )}
+              </>
+            )}
+
+            {/* ── Time / Departs + Arrives ── (per-day smart time used in All-days mode) */}
+            {allDays ? null : tile.type === 'transport' && tile.subtype !== 'pitstop' ? (
               <View style={s.inlineRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.sectionLabel}>DEPARTS</Text>
@@ -506,7 +600,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
             ) : (
               <View style={s.inlineRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.sectionLabel}>TIME</Text>
+                  <Text style={s.sectionLabel}>TIME <Text style={s.optional}>(fine-tune)</Text></Text>
                   <TimePickerInput value={time} onChange={setTime} />
                 </View>
               </View>
@@ -748,6 +842,29 @@ const s = StyleSheet.create({
     color: colors.text,
     ...shadow.sm,
   },
+
+  // Day picker (chips) + smart When slot grid
+  dayRow:    { gap: spacing.sm, paddingBottom: spacing.xs },
+  dayBtn:    { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: '#fff', alignItems: 'center', minWidth: 64 },
+  dayBtnAll: { borderStyle: 'dashed' },
+  dayBtnActive:      { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  dayBtnLabel:       { ...typography.caption, color: colors.muted, fontWeight: '700', textTransform: 'uppercase' },
+  dayBtnLabelActive: { color: colors.primary },
+  dayBtnDate:        { fontSize: 10, color: colors.muted, marginTop: 1 },
+  slotGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  slotBtn:      { width: '48%', borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: '#fff', padding: spacing.md, gap: 3 },
+  // Fullness hint: more activities → warmer tint (green → light green → orange).
+  slotFree:     { borderColor: '#22c55e', backgroundColor: '#dcfce7' },  // 0 — open
+  slotSome:     { borderColor: '#86efac', backgroundColor: '#f0fdf4' },  // 1–2 — filling
+  slotBusy:     { borderColor: '#fb923c', backgroundColor: '#fff7ed' },  // 3+ — busy
+  slotBtnActive:{ borderColor: colors.primary, borderWidth: 2 },
+  slotBtnTop:   { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  slotEmoji:    { fontSize: 16 },
+  slotLabel:    { ...typography.bodyBold, color: colors.text, fontSize: 13 },
+  slotOwl:      { fontSize: 13, marginLeft: 'auto' },
+  slotMeta:     { fontSize: 13, fontWeight: '700', color: colors.primary },
+  slotCount:    { fontSize: 10, color: colors.muted },
+  allDaysHint:  { fontSize: 11, color: '#9b6e00', fontWeight: '600', marginTop: spacing.sm, lineHeight: 16 },
 
   // Inline row
   inlineRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, alignItems: 'flex-start' },

@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GOOGLE_PLACES_API_KEY } from '../config';
 import useStore from '../store';
-import { uid } from '../utils/helpers';
+import { uid, getAllMembers } from '../utils/helpers';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
 import { autoArrange } from '../utils/autoArrange';
@@ -283,6 +283,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [pendingPlace,   setPendingPlace]   = useState(null);
   const [pickerDay,      setPickerDay]      = useState(dayIndex ?? 0);
   const [pickerSlot,     setPickerSlot]     = useState('morning');
+  const [hotelRate,      setHotelRate]      = useState('');   // nightly rate $
+  const [hotelNights,    setHotelNights]    = useState('1');  // nights
   const [cities,         setCities]         = useState([]);     // searchable cities
   const [activeCity,     setActiveCity]     = useState('');     // current search city
   const [cityPickerOpen, setCityPickerOpen] = useState(false);  // city picker sheet
@@ -367,17 +369,33 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const handleAdd = place => {
     setPickerDay(dayIndex ?? 0);
     setPickerSlot(getSlotKey(defaultTime || '09:00'));
+    setHotelRate(''); setHotelNights('1');
     setPendingPlace(place);
   };
 
   const handleConfirmAdd = () => {
     if (!pendingPlace) return;
     const smartTime = getSuggestedTime(trip, pickerDay, pickerSlot);
+    const isStay    = pendingPlace.activityType === 'stay';
+
+    // Hotel: capture the nightly rate the user found while booking. Store the
+    // booking TOTAL (rate × nights) for display, and a per-person share so the
+    // existing expense-split (costPerPerson × members) totals correctly.
+    let cost = { costPerPerson: pendingPlace.costPerPerson, costMode: 'per_person', costAmount: pendingPlace.costPerPerson };
+    let detail = '';
+    const rate = parseFloat(hotelRate);
+    if (isStay && rate > 0) {
+      const nights  = Math.max(1, parseInt(hotelNights, 10) || 1);
+      const total   = rate * nights;
+      const members = Math.max(1, getAllMembers(trip).length);
+      cost   = { costPerPerson: parseFloat((total / members).toFixed(2)), costMode: 'total', costAmount: total };
+      detail = `${nights} night${nights !== 1 ? 's' : ''} · $${rate}/night`;
+    }
+
     addActivity(trip.id, pickerDay, {
       id:uid(), type:pendingPlace.activityType, time:smartTime,
-      name:pendingPlace.name, detail:'',
-      costPerPerson:pendingPlace.costPerPerson, costMode:'per_person',
-      costAmount:pendingPlace.costPerPerson,
+      name:pendingPlace.name, detail,
+      ...cost,
       address:pendingPlace.address, url:pendingPlace.url,
       rating:pendingPlace.rating, lat:pendingPlace.lat, lng:pendingPlace.lng,
       city:cityLabel(activeCity),   // tag the source city → Trip Check flags multi-city days
@@ -596,6 +614,27 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
                   );
                 })}
               </View>
+
+              {pendingPlace?.activityType === 'stay' && (
+                <View style={sp.hotelBox}>
+                  <Text style={sp.sectionLabel}>Nightly rate (optional)</Text>
+                  <Text style={sp.hotelHint}>Tap "Book rooms ↗" on the card to check prices, then enter what you chose.</Text>
+                  <View style={sp.hotelRow}>
+                    <View style={sp.hotelField}>
+                      <Text style={sp.hotelFieldLabel}>$ / night</Text>
+                      <TextInput style={sp.hotelInput} value={hotelRate} onChangeText={setHotelRate} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.muted} />
+                    </View>
+                    <View style={sp.hotelField}>
+                      <Text style={sp.hotelFieldLabel}>Nights</Text>
+                      <TextInput style={sp.hotelInput} value={hotelNights} onChangeText={setHotelNights} keyboardType="numeric" placeholder="1" placeholderTextColor={colors.muted} />
+                    </View>
+                    <View style={sp.hotelTotal}>
+                      <Text style={sp.hotelFieldLabel}>Total</Text>
+                      <Text style={sp.hotelTotalAmt}>${((parseFloat(hotelRate)||0) * Math.max(1, parseInt(hotelNights,10)||1)).toFixed(0)}</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
 
               {(() => {
                 const smart = getSuggestedTime(trip, pickerDay, pickerSlot);
@@ -846,6 +885,14 @@ const sp = StyleSheet.create({
   slotLabel:{...typography.bodyBold,color:colors.text,fontSize:13},
   slotMeta:{fontSize:13,fontWeight:'700',color:colors.primary},
   slotCount:{fontSize:10,color:colors.muted},
+  hotelBox:{backgroundColor:colors.smartSoft,borderRadius:radius.lg,padding:spacing.md,marginBottom:spacing.md},
+  hotelHint:{fontSize:11,color:colors.subtle,marginBottom:spacing.sm,lineHeight:15},
+  hotelRow:{flexDirection:'row',alignItems:'flex-end',gap:spacing.sm},
+  hotelField:{flex:1},
+  hotelFieldLabel:{fontSize:10,fontWeight:'800',color:colors.subtle,textTransform:'uppercase',letterSpacing:0.5,marginBottom:4},
+  hotelInput:{backgroundColor:'#fff',borderWidth:1.5,borderColor:colors.hairline,borderRadius:radius.md,paddingHorizontal:spacing.md,paddingVertical:spacing.sm,fontSize:16,fontWeight:'700',color:colors.ink},
+  hotelTotal:{flex:1,alignItems:'flex-end'},
+  hotelTotalAmt:{fontSize:20,fontWeight:'900',color:colors.smartDeep},
   confirmBtn:{backgroundColor:colors.primary,borderRadius:radius.lg,paddingVertical:spacing.md,alignItems:'center',marginTop:spacing.xs},
   confirmBtnDisabled:{backgroundColor:colors.border},
   confirmBtnText:{...typography.bodyBold,color:'#fff'},

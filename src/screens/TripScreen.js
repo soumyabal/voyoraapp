@@ -13,15 +13,16 @@ import ChangeModeModal from '../modals/ChangeModeModal';
 import AgenticPlannerModal from '../modals/AgenticPlannerModal';
 import TripValidationModal from '../modals/TripValidationModal';
 import { colors, spacing, typography, radius } from '../theme';
+import Icon from '../components/ui/Icon';
 import { fmt, getAllMembers } from '../utils/helpers';
 import { exportTripAsPDF } from '../utils/exportPlan';
 import { RELEASE_FLAGS } from '../config';
 
 // AI tab removed — plan is triggered directly from header / People screen
 const TABS = [
-  { key: 'itinerary', label: '📅 Plan' },
-  { key: 'travelers', label: '👥 People' },
-  { key: 'splitwise', label: '💸 Split' },
+  { key: 'itinerary', label: 'Plan',   icon: 'calendar' },
+  { key: 'travelers', label: 'People', icon: 'people' },
+  { key: 'splitwise', label: 'Split',  icon: 'wallet' },
 ];
 
 export default function TripScreen({ navigation }) {
@@ -62,7 +63,9 @@ export default function TripScreen({ navigation }) {
   const hasActivities = trip.days?.some(d => d.activities.length > 0);
 
   const hasAccessible = trip.families.some(f => f.members.some(m => m.needs.length > 0));
-  const modeLabel = trip.mode === 'ai' ? '🤖 AI Planned' : trip.mode === 'expert' ? '🧳 Expert' : '✍️ Manual';
+  const modeLabel = trip.mode === 'ai' ? 'AI Planned' : trip.mode === 'expert' ? 'Expert' : 'Manual';
+  const modeIcon  = trip.mode === 'ai' ? 'sparkles' : trip.mode === 'expert' ? 'briefcase-outline' : 'create-outline';
+  const modeColor = trip.mode === 'ai' ? colors.ai : trip.mode === 'expert' ? colors.expert : colors.primary;
 
   const handleShare = async () => {
     const members = getAllMembers(trip);
@@ -130,11 +133,13 @@ export default function TripScreen({ navigation }) {
             <Text style={styles.tripMeta}>📍 {trip.destination}  ·  {fmt(trip.startDate)} – {fmt(trip.endDate)}</Text>
             <View style={styles.tags}>
               <View style={[styles.tag, { backgroundColor: trip.mode === 'ai' ? colors.aiLight : trip.mode === 'expert' ? colors.expertLight : colors.primaryLight }]}>
-                <Text style={[styles.tagText, { color: trip.mode === 'ai' ? colors.ai : trip.mode === 'expert' ? colors.expert : colors.primary }]}>{modeLabel}</Text>
+                <Icon name={modeIcon} size={11} color={modeColor} />
+                <Text style={[styles.tagText, { color: modeColor }]}>{modeLabel}</Text>
               </View>
               {hasAccessible && (
                 <View style={[styles.tag, { backgroundColor: '#fff8e6' }]}>
-                  <Text style={[styles.tagText, { color: '#9b6e00' }]}>♿ Needs</Text>
+                  <Icon name="accessible" size={11} color="#9b6e00" />
+                  <Text style={[styles.tagText, { color: '#9b6e00' }]}>Needs</Text>
                 </View>
               )}
 
@@ -145,8 +150,9 @@ export default function TripScreen({ navigation }) {
                   onPress={() => setShowPlanner(true)}
                   activeOpacity={0.8}
                 >
+                  <Icon name={hasActivities ? 'refresh' : 'sparkles'} size={12} color="#fff" />
                   <Text style={styles.planBtnText}>
-                    {hasActivities ? '↺ Update Plan' : '✨ Plan with AI'}
+                    {hasActivities ? 'Update Plan' : 'Plan with AI'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -156,15 +162,19 @@ export default function TripScreen({ navigation }) {
 
         {/* Tab Bar */}
         <View style={styles.tabBar}>
-          {TABS.map(tab => (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.tab, activeTab === tab.key && styles.tabActive]}
-              onPress={() => setActiveTab(tab.key)}
-            >
-              <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>{tab.label}</Text>
-            </TouchableOpacity>
-          ))}
+          {TABS.map(tab => {
+            const active = activeTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[styles.tab, active && styles.tabActive]}
+                onPress={() => setActiveTab(tab.key)}
+              >
+                <Icon name={tab.icon} size={16} color={active ? colors.accent : colors.subtle} />
+                <Text style={[styles.tabText, active && styles.tabTextActive]}>{tab.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
@@ -239,11 +249,12 @@ const styles = StyleSheet.create({
   tripName: { fontSize: 16, fontWeight: '700', color: colors.text, flex: 1 },
   tripMeta: { fontSize: 11, color: colors.muted, marginTop: 1 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm, alignItems: 'center' },
-  tag: { borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  tag: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   tagText: { ...typography.caption, fontWeight: '700', fontSize: 11 },
 
   // Plan with AI / Update Plan button (inline with tags)
   planBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
@@ -259,8 +270,11 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
+    flexDirection: 'row',
+    gap: 5,
     paddingVertical: spacing.md,
     alignItems: 'center',
+    justifyContent: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },

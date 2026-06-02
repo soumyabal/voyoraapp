@@ -830,6 +830,40 @@ const useStore = create(
         }),
       })),
 
+      // Merge auto-arranged DRAFT activities into existing days (never overwrites).
+      // `placements` is Activity[][] aligned to trip.days, as produced by
+      // autoArrange(). Strips draft-only fields, assigns real ids, and batches
+      // the Splitwise sync once (vs. looping addActivity per item).
+      applyArrangedActivities: (tripId, placements) => set(s => ({
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+
+          const cleanedByDay = t.days.map((_, i) =>
+            (placements[i] || []).map(a => {
+              const { _draftId, _source, ...rest } = a;
+              return { ...rest, id: uid() };
+            })
+          );
+          const newDays = t.days.map((d, i) =>
+            cleanedByDay[i].length ? { ...d, activities: [...d.activities, ...cleanedByDay[i]] } : d
+          );
+
+          if (!t.itineraryPushed) return { ...t, days: newDays };
+
+          // Itinerary already pushed → add linked expenses for costed activities.
+          const allMembers = getAllMembers({ ...t, days: newDays });
+          const allFamilyIds = t.families.map(f => f.id);
+          const addedExpenses = [];
+          cleanedByDay.forEach((drafts, i) => {
+            const label = t.days[i]?.label || `Day ${i + 1}`;
+            drafts.forEach(a => {
+              if (a.costPerPerson > 0) addedExpenses.push(activityToExpense(a, label, allMembers, allFamilyIds));
+            });
+          });
+          return { ...t, days: newDays, expenses: [...t.expenses, ...addedExpenses] };
+        }),
+      })),
+
       // Smart itinerary: calls planner for known destinations, falls back to generics
       generateSmartItinerary: (tripId) => {
         const { trips, travelers } = get();

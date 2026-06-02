@@ -14,6 +14,7 @@ import useStore from '../store';
 import { uid } from '../utils/helpers';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
+import { autoArrange } from '../utils/autoArrange';
 
 const CATEGORIES = [
   { key: 'attractions', label: '\u{1F3DB}️ Attractions', query: 'top tourist attractions and landmarks' },
@@ -123,10 +124,11 @@ async function fetchPlaces(textQuery) {
   } catch(e) { console.warn('[DiscoverModal]',e.message); return []; }
 }
 
-function PlaceCard({ place, onAdd, added }) {
+function PlaceCard({ place, onAdd, added, selectMode, selected, onToggle }) {
   const typeEmoji = place.activityType==='food'?'\u{1F37D}️':place.activityType==='stay'?'\u{1F3E8}':'\u{1F3AF}';
+  const isOn = selectMode ? selected : added;
   return (
-    <View style={card.wrap}>
+    <View style={[card.wrap, selectMode&&selected&&card.wrapSel]}>
       <View style={card.body}>
         <View style={card.nameRow}>
           <Text style={card.typeIcon}>{typeEmoji}</Text>
@@ -143,10 +145,10 @@ function PlaceCard({ place, onAdd, added }) {
         {!!place.address && <Text style={card.address} numberOfLines={1}>{'\u{1F4CD}'} {place.address}</Text>}
       </View>
       <TouchableOpacity
-        style={[card.addBtn, added&&card.addBtnDone]}
-        onPress={() => !added && onAdd(place)} activeOpacity={added?1:0.7}
+        style={[card.addBtn, isOn&&card.addBtnDone]}
+        onPress={() => selectMode ? onToggle(place) : (!added && onAdd(place))} activeOpacity={isOn&&!selectMode?1:0.7}
       >
-        <Text style={[card.addBtnText, added&&{color:'#15803d'}]}>{added?'✓':'+'}</Text>
+        <Text style={[card.addBtnText, isOn&&{color:'#15803d'}]}>{isOn?'✓':'+'}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -154,8 +156,11 @@ function PlaceCard({ place, onAdd, added }) {
 
 export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime }) {
   const insets = useSafeAreaInsets();
-  const { addActivity } = useStore();
+  const { addActivity, applyArrangedActivities } = useStore();
 
+  const [selectMode, setSelectMode] = useState(false);  // basket multi-select
+  const [basket,     setBasket]     = useState([]);      // chosen places (city-tagged)
+  const [preview,    setPreview]    = useState(null);    // autoArrange draft + editable placements
   const [activeCategory, setActiveCategory] = useState('attractions');
   const [searchText,     setSearchText]     = useState('');
   const [results,        setResults]        = useState([]);
@@ -186,6 +191,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     const parsed = parseLocations(destination);
     const start  = parsed[0] || destination;
     setSearchText(''); setAddedNames(new Set());
+    setSelectMode(false); setBasket([]); setPreview(null);
     setCities(parsed.length ? parsed : (destination ? [destination] : []));
     setActiveCity(start);
     setCityPickerOpen(false); setNewCity('');
@@ -272,6 +278,30 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setPendingPlace(null);
   };
 
+  // ── Basket (auto-arrange) handlers ──────────────────────────────
+  const basketHas = name => basket.some(p => p.name === name);
+  const toggleBasket = place => {
+    setBasket(prev => prev.some(p => p.name === place.name)
+      ? prev.filter(p => p.name !== place.name)
+      : [...prev, { ...place, city: cityLabel(activeCity) }]);  // tag source city for clustering
+  };
+  const runArrange = () => {
+    if (!basket.length) return;
+    setPreview(autoArrange(basket, trip));
+  };
+  const removeFromPreview = (dayIdx, draftId) => {
+    setPreview(prev => prev && ({
+      ...prev,
+      placements: prev.placements.map((acts, i) => i === dayIdx ? acts.filter(a => a._draftId !== draftId) : acts),
+    }));
+  };
+  const applyPreview = () => {
+    if (!preview) return;
+    applyArrangedActivities(trip.id, preview.placements);
+    setPreview(null); setBasket([]); setSelectMode(false);
+    onClose();
+  };
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':'height'}>
@@ -283,9 +313,14 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
               <Text style={s.subtitle} numberOfLines={1}>{'\u{1F4CD}'} {destination}</Text>
               {dietBadge.length>0 && <Text style={s.dietBadge}>{dietBadge.join(' · ')} · filtered</Text>}
             </View>
-            <TouchableOpacity style={s.closeBtn} onPress={onClose}>
-              <Text style={s.closeBtnText}>Done</Text>
-            </TouchableOpacity>
+            <View style={s.headerActions}>
+              <TouchableOpacity style={[s.modeBtn, selectMode&&s.modeBtnOn]} onPress={() => setSelectMode(m => !m)} activeOpacity={0.8}>
+                <Text style={[s.modeBtnText, selectMode&&s.modeBtnTextOn]}>{selectMode ? '\u{1F9E0} Building' : '+ Build a day'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.closeBtn} onPress={onClose}>
+                <Text style={s.closeBtnText}>Done</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={s.searchRow}>
@@ -335,10 +370,24 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
               contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
               renderItem={({item}) => (
-                <PlaceCard place={item} onAdd={handleAdd} added={addedNames.has(item.name)}/>
+                <PlaceCard place={item} onAdd={handleAdd} added={addedNames.has(item.name)}
+                  selectMode={selectMode} selected={basketHas(item.name)} onToggle={toggleBasket}/>
               )}
               ListHeaderComponent={results.length>0?<Text style={s.resultCount}>{results.length} places found</Text>:null}
             />
+          )}
+
+          {/* Basket bar — appears in select mode once events are chosen */}
+          {selectMode && basket.length > 0 && (
+            <View style={[s.basketBar, { paddingBottom: (insets.bottom || spacing.md) }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.basketCount}>{basket.length} event{basket.length !== 1 ? 's' : ''} selected</Text>
+                <Text style={s.basketHint}>We'll spread them across your days</Text>
+              </View>
+              <TouchableOpacity style={s.basketBtn} onPress={runArrange} activeOpacity={0.85}>
+                <Text style={s.basketBtnText}>{'\u{1F9E0}'} Auto-arrange</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
@@ -396,6 +445,72 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
           </TouchableOpacity>
         </Modal>
 
+        {/* Auto-arrange preview — editable draft, nothing committed until Apply */}
+        <Modal visible={!!preview} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPreview(null)}>
+          <View style={[s.container, { paddingTop: insets.top + 8 }]}>
+            <View style={s.header}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.title}>Suggested plan</Text>
+                <Text style={s.subtitle} numberOfLines={1}>
+                  {preview?.summary.placed} placed{preview?.summary.unplaced ? ` · ${preview.summary.unplaced} didn't fit` : ''} · review & edit
+                </Text>
+              </View>
+              <TouchableOpacity style={[s.modeBtn]} onPress={() => setPreview(null)}>
+                <Text style={s.modeBtnText}>Back</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ padding: spacing.xxl, paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+              {(trip.days || []).map((d, i) => {
+                const acts = preview?.placements[i] || [];
+                if (!acts.length) return null;
+                return (
+                  <View key={d.date} style={pv.dayCard}>
+                    <Text style={pv.dayTitle}>{d.label} · {d.date?.slice(5)}</Text>
+                    {acts.map(a => (
+                      <View key={a._draftId} style={pv.row}>
+                        <Text style={pv.time}>{a.time}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={pv.name} numberOfLines={1}>
+                            {a.type === 'food' ? '\u{1F37D}️' : a.type === 'stay' ? '\u{1F3E8}' : '\u{1F3AF}'} {a.name}
+                          </Text>
+                          {!!a.city && <Text style={pv.city} numberOfLines={1}>{'\u{1F4CD}'} {a.city}</Text>}
+                        </View>
+                        <TouchableOpacity onPress={() => removeFromPreview(i, a._draftId)} style={pv.remove} hitSlop={8}>
+                          <Text style={pv.removeText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                );
+              })}
+
+              {preview?.unplaced?.length > 0 && (
+                <View style={pv.unplacedCard}>
+                  <Text style={pv.unplacedTitle}>Couldn't fit ({preview.unplaced.length})</Text>
+                  {preview.unplaced.map((p, idx) => <Text key={idx} style={pv.unplacedItem}>• {p.name}</Text>)}
+                  <Text style={pv.unplacedHint}>Add a day to the trip, or remove some events, then re-arrange.</Text>
+                </View>
+              )}
+
+              {preview?.warnings?.some(w => w.severity === 'error') && (
+                <Text style={pv.warn}>
+                  {'⚠'} {preview.warnings.filter(w => w.severity === 'error').length} scheduling conflict(s) — fixable in Trip Check after applying.
+                </Text>
+              )}
+            </ScrollView>
+
+            <View style={[pv.applyBar, { paddingBottom: (insets.bottom || spacing.md) }]}>
+              <TouchableOpacity style={pv.reBtn} onPress={runArrange} activeOpacity={0.8}>
+                <Text style={pv.reBtnText}>{'↻'} Re-arrange</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={pv.applyBtn} onPress={applyPreview} activeOpacity={0.85}>
+                <Text style={pv.applyBtnText}>Apply to trip</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
         {/* City picker sheet */}
         <Modal visible={cityPickerOpen} transparent animationType="slide" onRequestClose={() => setCityPickerOpen(false)}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -445,6 +560,16 @@ const s = StyleSheet.create({
   subtitle:{...typography.small,color:colors.muted,marginTop:2,maxWidth:260},
   closeBtn:{backgroundColor:colors.primary,borderRadius:radius.full,paddingHorizontal:spacing.lg,paddingVertical:8,marginTop:4},
   closeBtnText:{color:'#fff',fontWeight:'700',fontSize:14},
+  headerActions:{flexDirection:'row',alignItems:'center',gap:spacing.xs,marginTop:4},
+  modeBtn:{borderRadius:radius.full,paddingHorizontal:spacing.md,paddingVertical:8,borderWidth:1.5,borderColor:colors.border,backgroundColor:'#fff'},
+  modeBtnOn:{backgroundColor:'#eef2ff',borderColor:'#6366f1'},
+  modeBtnText:{fontSize:13,fontWeight:'800',color:colors.text},
+  modeBtnTextOn:{color:'#4f46e5'},
+  basketBar:{flexDirection:'row',alignItems:'center',gap:spacing.md,paddingHorizontal:spacing.xxl,paddingTop:spacing.md,backgroundColor:'#fff',borderTopWidth:1,borderTopColor:colors.border,...shadow.lg},
+  basketCount:{...typography.bodyBold,color:colors.text},
+  basketHint:{fontSize:11,color:colors.muted,marginTop:1},
+  basketBtn:{backgroundColor:'#4f46e5',borderRadius:radius.full,paddingHorizontal:spacing.xl,paddingVertical:spacing.md},
+  basketBtnText:{color:'#fff',fontWeight:'800',fontSize:15},
   searchRow:{flexDirection:'row',alignItems:'center',marginHorizontal:spacing.xxl,marginBottom:spacing.sm,backgroundColor:colors.surface2,borderRadius:radius.md,paddingHorizontal:spacing.md,paddingVertical:spacing.xs,borderWidth:1,borderColor:colors.border},
   searchIcon:{fontSize:15,marginRight:spacing.xs},
   searchInput:{flex:1,fontSize:15,color:colors.text,paddingVertical:6},
@@ -517,6 +642,7 @@ const sp = StyleSheet.create({
 
 const card = StyleSheet.create({
   wrap:{flexDirection:'row',alignItems:'center',backgroundColor:'#fff',borderRadius:radius.lg,borderWidth:1,borderColor:colors.border,marginBottom:spacing.sm,padding:spacing.md,gap:spacing.sm,...shadow.sm},
+  wrapSel:{borderColor:'#6366f1',backgroundColor:'#eef2ff'},
   body:{flex:1,gap:4},
   nameRow:{flexDirection:'row',alignItems:'flex-start',gap:6},
   typeIcon:{fontSize:16,marginTop:1},
@@ -532,4 +658,26 @@ const card = StyleSheet.create({
   addBtnText:{color:'#fff',fontSize:20,fontWeight:'700',lineHeight:22},
   vegBadge:{backgroundColor:'#dcfce7',borderRadius:radius.full,paddingHorizontal:6,paddingVertical:2,marginLeft:4},
   vegBadgeText:{fontSize:10,color:'#15803d',fontWeight:'700'},
+});
+
+// Auto-arrange preview sheet
+const pv = StyleSheet.create({
+  dayCard:{backgroundColor:'#fff',borderRadius:radius.lg,borderWidth:1,borderColor:colors.border,padding:spacing.md,marginBottom:spacing.md,...shadow.sm},
+  dayTitle:{...typography.bodyBold,color:colors.text,marginBottom:spacing.sm},
+  row:{flexDirection:'row',alignItems:'center',gap:spacing.sm,paddingVertical:6,borderTopWidth:1,borderTopColor:colors.border},
+  time:{fontSize:13,fontWeight:'800',color:'#4f46e5',width:48},
+  name:{...typography.body,color:colors.text},
+  city:{fontSize:11,color:colors.muted,marginTop:1},
+  remove:{width:28,height:28,borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:'#fef2f2'},
+  removeText:{fontSize:14,fontWeight:'800',color:'#dc2626'},
+  unplacedCard:{backgroundColor:'#fffbeb',borderRadius:radius.lg,borderWidth:1,borderColor:'#fde68a',padding:spacing.md,marginBottom:spacing.md},
+  unplacedTitle:{...typography.bodyBold,color:'#92400e',marginBottom:spacing.xs},
+  unplacedItem:{fontSize:13,color:'#92400e',lineHeight:20},
+  unplacedHint:{fontSize:11,color:'#b45309',marginTop:spacing.xs,fontStyle:'italic'},
+  warn:{fontSize:12,color:'#dc2626',fontWeight:'600',marginBottom:spacing.md,lineHeight:18},
+  applyBar:{position:'absolute',left:0,right:0,bottom:0,flexDirection:'row',gap:spacing.md,paddingHorizontal:spacing.xxl,paddingTop:spacing.md,backgroundColor:'#fff',borderTopWidth:1,borderTopColor:colors.border,...shadow.lg},
+  reBtn:{borderRadius:radius.full,paddingHorizontal:spacing.xl,paddingVertical:spacing.md,borderWidth:1.5,borderColor:colors.border,backgroundColor:'#fff'},
+  reBtnText:{fontSize:15,fontWeight:'800',color:colors.text},
+  applyBtn:{flex:1,backgroundColor:'#4f46e5',borderRadius:radius.full,paddingVertical:spacing.md,alignItems:'center'},
+  applyBtnText:{color:'#fff',fontWeight:'800',fontSize:16},
 });

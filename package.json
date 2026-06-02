@@ -6,7 +6,15 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "jest"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/__tests__/**/*.test.js"
+    ]
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -30,5 +38,9 @@
     "react-native-screens": "~4.16.0",
     "zustand": "^5.0.14"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-expo": "~54.0.0"
+  }
 }

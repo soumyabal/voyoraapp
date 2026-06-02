@@ -1,12 +1,74 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal } from 'react-native';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal, Share } from 'react-native';
 import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import DiscoverModal from '../modals/DiscoverModal';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
 import { fmt, fmtM, getActivityIcon } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
-import { validateTrip, summariseWarnings } from '../utils/tripValidator';
+import { validateTrip, summariseWarnings, estimateDuration, formatDuration } from '../utils/tripValidator';
+import { exportDayAsPDF } from '../utils/exportPlan';
+
+// ─── Dietary warning helper ───────────────────────────────────────
+const MEAT_WARN_RE = /\b(beef|pork|lamb|chicken|mutton|fish|prawn|shrimp|seafood|lobster|crab|sashimi|sushi|steak|burger|bbq|barbecue|bacon|ham|meat|non.?veg)\b/i;
+const ALCO_WARN_RE = /\b(beer|wine|cocktail|whisky|whiskey|vodka|rum|gin|spirits|alcohol|brewery|pub|bar|tavern|champagne|prosecco|sake)\b/i;
+
+function getDietaryWarning(act, families = []) {
+  if (act.type !== 'food') return null;
+  const text     = `${act.name} ${act.detail || ''}`;
+  const vegFams  = families.filter(f => (f.dietary || []).some(d => d === 'vegetarian' || d === 'vegan'));
+  const alcoFams = families.filter(f => (f.dietary || []).includes('no-alcohol'));
+  if (vegFams.length > 0 && MEAT_WARN_RE.test(text)) return '⚠️ May contain meat';
+  if (alcoFams.length > 0 && ALCO_WARN_RE.test(text)) return '⚠️ Alcohol';
+  return null;
+}
+
+// ─── WhatsApp day share text ──────────────────────────────────────
+const SLOT_RANGES = [
+  { key: 'morning',   label: '🌅 Morning',   before: 720  },
+  { key: 'afternoon', label: '☀️ Afternoon',  before: 1020 },
+  { key: 'evening',   label: '🌆 Evening',    before: 1260 },
+  { key: 'night',     label: '🌙 Night',      before: 1440 },
+];
+
+function generateDayShareText(trip, day) {
+  if (!day) return '';
+  const acts = [...(day.activities || [])]
+    .filter(a => a.status !== 'skipped')
+    .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+
+  const toMin = t => { const [h, m] = (t || '09:00').split(':').map(Number); return h * 60 + m; };
+  const getSlot = t => {
+    const m = toMin(t);
+    return SLOT_RANGES.find(s => m < s.before)?.key ?? 'night';
+  };
+
+  const bySlot = {};
+  acts.forEach(a => {
+    const sk = getSlot(a.time);
+    if (!bySlot[sk]) bySlot[sk] = [];
+    bySlot[sk].push(a);
+  });
+
+  const dayCost = acts.reduce((s, a) => s + (a.costPerPerson || 0), 0);
+
+  let text = `*${trip.name}* — ${day.label} (${fmt(day.date)})\n📍 ${trip.destination}\n\n`;
+
+  SLOT_RANGES.forEach(({ key, label }) => {
+    if (!bySlot[key]?.length) return;
+    text += `${label}\n`;
+    bySlot[key].forEach(a => {
+      const icon = a.type === 'food' ? '🍽️' : a.type === 'transport' ? '🚗' : a.type === 'stay' ? '🏨' : '🎯';
+      const cost = a.costPerPerson > 0 ? ` (~$${a.costPerPerson}/p)` : '';
+      text += `  ${a.time}  ${icon} ${a.name}${cost}\n`;
+    });
+    text += '\n';
+  });
+
+  if (dayCost > 0) text += `💰 Day estimate: ${fmtM(dayCost)}/person\n`;
+  text += `\n_Shared via Voyara_`;
+  return text;
+}
 
 const SCREEN_W       = Dimensions.get('window').width;
 const CARD_ACTIONS_W = 216;                        // 3 × 72px action buttons
@@ -134,6 +196,15 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush }) {
   const dayCost = day ? calcDayCostForTrip(day, trip) : 0;
   const dayPP   = day ? calcDayPerPersonCost(day) : 0;
 
+  const handleShare = async () => {
+    try {
+      const text = generateDayShareText(trip, day);
+      await Share.share({ message: text });
+    } catch (e) {
+      console.warn('[share]', e);
+    }
+  };
+
   return (
     <>
       {/* ── Sticky bar ── */}
@@ -154,6 +225,11 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush }) {
             {dayCost > 0 && <Text style={ch.miniPP}>{fmtM(dayPP)}/p</Text>}
           </View>
         </View>
+
+        {/* Share day */}
+        <TouchableOpacity style={ch.shareBtn} onPress={handleShare} activeOpacity={0.7}>
+          <Text style={ch.shareBtnText}>📤</Text>
+        </TouchableOpacity>
 
         {/* Detail trigger */}
         <TouchableOpacity style={ch.infoBtn} onPress={() => setShowDetail(true)} activeOpacity={0.7}>
@@ -221,6 +297,15 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush }) {
             />
 
             {/* Push / synced */}
+            {/* Export day as PDF */}
+            <TouchableOpacity
+              style={ch.exportDayBtn}
+              onPress={() => { setShowDetail(false); exportDayAsPDF(trip, day); }}
+              activeOpacity={0.8}
+            >
+              <Text style={ch.exportDayBtnText}>📄 Export Day as PDF</Text>
+            </TouchableOpacity>
+
             {trip.itineraryPushed ? (
               <View style={ch.syncedBadge}>
                 <Text style={ch.syncedText}>✅ Synced to Splitwise — edits update automatically</Text>
@@ -239,13 +324,16 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush }) {
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
   const { currentDay, setCurrentDay, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities } = useStore();
-  const [showAddActivity, setShowAddActivity] = useState(false);
-  const [editActivity,    setEditActivity]    = useState(null);
-  const [defaultSlotTime, setDefaultSlotTime] = useState('09:00');
-  const [showDiscover,    setShowDiscover]    = useState(false);
-  const [movingAct,       setMovingAct]       = useState(null);
-  const [reorderHint,    setReorderHint]    = useState(false);
-  const [collapsedSlots, setCollapsedSlots] = useState({});   // { [slotKey]: true }
+  const [showAddActivity,       setShowAddActivity]       = useState(false);
+  const [editActivity,          setEditActivity]          = useState(null);
+  const [defaultSlotTime,       setDefaultSlotTime]       = useState('09:00');
+  const [showDiscover,          setShowDiscover]          = useState(false);
+  const [movingAct,             setMovingAct]             = useState(null);
+  const [reorderHint,           setReorderHint]           = useState(false);
+  const [collapsedSlots,        setCollapsedSlots]        = useState({});
+  const [groupProfileDismissed, setGroupProfileDismissed] = useState(false);
+  const [mustDosDismissed,      setMustDosDismissed]      = useState(false);
+  const [mustDosChecked,        setMustDosChecked]        = useState({});
 
   const toggleSlot = (key) =>
     setCollapsedSlots(prev => ({ ...prev, [key]: !prev[key] }));
@@ -339,14 +427,84 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           })}
         </ScrollView>
 
+        {/* ── Group compatibility summary card ── */}
+        {(() => {
+          const families = trip.families || [];
+          const hasDietary  = families.some(f => (f.dietary || []).length > 0);
+          const hasWakeTime = families.some(f => f.wakeTime && f.wakeTime !== 'regular');
+          const hasMustDos  = !!(trip.mustDos?.trim());
+          if ((!hasDietary && !hasWakeTime) || groupProfileDismissed) return null;
+          return (
+            <View style={styles.groupCard}>
+              <View style={styles.groupCardHeader}>
+                <Text style={styles.groupCardTitle}>👥 Group Profile</Text>
+                <TouchableOpacity onPress={() => setGroupProfileDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.groupCardDismiss}>✕ Hide</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.groupCardRow}>
+                {families.map(fam => (
+                  <View key={fam.id} style={[styles.groupFamChip, { borderColor: fam.color }]}>
+                    <View style={[styles.groupFamDot, { backgroundColor: fam.color }]} />
+                    <View>
+                      <Text style={[styles.groupFamName, { color: fam.color }]}>{fam.name.split(' ')[0]}</Text>
+                      {(fam.dietary || []).length > 0 && (
+                        <Text style={styles.groupFamDiet}>{fam.dietary.join(' · ')}</Text>
+                      )}
+                      {fam.wakeTime === 'late'  && <Text style={styles.groupFamWake}>🦉 Late riser</Text>}
+                      {fam.wakeTime === 'early' && <Text style={styles.groupFamWake}>🌅 Early bird</Text>}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          );
+        })()}
+
+        {/* ── Must-dos strip ── */}
+        {(() => {
+          const raw = trip.mustDos?.trim();
+          if (!raw || mustDosDismissed) return null;
+          const items = raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+          const allDone = items.every((_, i) => mustDosChecked[i]);
+          return (
+            <View style={styles.mustDosStrip}>
+              <View style={styles.mustDosHeader}>
+                <Text style={styles.mustDosTitle}>📌 Must-dos</Text>
+                <TouchableOpacity onPress={() => setMustDosDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.mustDosDismiss}>✕ Hide</Text>
+                </TouchableOpacity>
+              </View>
+              {allDone ? (
+                <Text style={styles.mustDosAllDone}>🎉 All must-dos added!</Text>
+              ) : (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mustDosRow}>
+                  {items.map((item, i) => {
+                    const checked = !!mustDosChecked[i];
+                    return (
+                      <TouchableOpacity
+                        key={i}
+                        style={[styles.mustDosChip, checked && styles.mustDosChipDone]}
+                        onPress={() => setMustDosChecked(prev => ({ ...prev, [i]: !prev[i] }))}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.mustDosChipText, checked && styles.mustDosChipTextDone]}>
+                          {checked ? '✓ ' : ''}{item}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </View>
+          );
+        })()}
+
         {/* Day Header */}
         {day && (
           <View style={styles.dayHeader}>
             <Text style={styles.dayTitle}>{day.label} — {fmt(day.date)}</Text>
             <View style={styles.dayHeaderActions}>
-              <TouchableOpacity style={styles.discoverBtn} onPress={() => setShowDiscover(true)}>
-                <Text style={styles.discoverBtnText}>🔍 Discover</Text>
-              </TouchableOpacity>
               <TouchableOpacity style={styles.addActBtn} onPress={openAdd}>
                 <Text style={styles.addActBtnText}>+ Activity</Text>
               </TouchableOpacity>
@@ -521,6 +679,15 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         </View>
       </ScrollView>
 
+      {/* ── Discover FAB (bottom-left) ── */}
+      <TouchableOpacity
+        style={styles.discoverFab}
+        onPress={() => setShowDiscover(true)}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.discoverFabText}>🔍 Discover</Text>
+      </TouchableOpacity>
+
       {/* ── Check Trip FAB ── */}
       {!!onCheckTrip && (() => {
         const issues = validateTrip(trip);
@@ -629,6 +796,11 @@ function ActivityCard({ activity: act, trip, isHighlighted, isFirst, isLast, onM
   const isDone    = status === 'done';
   const isSkipped = status === 'skipped';
   const dimmed    = isDone || isSkipped;
+  const dietWarn  = getDietaryWarning(act, trip.families || []);
+  const duration  = estimateDuration(act);
+  const durationLabel = act.type !== 'note' && act.type !== 'stay' && duration > 0
+    ? formatDuration(duration)
+    : null;
 
   const hasSecondary = !!(act.detail || act.memo || act.reminder || act.note || act.address || act.url);
   const [cardExpanded, setCardExpanded] = useState(false);
@@ -712,13 +884,25 @@ function ActivityCard({ activity: act, trip, isHighlighted, isFirst, isLast, onM
               </Text>
             )}
 
-            {!dimmed && displayCostAmt > 0 && (
+            {!dimmed && (
               <View style={styles.actTags}>
-                <View style={[styles.costBadge, isPerFamily && { backgroundColor: '#f0eeff', borderColor: '#c4b5fd' }, isTotal && { backgroundColor: '#dcfce7', borderColor: '#a7f3d0' }]}>
-                  <Text style={[styles.costBadgeText, isPerFamily && { color: '#7c3aed' }, isTotal && { color: '#065f46' }]}>
-                    ~${displayCostAmt}{displayCostLbl}
-                  </Text>
-                </View>
+                {displayCostAmt > 0 && (
+                  <View style={[styles.costBadge, isPerFamily && { backgroundColor: '#f0eeff', borderColor: '#c4b5fd' }, isTotal && { backgroundColor: '#dcfce7', borderColor: '#a7f3d0' }]}>
+                    <Text style={[styles.costBadgeText, isPerFamily && { color: '#7c3aed' }, isTotal && { color: '#065f46' }]}>
+                      ~${displayCostAmt}{displayCostLbl}
+                    </Text>
+                  </View>
+                )}
+                {!!durationLabel && (
+                  <View style={styles.durationBadge}>
+                    <Text style={styles.durationBadgeText}>~{durationLabel}</Text>
+                  </View>
+                )}
+                {!!dietWarn && (
+                  <View style={styles.dietWarnBadge}>
+                    <Text style={styles.dietWarnBadgeText}>{dietWarn}</Text>
+                  </View>
+                )}
                 {!!act.access && (
                   <View style={[styles.costBadge, { backgroundColor: colors.greenLight, borderColor: '#b2dfdb' }]}>
                     <Text style={[styles.costBadgeText, { color: colors.green }]}>* {act.access}</Text>
@@ -892,6 +1076,18 @@ const ch = StyleSheet.create({
     fontWeight: '600',
     color: colors.green,
   },
+  shareBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareBtnText: {
+    fontSize: 14,
+  },
   infoBtn: {
     width: 28,
     height: 28,
@@ -905,6 +1101,21 @@ const ch = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255,255,255,0.7)',
     fontWeight: '700',
+  },
+  exportDayBtn: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  exportDayBtnText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '600',
   },
 
   // Detail sheet (slide-up modal)
@@ -1127,6 +1338,55 @@ const styles = StyleSheet.create({
   },
   syncedBadgeText: { ...typography.caption, color: colors.green, fontWeight: '700' },
 
+  // ── Group compatibility card ─────────────────────────────────────
+  groupCard: {
+    marginHorizontal: spacing.xxl,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+    backgroundColor: '#f0f9ff',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: '#bae6fd',
+  },
+  groupCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  groupCardTitle:  { fontSize: 12, fontWeight: '700', color: '#0369a1' },
+  groupCardDismiss:{ fontSize: 11, color: colors.muted },
+  groupCardRow:    { gap: spacing.sm, paddingBottom: 2 },
+  groupFamChip: {
+    borderWidth: 1.5, borderRadius: radius.lg, padding: spacing.sm,
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    backgroundColor: '#fff',
+  },
+  groupFamDot:  { width: 8, height: 8, borderRadius: 4, marginTop: 3 },
+  groupFamName: { fontSize: 12, fontWeight: '700' },
+  groupFamDiet: { fontSize: 10, color: colors.muted, marginTop: 1 },
+  groupFamWake: { fontSize: 10, color: '#d97706', marginTop: 1 },
+
+  // ── Must-dos strip ───────────────────────────────────────────────
+  mustDosStrip: {
+    marginHorizontal: spacing.xxl,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+    backgroundColor: '#fffbeb',
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  mustDosHeader:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  mustDosTitle:        { fontSize: 12, fontWeight: '700', color: '#92400e' },
+  mustDosDismiss:      { fontSize: 11, color: colors.muted },
+  mustDosAllDone:      { fontSize: 12, color: '#15803d', fontWeight: '700', textAlign: 'center', paddingVertical: 2 },
+  mustDosRow:          { gap: spacing.xs },
+  mustDosChip: {
+    borderWidth: 1.5, borderColor: '#f59e0b', borderRadius: radius.full,
+    paddingHorizontal: spacing.md, paddingVertical: 5, backgroundColor: '#fff',
+  },
+  mustDosChipDone:     { backgroundColor: '#dcfce7', borderColor: '#16a34a' },
+  mustDosChipText:     { fontSize: 12, color: '#92400e', fontWeight: '600' },
+  mustDosChipTextDone: { color: '#15803d', textDecorationLine: 'line-through' },
+
   // ── Day navigation ───────────────────────────────────────────────
   dayNav: { marginTop: spacing.xl },
   dayBtn: {
@@ -1156,14 +1416,6 @@ const styles = StyleSheet.create({
   },
   dayTitle: { ...typography.h4, color: colors.text, flex: 1, marginRight: spacing.sm },
   dayHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  discoverBtn: {
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  discoverBtnText: { ...typography.caption, color: colors.primary, fontWeight: '700' },
   addActBtn: {
     backgroundColor: colors.primary,
     borderRadius: radius.lg,
@@ -1171,6 +1423,26 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   addActBtnText: { ...typography.caption, color: '#fff', fontWeight: '800' },
+
+  // ── Discover FAB ────────────────────────────────────────────────
+  discoverFab: {
+    position: 'absolute',
+    left: 20,
+    bottom: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: radius.full,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    backgroundColor: colors.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  discoverFabText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   // ── Check Trip FAB ───────────────────────────────────────────────
   checkFab: {
@@ -1468,6 +1740,24 @@ const styles = StyleSheet.create({
     borderColor: '#a0e6d4',
   },
   costBadgeText: { fontSize: 11, fontWeight: '700', color: colors.green },
+  durationBadge: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  durationBadgeText: { fontSize: 11, color: colors.muted, fontWeight: '600' },
+  dietWarnBadge: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    backgroundColor: '#fef9c3',
+    borderWidth: 1,
+    borderColor: '#fde047',
+  },
+  dietWarnBadgeText: { fontSize: 11, color: '#713f12', fontWeight: '700' },
   ratingBadge: {
     backgroundColor: colors.yellowLight,
     borderRadius: radius.full,

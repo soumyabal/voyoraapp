@@ -4,30 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sampleTrips, sampleTravelers, sampleGroups } from '../data/sampleData';
 import { uid, getAllMembers, findMemberFamily, TRIP_EMOJIS, TRIP_BG_COLORS, familyPalette } from '../utils/helpers';
 import { getExpSplitBetween } from '../utils/costs';
+import { activityToExpense, rebuildItineraryExpenses } from '../utils/expenses';
 import { generateSmartItinerary as planSmartItinerary } from '../utils/itineraryPlanner';
-
-// ── Activity → Expense sync helper ─────────────────────────────────────────
-function activityToExpense(act, dayLabel, allMembers, allFamilyIds) {
-  const cat = act.type === 'food' ? '🍽️'
-    : act.type === 'transport' ? '✈️'
-    : act.type === 'stay' ? '🏨'
-    : '🎯';
-  const amount = parseFloat((act.costPerPerson * allMembers.length).toFixed(2));
-  return {
-    id: uid(),
-    name: `${act.name} (${dayLabel})`,
-    amount,
-    estimatedAmount: amount,
-    category: cat,
-    paidBy: allMembers[0]?.id ?? null,
-    splitMode: null,
-    participatingFamilies: [...allFamilyIds],
-    participatingMembers: null,
-    excluded: false,
-    source: 'itinerary',
-    activityId: act.id,
-  };
-}
 
 // Toast reference (set by Toast component)
 let _showToast = null;
@@ -209,15 +187,24 @@ const useStore = create(
           const newDays = t.days.map((d, i) => i !== dayIndex ? d : {
             ...d, activities: [...d.activities, actWithId],
           });
-          // Auto-sync: if itinerary already pushed and activity has a cost, add expense
+          // Costs auto-flow into Split. If already pushed, append this one
+          // expense; if NOT yet pushed and this is the first costed activity,
+          // auto-fund the split (rebuild from all costed activities, mark pushed)
+          // so the per-family Split populates without a manual "Move" step.
           let newExpenses = t.expenses;
-          if (t.itineraryPushed && actWithId.costPerPerson > 0) {
-            const allMembers = getAllMembers({ ...t, days: newDays });
-            const allFamilyIds = t.families.map(f => f.id);
-            const dayLabel = t.days[dayIndex]?.label || `Day ${dayIndex + 1}`;
-            newExpenses = [...t.expenses, activityToExpense(actWithId, dayLabel, allMembers, allFamilyIds)];
+          let itineraryPushed = t.itineraryPushed;
+          if (actWithId.costPerPerson > 0) {
+            if (t.itineraryPushed) {
+              const allMembers = getAllMembers({ ...t, days: newDays });
+              const allFamilyIds = t.families.map(f => f.id);
+              const dayLabel = t.days[dayIndex]?.label || `Day ${dayIndex + 1}`;
+              newExpenses = [...t.expenses, activityToExpense(actWithId, dayLabel, allMembers, allFamilyIds)];
+            } else {
+              newExpenses = rebuildItineraryExpenses({ ...t, days: newDays });
+              itineraryPushed = true;
+            }
           }
-          return { ...t, days: newDays, expenses: newExpenses };
+          return { ...t, days: newDays, expenses: newExpenses, itineraryPushed };
         }),
       })),
 

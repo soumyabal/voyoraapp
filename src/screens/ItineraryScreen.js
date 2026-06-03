@@ -87,6 +87,13 @@ const DAY_SLOTS = [
 
 // Activity type → Icon name (see components/ui/Icon)
 const ACT_ICON = { transport: 'transport', stay: 'hotel', food: 'food', activity: 'activity', note: 'note' };
+// Trip Check severity → sort rank + inline chip palette (errors first).
+const SEV_RANK = { error: 0, warning: 1, info: 2 };
+const SEV_CHIP = {
+  error:   { backgroundColor: '#fef2f2', color: '#dc2626' },
+  warning: { backgroundColor: '#fffbeb', color: '#b45309' },
+  info:    { backgroundColor: '#f0ede8', color: '#6b6259' },
+};
 
 function getSlotKey(timeStr) {
   if (!timeStr) return 'morning';
@@ -382,6 +389,15 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
 
   const day = trip.days[currentDay] || trip.days[0];
 
+  // Trip Check warnings for THIS day — surfaced inline so "arrange → see what's
+  // still off" is one glance. Memoised so validateTrip doesn't run every render.
+  const dayWarnings = React.useMemo(() => {
+    const ignored = trip.ignoredWarnings || [];
+    return validateTrip(trip)
+      .filter(w => w.dayIndex === currentDay && !ignored.includes(`${w.type}:${w.dayIndex ?? 'trip'}`))
+      .sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity]);
+  }, [trip, currentDay]);
+
   const handlePush = () => { pushItineraryToSplitwise(trip.id); switchTab('splitwise'); };
 
   const openEdit       = (act)  => { setEditActivity(act); setShowAddActivity(true); };
@@ -557,6 +573,22 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                 <Text style={styles.addActBtnText}>+ Activity</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        )}
+
+        {/* Inline Trip Check for THIS day — tap a chip to open the full checker */}
+        {day && dayWarnings.length > 0 && (
+          <View style={styles.dayWarnings}>
+            {dayWarnings.map((w, i) => (
+              <TouchableOpacity
+                key={`${w.type}-${i}`}
+                style={[styles.dayWarnChip, { backgroundColor: SEV_CHIP[w.severity].backgroundColor }]}
+                onPress={onCheckTrip} activeOpacity={0.8}
+              >
+                <Text style={styles.dayWarnIcon}>{w.icon}</Text>
+                <Text style={[styles.dayWarnText, { color: SEV_CHIP[w.severity].color }]} numberOfLines={1}>{w.title}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         )}
 
@@ -1477,6 +1509,10 @@ const styles = StyleSheet.create({
   addActBtnText: { ...typography.caption, color: '#fff', fontWeight: '800' },
   arrangeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.smartSoft, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   arrangeBtnText: { ...typography.caption, color: colors.smartDeep, fontWeight: '800' },
+  dayWarnings: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
+  dayWarnChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 6 },
+  dayWarnIcon: { fontSize: 12 },
+  dayWarnText: { fontSize: 12, fontWeight: '700' },
 
   // ── Discover FAB ────────────────────────────────────────────────
   discoverFab: {

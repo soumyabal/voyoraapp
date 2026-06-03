@@ -1,0 +1,48 @@
+/**
+ * expenses.js — pure helpers that turn costed itinerary activities into
+ * per-family Splitwise expenses. Extracted from the store so the MONEY path
+ * (the moat) is unit-testable without the Zustand/AsyncStorage machinery.
+ *
+ * Invariants (see AGENTS.md):
+ *  - costPerPerson is per-person → amount = costPerPerson × member count.
+ *  - estimatedAmount is FROZEN at creation (only `amount` is ever updated).
+ *  - participatingFamilies = ALL families (the per-family split is the default).
+ */
+import { uid, getAllMembers } from './helpers';
+
+const CAT = { food: '🍽️', transport: '✈️', stay: '🏨' };
+const catFor = type => CAT[type] || '🎯';
+
+/** Build ONE expense from a costed activity. */
+export function activityToExpense(act, dayLabel, allMembers, allFamilyIds) {
+  const amount = parseFloat((act.costPerPerson * allMembers.length).toFixed(2));
+  return {
+    id: uid(),
+    name: `${act.name} (${dayLabel})`,
+    amount,
+    estimatedAmount: amount,          // frozen reference to the original estimate
+    category: catFor(act.type),
+    paidBy: allMembers[0]?.id ?? null,
+    splitMode: null,                  // inherit from trip
+    participatingFamilies: [...allFamilyIds],
+    participatingMembers: null,       // null = all members in participating families
+    excluded: false,
+    source: 'itinerary',
+    activityId: act.id,               // link for live sync
+  };
+}
+
+/** Rebuild a trip's itinerary expenses from its costed activities. Manual
+ *  expenses (source !== 'itinerary') are preserved. */
+export function rebuildItineraryExpenses(t) {
+  const allMembers = getAllMembers(t);
+  const allFamilyIds = (t.families || []).map(f => f.id);
+  const itin = [];
+  (t.days || []).forEach(day => {
+    (day.activities || []).filter(a => a.costPerPerson > 0).forEach(act => {
+      itin.push(activityToExpense(act, day.label || 'Day', allMembers, allFamilyIds));
+    });
+  });
+  const manual = (t.expenses || []).filter(e => e.source !== 'itinerary');
+  return [...manual, ...itin];
+}

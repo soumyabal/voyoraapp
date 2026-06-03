@@ -295,6 +295,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [areaSearch, setAreaSearch] = useState(null);   // committed map area; sticky scope for searches
   const [selectedName, setSelectedName] = useState(null); // pin-tapped place (highlight + scroll carousel)
   const carouselRef = useRef(null);
+  const pendingCloseRef = useRef(false); // iOS: close Discover after the preview sheet dismisses
   const [selectMode, setSelectMode] = useState(false);  // basket multi-select
   const [basket,     setBasket]     = useState([]);      // chosen places (city-tagged)
   const [preview,    setPreview]    = useState(null);    // autoArrange draft + editable placements
@@ -508,8 +509,17 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const applyPreview = () => {
     if (!preview) return;
     applyArrangedActivities(trip.id, preview.placements);
-    setPreview(null); setBasket([]); setSelectMode(false); setArrangeHints({}); setEditingRow(null);
-    onClose();
+    setBasket([]); setSelectMode(false); setArrangeHints({}); setEditingRow(null);
+    // iOS: dismissing two stacked pageSheet modals in the same tick blanks the
+    // screen. Close the preview first, then close Discover once it has finished
+    // dismissing (via the preview Modal's onDismiss). Android has no such issue.
+    if (Platform.OS === 'ios') {
+      pendingCloseRef.current = true;
+      setPreview(null);
+    } else {
+      setPreview(null);
+      onClose();
+    }
   };
 
   return (
@@ -707,7 +717,9 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
         </Modal>
 
         {/* Auto-arrange preview — editable draft, nothing committed until Apply */}
-        <Modal visible={!!preview} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPreview(null)}>
+        <Modal visible={!!preview} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPreview(null)}
+          onDismiss={() => { if (pendingCloseRef.current) { pendingCloseRef.current = false; onClose(); } }}>
+
           <View style={[s.container, { paddingTop: insets.top + 8 }]}>
             <View style={s.header}>
               <View style={{ flex: 1 }}>

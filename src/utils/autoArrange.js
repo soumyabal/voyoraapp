@@ -41,6 +41,36 @@ const DAY_END_MIN = 22 * 60;     // 22:00
 const LUNCH_MIN = 12 * 60 + 30;  // 12:30
 const DINNER_MIN = 19 * 60;      // 19:00
 
+// Preferred start windows (min since midnight) for scheduleDay's per-type model.
+const WINDOWS = {
+  checkin:   16 * 60,        // hotel check-in — late afternoon, never morning
+  checkout:  10 * 60,        // hotel check-out on the departure day — morning
+  breakfast:  8 * 60,
+  lunch:     LUNCH_MIN,
+  dinner:    DINNER_MIN,
+  nightlife: 20 * 60 + 30,   // bars / shows / concerts — evening
+  sunrise:    6 * 60,
+  sunset:    18 * 60 + 30,
+};
+const BREAKFAST_RE = /breakfast|brunch/i;
+const SUNRISE_RE   = /sunrise/i;
+const SUNSET_RE    = /sunset|viewpoint|lookout|observation deck/i;
+const NIGHTLIFE_RE = /nightlife|night club|nightclub|\bbar\b|\bpub\b|concert|live music|\bshow\b|theatre|theater|opera|casino|cocktail/i;
+
+// Earliest start >= `from` where [start, start+need] clears all occupied
+// intervals and ends by `end`; null if it can't fit before day end. Module-level
+// so both autoArrange and scheduleDay share it.
+function findSlotMin(occ, from, need, end) {
+  let cur = Math.max(from, DAY_START_MIN);
+  for (const [s, e] of occ) {
+    if (e <= cur) continue;
+    if (s - cur >= need) return cur;
+    cur = e + BUFFER_MIN;
+  }
+  return cur + need <= end ? cur : null;
+}
+const addInterval = (occ, start, need) => { occ.push([start, start + need]); occ.sort((x, y) => x[0] - y[0]); };
+
 // ── Geo helpers ───────────────────────────────────────────────────
 function haversine(a, b) {
   if (a?.lat == null || a?.lng == null || b?.lat == null || b?.lng == null) return Infinity;
@@ -245,19 +275,6 @@ export function autoArrange(basket, trip, opts = {}) {
       .map(a => { const s = timeToMin(a.time); return [s, s + Math.max(BUFFER_MIN, estimateDuration(a))]; })
       .sort((x, y) => x[0] - y[0]);
   }
-  // Earliest start >= `from` where [start, start+need] clears all occupied
-  // intervals and ends by `end`; null if it can't fit before day end.
-  function findSlotMin(occ, from, need, end) {
-    let cur = Math.max(from, DAY_START_MIN);
-    for (const [s, e] of occ) {
-      if (e <= cur) continue;
-      if (s - cur >= need) return cur;
-      cur = e + BUFFER_MIN;
-    }
-    return cur + need <= end ? cur : null;
-  }
-  const addInterval = (occ, start, need) => { occ.push([start, start + need]); occ.sort((x, y) => x[0] - y[0]); };
-
   for (let i = 0; i < dayCount; i++) {
     const dayDrafts = added[i];
     if (dayDrafts.length === 0) continue;
@@ -304,4 +321,70 @@ export function autoArrange(basket, trip, opts = {}) {
     warnings,
     summary: { placed, unplaced: unplaced.length, daysUsed: added.filter(a => a.length > 0).length },
   };
+}
+
+// ── Per-day arranger ──────────────────────────────────────────────
+/**
+ * scheduleDay — re-time and re-order ONE day's activities using the per-type
+ * window model + proximity ordering. PURE: returns a NEW array of copies with
+ * `time` assigned, sorted; never mutates the input. Notes/skipped are kept.
+ *
+ *   opts = { dayRole?: 'arrival'|'departure'|'normal', anchor?: {lat,lng} }
+ *
+ * Windows: hotel check-in → ~16:00 (check-out → ~10:00 on a departure day),
+ * meals → breakfast/lunch/dinner, nightlife/shows → evening, sunrise/sunset →
+ * their hours; everything else flows from the morning, ordered nearest-neighbour
+ * around the day's hotel. Transport with a user-set time anchors the day.
+ */
+export function scheduleDay(activities, opts = {}) {
+  const all = (activities || []).map(a => ({ ...a }));
+  const sched = all.filter(a => a.type !== 'note' && a.status !== 'skipped');
+  if (sched.length === 0) return activities ? activities.slice() : [];
+
+  const dayRole = opts.dayRole || 'normal';
+  const anchor = opts.anchor
+    || sched.find(a => a.type === 'stay' && a.lat != null)
+    || sched.find(a => a.lat != null) || null;
+  const text = a => `${a.name || ''} ${a.detail || ''}`;
+
+  const occ = [];
+  const place = (a, target) => {
+    const need = Math.max(BUFFER_MIN, estimateDuration(a));
+    const start = findSlotMin(occ, target, need, DAY_END_MIN)
+               ?? findSlotMin(occ, DAY_START_MIN, need, DAY_END_MIN) ?? target;
+    a.time = minToTime(start);
+    addInterval(occ, start, need);
+  };
+
+  // 1. Transport with a user-set time anchors the day (departures/arrivals).
+  sched.filter(a => a.type === 'transport' && a.time)
+       .forEach(a => addInterval(occ, timeToMin(a.time), Math.max(BUFFER_MIN, estimateDuration(a))));
+  // 2. Stays → check-in window (or check-out on the departure day).
+  sched.filter(a => a.type === 'stay')
+       .forEach(a => place(a, dayRole === 'departure' ? WINDOWS.checkout : WINDOWS.checkin));
+  // 3. Meals → breakfast / lunch / dinner.
+  let mealIdx = 0;
+  sched.filter(a => a.type === 'food').forEach(a => {
+    const target = BREAKFAST_RE.test(text(a)) ? WINDOWS.breakfast : (mealIdx++ === 0 ? WINDOWS.lunch : WINDOWS.dinner);
+    place(a, target);
+  });
+  // 4. Window-anchored activities (sunrise / sunset / nightlife).
+  const acts = sched.filter(a => a.type === 'activity');
+  const windowFor = a => SUNRISE_RE.test(text(a)) ? WINDOWS.sunrise
+                       : SUNSET_RE.test(text(a))   ? WINDOWS.sunset
+                       : NIGHTLIFE_RE.test(text(a)) ? WINDOWS.nightlife : null;
+  acts.filter(a => windowFor(a) != null).forEach(a => place(a, windowFor(a)));
+  // 5. Remaining daytime activities flow from the morning, nearest-neighbour.
+  const daytime = nearestNeighborOrder(acts.filter(a => windowFor(a) == null), anchor);
+  let cursor = DAY_START_MIN;
+  daytime.forEach(a => {
+    const need = Math.max(BUFFER_MIN, estimateDuration(a));
+    const start = findSlotMin(occ, cursor, need, DAY_END_MIN)
+               ?? findSlotMin(occ, DAY_START_MIN, need, DAY_END_MIN) ?? cursor;
+    a.time = minToTime(start);
+    addInterval(occ, start, need);
+    cursor = start + need + BUFFER_MIN;
+  });
+
+  return all.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
 }

@@ -14,7 +14,6 @@ import useStore from '../store';
 import { uid, getAllMembers } from '../utils/helpers';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
-import { autoArrange } from '../utils/autoArrange';
 import { WebView } from 'react-native-webview';
 import Icon from '../components/ui/Icon';
 
@@ -183,10 +182,9 @@ async function cachedPlaces(q, bias, pages = 1) {
   return p;
 }
 
-function PlaceCard({ place, onAdd, added, selectMode, selected, onToggle }) {
-  const isOn = selectMode ? selected : added;
+function PlaceCard({ place, onAdd, added }) {
   return (
-    <View style={[card.wrap, selectMode&&selected&&card.wrapSel]}>
+    <View style={card.wrap}>
       {place.photo
         ? <Image source={{uri:place.photo}} style={card.thumb} />
         : <View style={[card.thumb, card.thumbPh]}><Icon name={TYPE_ICON[place.activityType]||'activity'} size={20} color={TYPE_TINT[place.activityType]||colors.subtle} /></View>}
@@ -213,10 +211,10 @@ function PlaceCard({ place, onAdd, added, selectMode, selected, onToggle }) {
         )}
       </View>
       <TouchableOpacity
-        style={[card.addBtn, isOn&&card.addBtnDone]}
-        onPress={() => selectMode ? onToggle(place) : (!added && onAdd(place))} activeOpacity={isOn&&!selectMode?1:0.7}
+        style={[card.addBtn, added&&card.addBtnDone]}
+        onPress={() => !added && onAdd(place)} activeOpacity={added?1:0.7}
       >
-        <Icon name={isOn?'check':'add'} size={20} color={isOn?colors.success:'#fff'} />
+        <Icon name={added?'check':'add'} size={20} color={added?colors.success:'#fff'} />
       </TouchableOpacity>
     </View>
   );
@@ -382,7 +380,7 @@ function DiscoverMap({ places, onMoved, onSelect, onSearchHere, onLongPress, sho
 
 export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime }) {
   const insets = useSafeAreaInsets();
-  const { addActivity, applyArrangedActivities } = useStore();
+  const { addActivity } = useStore();
 
   const [viewMode,   setViewMode]   = useState('list'); // 'list' | 'map'
   const [mapCenter,  setMapCenter]  = useState(null);   // {lat,lng} of the map view
@@ -393,12 +391,6 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [focusTarget,  setFocusTarget]  = useState(null); // card-tapped place → centre the map ({lat,lng,n})
   const carouselRef = useRef(null);
   const focusSeq    = useRef(0);
-  const pendingCloseRef = useRef(false); // iOS: close Discover after the preview sheet dismisses
-  const [selectMode, setSelectMode] = useState(false);  // basket multi-select
-  const [basket,     setBasket]     = useState([]);      // chosen places (city-tagged)
-  const [preview,    setPreview]    = useState(null);    // autoArrange draft + editable placements
-  const [arrangeHints, setArrangeHints] = useState({});  // placeName → { pinDay?, dayCount? }
-  const [editingRow,   setEditingRow]   = useState(null);// draftId whose edit panel is open
   const [layers,      setLayers]      = useState({ see: true, eat: true, stay: true }); // multi-select map layers
   const [layerData,   setLayerData]   = useState({ see: [], eat: [], stay: [] });       // per-layer fetched places
   const [textResults, setTextResults] = useState([]);                                   // free-text search results
@@ -444,7 +436,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setSearchText(''); setAddedNames(new Set());
     setLayers({ see: true, eat: true, stay: true });
     setLayerData({ see: [], eat: [], stay: [] }); setTextResults([]);
-    setSelectMode(false); setBasket([]); setPreview(null); setArrangeHints({}); setEditingRow(null); setViewMode('list');
+    setViewMode('list');
     setAreaSearch(null); setMapMoved(false); setMapCenter(null); setSelectedName(null); setFocusTarget(null);
     setFitToken(t => t + 1);
     setCities(parsed.length ? parsed : (destination ? [destination] : []));
@@ -600,67 +592,22 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setPendingPlace(null);
   };
 
-  // ── Basket (auto-arrange) handlers ──────────────────────────────
-  const basketHas = name => basket.some(p => p.name === name);
-  const toggleBasket = place => {
-    setBasket(prev => prev.some(p => p.name === place.name)
-      ? prev.filter(p => p.name !== place.name)
-      : [...prev, { ...place, city: cityLabel(activeCity) }]);  // tag source city for clustering
-  };
-  // Run the engine with the current per-event hints attached.
-  const rerun = (hints) => {
-    setArrangeHints(hints);
-    const hinted = basket.map(p => hints[p.name] ? { ...p, _hint: hints[p.name] } : p);
-    setPreview(autoArrange(hinted, trip));
-  };
-  const runArrange = () => {
-    if (!basket.length) return;
-    setEditingRow(null);
-    rerun({});   // fresh arrange — clear any prior hints
-  };
-  // Move one item to a specific day. To keep the move LOCAL, first pin every
-  // currently-placed single-instance item to the day it's on, then override
-  // this one — so re-running the engine doesn't reshuffle everything else.
-  const moveToDay = (draft, dayIdx) => {
-    const snap = { ...arrangeHints };
-    (preview?.placements || []).forEach((acts, i) => acts.forEach(a => {
-      const multi = (arrangeHints[a.name]?.dayCount || 1) > 1 || a.repeatIntent;
-      if (!multi) snap[a.name] = { ...(snap[a.name] || {}), pinDay: i };
-    }));
-    snap[draft.name] = { ...(snap[draft.name] || {}), pinDay: dayIdx };
-    setEditingRow(null);
-    rerun(snap);
-  };
-  // Set how many days a (big) venue spans. dayCount > 1 and pinDay conflict,
-  // so clear pinDay when spanning.
-  const setSpan = (draft, n) => {
-    const next = { ...arrangeHints };
-    const cur = { ...(next[draft.name] || {}) };
-    if (n <= 1) delete cur.dayCount; else { cur.dayCount = n; delete cur.pinDay; }
-    next[draft.name] = cur;
-    setEditingRow(null);
-    rerun(next);
-  };
-  const removeFromPreview = (dayIdx, draftId) => {
-    setPreview(prev => prev && ({
-      ...prev,
-      placements: prev.placements.map((acts, i) => i === dayIdx ? acts.filter(a => a._draftId !== draftId) : acts),
-    }));
-  };
-  const applyPreview = () => {
-    if (!preview) return;
-    applyArrangedActivities(trip.id, preview.placements);
-    setBasket([]); setSelectMode(false); setArrangeHints({}); setEditingRow(null);
-    // iOS: dismissing two stacked pageSheet modals in the same tick blanks the
-    // screen. Close the preview first, then close Discover once it has finished
-    // dismissing (via the preview Modal's onDismiss). Android has no such issue.
-    if (Platform.OS === 'ios') {
-      pendingCloseRef.current = true;
-      setPreview(null);
-    } else {
-      setPreview(null);
-      onClose();
-    }
+  // One-tap add to the CURRENT day at a smart time (non-stays). Stays open the
+  // sheet to capture the nightly rate + nights. Auto-arrange (on the day view)
+  // tidies the times later — here we just drop it on the least-full slot.
+  const quickAdd = place => {
+    if (place.activityType === 'stay') { handleAdd(place); return; }
+    const day  = dayIndex ?? 0;
+    const slot = [...SLOTS].sort((a, b) => getSlotCount(trip, day, a.key) - getSlotCount(trip, day, b.key))[0]?.key || 'morning';
+    addActivity(trip.id, day, {
+      id: uid(), type: place.activityType, time: getSuggestedTime(trip, day, slot),
+      name: place.name, detail: '',
+      costPerPerson: place.costPerPerson || 0, costMode: 'per_person', costAmount: place.costPerPerson || 0,
+      address: place.address || '', url: place.url || '',
+      rating: place.rating ?? null, lat: place.lat ?? null, lng: place.lng ?? null,
+      city: cityLabel(activeCity), note: null, status: null,
+    });
+    setAddedNames(prev => new Set([...prev, place.name]));
   };
 
   return (
@@ -670,13 +617,12 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
           <View style={s.header}>
             <View style={{flex:1}}>
-              <Text style={s.title}>Discover</Text>
+              <Text style={s.title}>Add to {trip.days?.[dayIndex ?? 0]?.label || 'your trip'}</Text>
+              {!!trip.days?.[dayIndex ?? 0]?.date && (
+                <Text style={s.subtitle} numberOfLines={1}>{'\u{1F4C5}'} {trip.days[dayIndex ?? 0].date} · tap + to add here</Text>
+              )}
             </View>
             <View style={s.headerActions}>
-              <TouchableOpacity style={[s.modeBtn, selectMode&&s.modeBtnOn]} onPress={() => setSelectMode(m => !m)} activeOpacity={0.8}>
-                <Icon name={selectMode?'sparkles':'add'} size={13} color={selectMode?colors.smart:colors.text} />
-                <Text style={[s.modeBtnText, selectMode&&s.modeBtnTextOn]}>{selectMode ? 'Building' : 'Build a day'}</Text>
-              </TouchableOpacity>
               <TouchableOpacity style={s.closeBtn} onPress={onClose}>
                 <Text style={s.closeBtnText}>Done</Text>
               </TouchableOpacity>
@@ -769,7 +715,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
                 getItemLayout={(_,i)=>({length:198,offset:198*i+spacing.md,index:i})}
                 onScrollToIndexFailed={()=>{}}
                 renderItem={({item}) => (
-                  <PlaceMapCard place={item} checked={basketHas(item.name)} selected={selectedName===item.name} onToggle={toggleBasket} onFocus={handleCarouselFocus}/>
+                  <PlaceMapCard place={item} checked={addedNames.has(item.name)} selected={selectedName===item.name} onToggle={quickAdd} onFocus={handleCarouselFocus}/>
                 )}
               />
             </View>
@@ -781,24 +727,9 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
               contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
               renderItem={({item}) => (
-                <PlaceCard place={item} onAdd={handleAdd} added={addedNames.has(item.name)}
-                  selectMode={selectMode} selected={basketHas(item.name)} onToggle={toggleBasket}/>
+                <PlaceCard place={item} onAdd={quickAdd} added={addedNames.has(item.name)}/>
               )}
             />
-          )}
-
-          {/* Basket bar — appears once events are chosen (select mode or map) */}
-          {(selectMode || viewMode === 'map') && basket.length > 0 && (
-            <View style={[s.basketBar, { paddingBottom: (insets.bottom || spacing.md) }]}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.basketCount}>{basket.length} event{basket.length !== 1 ? 's' : ''} selected</Text>
-                <Text style={s.basketHint}>We'll spread them across your days</Text>
-              </View>
-              <TouchableOpacity style={s.basketBtn} onPress={runArrange} activeOpacity={0.85}>
-                <Icon name="sparkles" size={15} color="#fff" />
-                <Text style={s.basketBtnText}>Auto-arrange</Text>
-              </TouchableOpacity>
-            </View>
           )}
         </View>
 
@@ -877,110 +808,6 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
           </TouchableOpacity>
         </Modal>
 
-        {/* Auto-arrange preview — editable draft, nothing committed until Apply */}
-        <Modal visible={!!preview} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPreview(null)}
-          onDismiss={() => { if (pendingCloseRef.current) { pendingCloseRef.current = false; onClose(); } }}>
-
-          <View style={[s.container, { paddingTop: insets.top + 8 }]}>
-            <View style={s.header}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.title}>Suggested plan</Text>
-                <Text style={s.subtitle} numberOfLines={1}>
-                  {preview?.summary.placed} placed{preview?.summary.unplaced ? ` · ${preview.summary.unplaced} didn't fit` : ''} · review & edit
-                </Text>
-              </View>
-              <TouchableOpacity style={[s.modeBtn]} onPress={() => setPreview(null)}>
-                <Text style={s.modeBtnText}>Back</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView contentContainerStyle={{ padding: spacing.xxl, paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
-              {(trip.days || []).map((d, i) => {
-                const acts = preview?.placements[i] || [];
-                if (!acts.length) return null;
-                return (
-                  <View key={d.date} style={pv.dayCard}>
-                    <Text style={pv.dayTitle}>{d.label} · {d.date?.slice(5)}</Text>
-                    {acts.map(a => {
-                      const span = arrangeHints[a.name]?.dayCount || 1;
-                      const editing = editingRow === a._draftId;
-                      return (
-                      <View key={a._draftId}>
-                        <View style={pv.row}>
-                          <Text style={pv.time}>{a.time}</Text>
-                          <View style={{ flex: 1 }}>
-                            <Text style={pv.name} numberOfLines={1}>
-                              {a.type === 'food' ? '\u{1F37D}️' : a.type === 'stay' ? '\u{1F3E8}' : '\u{1F3AF}'} {a.name}
-                              {a.repeatIntent ? '  \u{1F501}' : ''}
-                            </Text>
-                            <View style={pv.metaRow}>
-                              {!!a.city && <Text style={pv.city} numberOfLines={1}>{'\u{1F4CD}'} {a.city}</Text>}
-                              {a.type !== 'food' && (
-                                <TouchableOpacity onPress={() => setEditingRow(editing ? null : a._draftId)} hitSlop={6}>
-                                  <Text style={pv.editLink}>{editing ? 'Done' : 'Move / multi-day ▾'}</Text>
-                                </TouchableOpacity>
-                              )}
-                            </View>
-                          </View>
-                          <TouchableOpacity onPress={() => removeFromPreview(i, a._draftId)} style={pv.remove} hitSlop={8}>
-                            <Text style={pv.removeText}>✕</Text>
-                          </TouchableOpacity>
-                        </View>
-
-                        {editing && (
-                          <View style={pv.editPanel}>
-                            <Text style={pv.editLabel}>Move to day</Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={pv.chipRow}>
-                              {(trip.days || []).map((dd, di) => (
-                                <TouchableOpacity key={dd.date} style={[pv.dayChip, di === i && pv.dayChipOn]}
-                                  onPress={() => moveToDay(a, di)} activeOpacity={0.7}>
-                                  <Text style={[pv.dayChipText, di === i && pv.dayChipTextOn]}>{dd.label}</Text>
-                                </TouchableOpacity>
-                              ))}
-                            </ScrollView>
-                            <Text style={pv.editLabel}>Stay for</Text>
-                            <View style={pv.chipRow}>
-                              {[1, 2, 3].map(n => (
-                                <TouchableOpacity key={n} style={[pv.spanBtn, span === n && pv.spanBtnOn]}
-                                  onPress={() => setSpan(a, n)} activeOpacity={0.7}>
-                                  <Text style={[pv.spanBtnText, span === n && pv.spanBtnTextOn]}>{n} day{n > 1 ? 's' : ''}</Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                          </View>
-                        )}
-                      </View>
-                      );
-                    })}
-                  </View>
-                );
-              })}
-
-              {preview?.unplaced?.length > 0 && (
-                <View style={pv.unplacedCard}>
-                  <Text style={pv.unplacedTitle}>Couldn't fit ({preview.unplaced.length})</Text>
-                  {preview.unplaced.map((p, idx) => <Text key={idx} style={pv.unplacedItem}>• {p.name}</Text>)}
-                  <Text style={pv.unplacedHint}>Add a day to the trip, or remove some events, then re-arrange.</Text>
-                </View>
-              )}
-
-              {preview?.warnings?.some(w => w.severity === 'error') && (
-                <Text style={pv.warn}>
-                  {'⚠'} {preview.warnings.filter(w => w.severity === 'error').length} scheduling conflict(s) — fixable in Trip Check after applying.
-                </Text>
-              )}
-            </ScrollView>
-
-            <View style={[pv.applyBar, { paddingBottom: (insets.bottom || spacing.md) }]}>
-              <TouchableOpacity style={pv.reBtn} onPress={runArrange} activeOpacity={0.8}>
-                <Text style={pv.reBtnText}>{'↻'} Re-arrange</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={pv.applyBtn} onPress={applyPreview} activeOpacity={0.85}>
-                <Text style={pv.applyBtnText}>Apply to trip</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
 
         {/* City picker sheet */}
         <Modal visible={cityPickerOpen} transparent animationType="slide" onRequestClose={() => setCityPickerOpen(false)}>

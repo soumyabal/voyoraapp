@@ -168,6 +168,14 @@ const useStore = create(
       // Called when DraggableFlatList drag ends within a slot.
       // orderedIds = activity IDs in new visual order (within the slot).
       // Reassigns the slot's sorted times to match the new order.
+      // Replace a whole day's activities (used by per-day Auto-arrange + its undo).
+      setDayActivities: (tripId, dayIndex, activities) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          days: t.days.map((d, i) => i === dayIndex ? { ...d, activities } : d),
+        }),
+      })),
+
       reorderSlotActivities: (tripId, dayIndex, orderedIds) => set(s => ({
         trips: s.trips.map(t => {
           if (t.id !== tripId) return t;

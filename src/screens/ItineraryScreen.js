@@ -9,6 +9,7 @@ import Snackbar from '../components/ui/Snackbar';
 import { fmt, fmtM, getActivityIcon } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight } from '../utils/tripValidator';
+import { scheduleDay } from '../utils/autoArrange';
 import { exportDayAsPDF } from '../utils/exportPlan';
 
 // ─── Dietary warning helper ───────────────────────────────────────
@@ -347,7 +348,7 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip }) {
 }
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
-  const { currentDay, setCurrentDay, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities } = useStore();
+  const { currentDay, setCurrentDay, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities } = useStore();
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
   const [defaultSlotTime,       setDefaultSlotTime]       = useState('09:00');
@@ -401,8 +402,27 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const undoStatus = () => {
     if (!snack) return;
     clearTimeout(snackTimer.current);
-    markActivityStatus(trip.id, snack.actId, snack.prevStatus);
+    if (snack.undo) snack.undo();
+    else markActivityStatus(trip.id, snack.actId, snack.prevStatus);
     setSnack(null);
+  };
+  // Generic undo toast (e.g. Auto-arrange) — carries its own rollback callback.
+  const showUndoAction = (message, icon, undo) => {
+    clearTimeout(snackTimer.current);
+    setSnack({ message, icon, undo, nonce: Date.now() });
+    snackTimer.current = setTimeout(() => setSnack(null), 4500);
+  };
+
+  // ✨ Auto-arrange THIS day — re-time/order in place, with Undo.
+  const arrangeDay = () => {
+    const day = trip.days[currentDay];
+    if (!day) return;
+    const schedulable = day.activities.filter(a => a.status !== 'skipped' && a.type !== 'note');
+    if (schedulable.length < 2) return;   // nothing to rearrange
+    const prev = day.activities;
+    const dayRole = currentDay === trip.days.length - 1 ? 'departure' : 'normal';
+    setDayActivities(trip.id, currentDay, scheduleDay(day.activities, { dayRole }));
+    showUndoAction('Day arranged', 'sparkles', () => setDayActivities(trip.id, currentDay, prev));
   };
 
   // Direct-status setters for swipe actions (toggle off if already set) + undo toast.
@@ -527,6 +547,12 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           <View style={styles.dayHeader}>
             <Text style={styles.dayTitle}>{day.label} — {fmt(day.date)}</Text>
             <View style={styles.dayHeaderActions}>
+              {day.activities.filter(a => a.status !== 'skipped' && a.type !== 'note').length >= 2 && (
+                <TouchableOpacity style={styles.arrangeBtn} onPress={arrangeDay} activeOpacity={0.85}>
+                  <Icon name="sparkles" size={13} color={colors.smart} />
+                  <Text style={styles.arrangeBtnText}>Arrange</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={styles.addActBtn} onPress={openAdd}>
                 <Text style={styles.addActBtnText}>+ Activity</Text>
               </TouchableOpacity>
@@ -1449,6 +1475,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   addActBtnText: { ...typography.caption, color: '#fff', fontWeight: '800' },
+  arrangeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.smartSoft, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  arrangeBtnText: { ...typography.caption, color: colors.smartDeep, fontWeight: '800' },
 
   // ── Discover FAB ────────────────────────────────────────────────
   discoverFab: {

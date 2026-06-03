@@ -36,6 +36,10 @@ export const RELEASE_FLAGS = {
   distanceWarnings: true,   // ✅ feature ready — user-facing toggle controls actual on/off
                             //    (store.preferences.distanceCheckEnabled)
                             //    Set false here only to hide the feature entirely in a build.
+  accounts:         false,  // 🔜 freemium — real sign-up/login + cloud sync. OFF for the
+                            //    free/local TestFlight build (hides the demo Sign In UI so
+                            //    there's no non-functional placeholder). Flip on with the
+                            //    Phase-2 backend; the auth code stays in place meanwhile.
 };
 export const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 

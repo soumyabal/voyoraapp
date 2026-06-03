@@ -23,7 +23,7 @@ import NewTripModal from '../modals/NewTripModal';
 import AuthModal from '../modals/AuthModal';
 import AddProfileModal from '../modals/AddProfileModal';
 import { colors, spacing, radius, typography, shadow } from '../theme';
-import { APP_NAME } from '../config';
+import { APP_NAME, RELEASE_FLAGS } from '../config';
 import { avatarColor, getAllMembers, fmt } from '../utils/helpers';
 import InfoBanner from '../components/ui/InfoBanner';
 import Icon from '../components/ui/Icon';
@@ -597,16 +597,20 @@ export default function HomeScreen({ navigation }) {
       >
         <View style={styles.heroNav}>
           <Text style={styles.logo}>{APP_NAME}</Text>
-          {account.loggedIn ? (
-            <TouchableOpacity style={styles.creditPill} onPress={() => setShowAuth(true)}>
-              <Text style={styles.creditPillText}>
-                {account.plan === 'pro' ? '⭐ Pro' : '🎁 Free'}  {account.name[0]?.toUpperCase()}
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={styles.signInBtn} onPress={() => setShowAuth(true)}>
-              <Text style={styles.signInText}>Sign In</Text>
-            </TouchableOpacity>
+          {/* Accounts are a freemium feature (RELEASE_FLAGS.accounts) — hidden in the
+              free/local TestFlight build so there's no non-functional Sign In UI. */}
+          {RELEASE_FLAGS.accounts && (
+            account.loggedIn ? (
+              <TouchableOpacity style={styles.creditPill} onPress={() => setShowAuth(true)}>
+                <Text style={styles.creditPillText}>
+                  {account.plan === 'pro' ? '⭐ Pro' : '🎁 Free'}  {account.name[0]?.toUpperCase()}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.signInBtn} onPress={() => setShowAuth(true)}>
+                <Text style={styles.signInText}>Sign In</Text>
+              </TouchableOpacity>
+            )
           )}
         </View>
 

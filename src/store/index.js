@@ -302,17 +302,6 @@ const useStore = create(
         }),
       })),
 
-      // Set activity completion status: 'done' | 'skipped' | null (clear)
-      markActivityStatus: (tripId, actId, status) => set(s => ({
-        trips: s.trips.map(t => t.id !== tripId ? t : {
-          ...t,
-          days: t.days.map(d => ({
-            ...d,
-            activities: d.activities.map(a => a.id !== actId ? a : { ...a, status }),
-          })),
-        }),
-      })),
-
       // Move an activity from one day to another, preserving all its data.
       // Also keeps Splitwise expense link intact (activityId stays the same).
       moveActivity: (tripId, fromDay, toDay, actId) => set(s => ({

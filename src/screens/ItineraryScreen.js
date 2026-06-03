@@ -1170,18 +1170,16 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
             isHighlighted && styles.actCardHighlighted,
           ]}
         >
-        {/* ── Time + icon (or big status emoji when done/skipped) ── */}
-        <View style={styles.actTimeCol}>
+        {/* ── Leading thumbnail: place photo · tinted type icon · status ── */}
+        <View style={styles.actLead}>
           {dimmed ? (
-            <Icon name={isDone ? 'checkmark-circle' : 'close-circle'} size={26} color={isDone ? colors.success : colors.danger} />
+            <Icon name={isDone ? 'checkmark-circle' : 'close-circle'} size={30} color={isDone ? colors.success : colors.danger} />
+          ) : act.photo ? (
+            <Image source={{ uri: act.photo }} style={styles.actLeadPhoto} />
           ) : (
-            <>
-              <Text style={styles.actTime}>{act.time}</Text>
-              {!!act.photo && <Image source={{ uri: act.photo }} style={styles.actThumb} />}
-              {act.type === 'transport' && !!act.arriveTime && (
-                <Text style={styles.actArriveTime}>→{act.arriveTime}</Text>
-              )}
-            </>
+            <View style={[styles.actLeadIcon, { backgroundColor: (activityColors[act.type] || colors.muted) + '1A' }]}>
+              <Icon name={ACT_ICON[act.type] || 'activity'} size={22} color={activityColors[act.type] || colors.subtle} />
+            </View>
           )}
         </View>
 
@@ -1193,13 +1191,21 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
             delayLongPress={400}
             activeOpacity={1}
           >
+            {/* Eyebrow — time · duration (transport shows arrival), quiet metadata */}
+            {!dimmed && (
+              <Text style={styles.actEyebrow} numberOfLines={1}>
+                <Text style={styles.actEyebrowTime}>{act.time}</Text>
+                {act.type === 'transport' && !!act.arriveTime ? ` → ${act.arriveTime}` : ''}
+                {durationLabel ? `  ·  ~${durationLabel}` : ''}
+              </Text>
+            )}
             <View style={styles.actNameRow}>
               <Text style={[
                 styles.actName,
                 isNote    && styles.actNameNote,
                 isDone    && styles.actNameDone,
                 isSkipped && styles.actNameSkipped,
-              ]} numberOfLines={2}>{!dimmed && `${actIcon}  `}{act.name}</Text>
+              ]} numberOfLines={2}>{act.name}</Text>
               {!!act.rating && !dimmed && (
                 <View style={styles.ratingBadge}><Text style={styles.ratingText}>⭐ {act.rating}</Text></View>
               )}
@@ -1219,11 +1225,6 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
                     <Text style={[styles.costBadgeText, isPerFamily && { color: '#7c3aed' }, isTotal && { color: '#065f46' }]}>
                       ~${displayCostAmt}{displayCostLbl}
                     </Text>
-                  </View>
-                )}
-                {!!durationLabel && (
-                  <View style={styles.durationBadge}>
-                    <Text style={styles.durationBadgeText}>~{durationLabel}</Text>
                   </View>
                 )}
                 {!!hoursStr && (
@@ -2061,7 +2062,12 @@ const styles = StyleSheet.create({
   checkboxSkipped: { backgroundColor: colors.muted,  borderColor: colors.muted },
   checkMark: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
-  // Time column
+  // Leading thumbnail (place photo / tinted type icon / status)
+  actLead:       { width: 56, alignItems: 'center', justifyContent: 'center' },
+  actLeadPhoto:  { width: 56, height: 56, borderRadius: 12, backgroundColor: colors.surface2 },
+  actLeadIcon:   { width: 56, height: 56, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  actEyebrow:    { ...typography.caption, color: colors.subtle, marginBottom: 1 },
+  actEyebrowTime:{ color: colors.primary, fontWeight: '800' },
   actTimeCol:    { alignItems: 'center', justifyContent: 'center', minWidth: 44 },
   actThumb:      { width: 38, height: 38, borderRadius: 9, marginTop: 5, backgroundColor: colors.surface2 },
   actTime:       { ...typography.caption, color: colors.primary, fontWeight: '700' },
@@ -2089,11 +2095,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
-    backgroundColor: '#e0faf4',
+    backgroundColor: colors.accentSoft,
     borderWidth: 1,
-    borderColor: '#a0e6d4',
+    borderColor: '#f0c9b5',
   },
-  costBadgeText: { fontSize: 11, fontWeight: '700', color: colors.green },
+  costBadgeText: { fontSize: 11, fontWeight: '800', color: colors.accent },
   durationBadge: {
     borderRadius: radius.full,
     paddingHorizontal: spacing.sm,

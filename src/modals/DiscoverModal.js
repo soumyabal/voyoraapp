@@ -493,6 +493,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [error,          setError]          = useState(null);
   const [activeFilters,  setActiveFilters]  = useState([]);
   const [nearLabel,      setNearLabel]      = useState(null);   // "exploring near X" banner
+  const [nearbyHydrated, setNearbyHydrated] = useState(null);   // fetched Places card for the explored stop (for its photo)
   const [pendingPlace,   setPendingPlace]   = useState(null);
   const [pickerDay,      setPickerDay]      = useState(dayIndex ?? 0);
   const [pickerSlot,     setPickerSlot]     = useState('morning');
@@ -527,16 +528,18 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     // Explore-nearby: the area search usually doesn't return the stop you came
     // from (a niche place). Inject it so IT shows as a real pin + selectable card.
     if (nearLabel && nearby && nearby.lat != null && !ranked.some(p => p.name === nearby.label)) {
+      const h = nearbyHydrated;   // fetched Places card (photo/footfall), if available
       ranked.unshift({
         name: nearby.label, lat: nearby.lat, lng: nearby.lng,
-        rating: nearby.rating ?? null, ratingCount: nearby.ratingCount ?? 0,
-        address: nearby.address || '', url: nearby.url || '', photo: nearby.photo || null,
-        openHours: nearby.openHours ?? null, activityType: nearby.type || 'activity',
+        rating: nearby.rating ?? h?.rating ?? null, ratingCount: nearby.ratingCount ?? h?.ratingCount ?? 0,
+        address: nearby.address || h?.address || '', url: nearby.url || h?.url || '',
+        photo: nearby.photo || h?.photo || null,
+        openHours: nearby.openHours ?? h?.openHours ?? null, activityType: nearby.type || 'activity',
         priceLevel: null, costPerPerson: 0,
       });
     }
     return ranked;
-  }, [searchText, textResults, layerData, layers, nearLabel, nearby]);
+  }, [searchText, textResults, layerData, layers, nearLabel, nearby, nearbyHydrated]);
 
   useEffect(() => {
     if (!visible) return;
@@ -633,6 +636,21 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setFocusTarget({ lat: match.lat, lng: match.lng, n: ++focusSeq.current });
     setTimeout(() => { try { carouselRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 }); } catch (_) {} }, 350);
   }, [results, nearLabel, nearby]);
+
+  // If the explored stop has no stored photo (added before we kept them), fetch
+  // its Places card so the injected carousel card shows a real thumbnail.
+  useEffect(() => {
+    if (!nearLabel || !nearby || nearby.lat == null || nearby.photo) { setNearbyHydrated(null); return; }
+    let cancelled = false;
+    cachedFetch(nearby.label, { lat: nearby.lat, lng: nearby.lng, radius: 2000 }, 1)
+      .then(list => {
+        if (cancelled || !list?.length) return;
+        const best = list.find(p => p.lat != null && metersBetween(nearby, p) < 400) || list[0];
+        if (best?.photo) setNearbyHydrated(best);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [nearLabel, nearby]);
 
   // Map panned/zoomed → offer to re-search that area (Redfin "search this area").
   const handleMapMoved = c => { setMapCenter(c); setMapMoved(true); };

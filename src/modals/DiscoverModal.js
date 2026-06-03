@@ -177,9 +177,9 @@ function PlaceCard({ place, onAdd, added, selectMode, selected, onToggle }) {
 }
 
 // ─── Photo card for the map carousel (mindtrip-style) ────────────────
-function PlaceMapCard({ place, checked, onToggle }) {
+function PlaceMapCard({ place, checked, selected, onToggle }) {
   return (
-    <TouchableOpacity style={mc.card} activeOpacity={0.9} onPress={() => onToggle(place)}>
+    <TouchableOpacity style={[mc.card, selected && mc.cardSel]} activeOpacity={0.9} onPress={() => onToggle(place)}>
       <View>
         {place.photo
           ? <Image source={{ uri: place.photo }} style={mc.photo} />
@@ -242,7 +242,7 @@ document.addEventListener('message',recv);window.addEventListener('message',recv
 
 // Geographic context pane — located results as pins. Adding happens in the
 // list beneath it (Redfin-style map-over-list), so this is display-only.
-function DiscoverMap({ places, onMoved }) {
+function DiscoverMap({ places, onMoved, onSelect }) {
   const withCoords = places.filter(p => p.lat != null && p.lng != null);
   const html = React.useMemo(() => buildMapHTML(withCoords), [withCoords.map(p => p.name).join('|')]);
 
@@ -257,7 +257,13 @@ function DiscoverMap({ places, onMoved }) {
   return (
     <View style={s.mapPane}>
       <WebView originWhitelist={['*']} source={{ html }} style={{ flex: 1, backgroundColor: '#dfe6e9' }}
-        onMessage={e => { try { const d = JSON.parse(e.nativeEvent.data); if (d.type === 'moved') onMoved && onMoved({ lat: d.lat, lng: d.lng }); } catch (_) {} }} />
+        onMessage={e => {
+          try {
+            const d = JSON.parse(e.nativeEvent.data);
+            if (d.type === 'moved') onMoved && onMoved({ lat: d.lat, lng: d.lng });
+            else if (d.type === 'select' && withCoords[d.index]) onSelect && onSelect(withCoords[d.index]);
+          } catch (_) {}
+        }} />
       <View style={mp.legendWrap} pointerEvents="none">
         <View style={mp.legend}>
           <Text style={[mp.legendDot, { color: MAP_TINT.activity }]}>●</Text><Text style={mp.legendTxt}>See</Text>
@@ -276,6 +282,9 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [viewMode,   setViewMode]   = useState('list'); // 'list' | 'map'
   const [mapCenter,  setMapCenter]  = useState(null);   // {lat,lng} of the map view
   const [mapMoved,   setMapMoved]   = useState(false);  // user panned → show "Search this area"
+  const [areaSearch, setAreaSearch] = useState(null);   // committed map area; sticky scope for searches
+  const [selectedName, setSelectedName] = useState(null); // pin-tapped place (highlight + scroll carousel)
+  const carouselRef = useRef(null);
   const [selectMode, setSelectMode] = useState(false);  // basket multi-select
   const [basket,     setBasket]     = useState([]);      // chosen places (city-tagged)
   const [preview,    setPreview]    = useState(null);    // autoArrange draft + editable placements
@@ -311,6 +320,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     const start  = parsed[0] || destination;
     setSearchText(''); setAddedNames(new Set());
     setSelectMode(false); setBasket([]); setPreview(null); setArrangeHints({}); setEditingRow(null); setViewMode('list');
+    setAreaSearch(null); setMapMoved(false); setMapCenter(null); setSelectedName(null);
     setCities(parsed.length ? parsed : (destination ? [destination] : []));
     setActiveCity(start);
     setCityPickerOpen(false); setNewCity('');
@@ -320,8 +330,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
   useEffect(() => {
     if (!visible || !activeCity) return;
-    setMapMoved(false);   // category/city changed → fresh city-scoped search
-    runSearch(searchText, activeCategory, activeFilters, activeCity);
+    setMapMoved(false);   // category/city changed → re-search (keeps the area scope if set)
+    runSearch(searchText, activeCategory, activeFilters, activeCity, areaSearch);
   }, [visible, activeCategory, activeCity]);
 
   // Map panned → offer to re-search that area (Redfin "search this area").
@@ -329,7 +339,15 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const searchThisArea = () => {
     if (!mapCenter) return;
     setMapMoved(false);
+    setAreaSearch(mapCenter);   // commit as the sticky scope so filter changes stay here
     runSearch(searchText, activeCategory, activeFilters, activeCity, mapCenter);
+  };
+  // Pin tapped → scroll the photo carousel to that place (reveals its image).
+  const handleMapSelect = place => {
+    const idx = results.findIndex(p => p.name === place.name);
+    if (idx < 0) return;
+    setSelectedName(place.name);
+    try { carouselRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 }); } catch (_) {}
   };
 
   // One API call per unique query; identical queries (e.g. switching back to a
@@ -347,7 +365,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     const geoBias = area ? { lat: area.lat, lng: area.lng, radius: 12000 } : null;
     const cacheKey = fullQ + (area ? `@${area.lat.toFixed(2)},${area.lng.toFixed(2)}` : '');
 
-    setError(null);
+    setError(null); setSelectedName(null);
     if (cacheRef.current.has(cacheKey)) {
       const cached = cacheRef.current.get(cacheKey);
       setResults(cached); setLoading(false);
@@ -365,19 +383,20 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const handleSearchChange = text => {
     setSearchText(text);
     clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => runSearch(text, activeCategory, activeFilters), 600);
+    searchTimeout.current = setTimeout(() => runSearch(text, activeCategory, activeFilters, activeCity, areaSearch), 600);
   };
 
   const toggleFilter = key => {
     const next = activeFilters.includes(key) ? activeFilters.filter(k=>k!==key) : [...activeFilters,key];
     setActiveFilters(next);
     // Debounce so toggling several filters quickly results in a single API call.
+    // Keep the current map area as the scope (don't snap back to the whole city).
     clearTimeout(filterTimeout.current);
-    filterTimeout.current = setTimeout(() => runSearch(searchText, activeCategory, next), 350);
+    filterTimeout.current = setTimeout(() => runSearch(searchText, activeCategory, next, activeCity, areaSearch), 350);
   };
 
-  // Selecting a city re-runs the search via the activeCity effect.
-  const chooseCity = c => { setCityPickerOpen(false); setActiveCity(c); };
+  // Selecting a city re-runs the search via the activeCity effect (resets area scope).
+  const chooseCity = c => { setCityPickerOpen(false); setAreaSearch(null); setMapMoved(false); setActiveCity(c); };
 
   // Commit a freely-typed city (need not be in the trip's destination).
   const commitNewCity = () => {
@@ -386,6 +405,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     if (!c) { setCityPickerOpen(false); return; }
     setCities(prev => prev.some(x => cityLabel(x) === cityLabel(c)) ? prev : [...prev, c]);
     setCityPickerOpen(false);
+    setAreaSearch(null); setMapMoved(false);
     setActiveCity(c);
   };
 
@@ -564,7 +584,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <View style={s.center}><Icon name="search" size={34} color={colors.subtle} /><Text style={s.errorText}>{error}</Text></View>
           ) : viewMode === 'map' ? (
             <View style={{ flex: 1 }}>
-              <DiscoverMap places={results} onMoved={handleMapMoved} />
+              <DiscoverMap places={results} onMoved={handleMapMoved} onSelect={handleMapSelect} />
               {mapMoved && (
                 <View style={s.searchAreaWrap} pointerEvents="box-none">
                   <TouchableOpacity style={s.searchAreaBtn} onPress={searchThisArea} activeOpacity={0.85}>
@@ -573,11 +593,13 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
                   </TouchableOpacity>
                 </View>
               )}
-              <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
+              <FlatList ref={carouselRef} data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
                 horizontal showsHorizontalScrollIndicator={false}
                 style={s.carousel} contentContainerStyle={s.carouselContent}
+                getItemLayout={(_,i)=>({length:198,offset:198*i+spacing.md,index:i})}
+                onScrollToIndexFailed={()=>{}}
                 renderItem={({item}) => (
-                  <PlaceMapCard place={item} checked={basketHas(item.name)} onToggle={toggleBasket}/>
+                  <PlaceMapCard place={item} checked={basketHas(item.name)} selected={selectedName===item.name} onToggle={toggleBasket}/>
                 )}
               />
             </View>
@@ -1004,6 +1026,7 @@ const mp = StyleSheet.create({
 // Map photo carousel card
 const mc = StyleSheet.create({
   card:{width:190,backgroundColor:'#fff',borderRadius:radius.lg,marginRight:spacing.sm,overflow:'hidden',borderWidth:1,borderColor:colors.hairline,...shadow.lg},
+  cardSel:{borderColor:colors.accent,borderWidth:2},
   photo:{width:'100%',height:104,backgroundColor:colors.surface2},
   photoPh:{alignItems:'center',justifyContent:'center'},
   check:{position:'absolute',top:8,right:8,width:30,height:30,borderRadius:15,backgroundColor:'rgba(255,255,255,0.95)',alignItems:'center',justifyContent:'center',...shadow.sm},

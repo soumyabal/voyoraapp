@@ -242,7 +242,7 @@ document.addEventListener('message',recv);window.addEventListener('message',recv
 
 // Geographic context pane — located results as pins. Adding happens in the
 // list beneath it (Redfin-style map-over-list), so this is display-only.
-function DiscoverMap({ places, onMoved, onSelect }) {
+function DiscoverMap({ places, onMoved, onSelect, showSearchArea, onSearchArea }) {
   const withCoords = places.filter(p => p.lat != null && p.lng != null);
   const html = React.useMemo(() => buildMapHTML(withCoords), [withCoords.map(p => p.name).join('|')]);
 
@@ -264,13 +264,23 @@ function DiscoverMap({ places, onMoved, onSelect }) {
             else if (d.type === 'select' && withCoords[d.index]) onSelect && onSelect(withCoords[d.index]);
           } catch (_) {}
         }} />
-      <View style={mp.legendWrap} pointerEvents="none">
-        <View style={mp.legend}>
-          <Text style={[mp.legendDot, { color: MAP_TINT.activity }]}>●</Text><Text style={mp.legendTxt}>See</Text>
-          <Text style={[mp.legendDot, { color: MAP_TINT.food }]}>●</Text><Text style={mp.legendTxt}>Eat</Text>
-          <Text style={[mp.legendDot, { color: MAP_TINT.stay }]}>●</Text><Text style={mp.legendTxt}>Stay</Text>
+      {/* Top overlay: "Search this area" while panned, else the legend (never both) */}
+      {showSearchArea ? (
+        <View style={mp.topOverlay} pointerEvents="box-none">
+          <TouchableOpacity style={s.searchAreaBtn} onPress={onSearchArea} activeOpacity={0.85}>
+            <Icon name="search" size={14} color="#fff" />
+            <Text style={s.searchAreaText}>Search this area</Text>
+          </TouchableOpacity>
         </View>
-      </View>
+      ) : (
+        <View style={mp.topOverlay} pointerEvents="none">
+          <View style={mp.legend}>
+            <Text style={[mp.legendDot, { color: MAP_TINT.activity }]}>●</Text><Text style={mp.legendTxt}>See</Text>
+            <Text style={[mp.legendDot, { color: MAP_TINT.food }]}>●</Text><Text style={mp.legendTxt}>Eat</Text>
+            <Text style={[mp.legendDot, { color: MAP_TINT.stay }]}>●</Text><Text style={mp.legendTxt}>Stay</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -584,15 +594,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <View style={s.center}><Icon name="search" size={34} color={colors.subtle} /><Text style={s.errorText}>{error}</Text></View>
           ) : viewMode === 'map' ? (
             <View style={{ flex: 1 }}>
-              <DiscoverMap places={results} onMoved={handleMapMoved} onSelect={handleMapSelect} />
-              {mapMoved && (
-                <View style={s.searchAreaWrap} pointerEvents="box-none">
-                  <TouchableOpacity style={s.searchAreaBtn} onPress={searchThisArea} activeOpacity={0.85}>
-                    <Icon name="search" size={14} color="#fff" />
-                    <Text style={s.searchAreaText}>Search this area</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+              <DiscoverMap places={results} onMoved={handleMapMoved} onSelect={handleMapSelect}
+                showSearchArea={mapMoved} onSearchArea={searchThisArea} />
               <FlatList ref={carouselRef} data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
                 horizontal showsHorizontalScrollIndicator={false}
                 style={s.carousel} contentContainerStyle={s.carouselContent}
@@ -1016,6 +1019,7 @@ const pv = StyleSheet.create({
 
 // Map view
 const mp = StyleSheet.create({
+  topOverlay:{position:'absolute',top:10,left:0,right:0,alignItems:'center'},
   legendWrap:{position:'absolute',top:10,left:0,right:0,alignItems:'center'},
   legend:{flexDirection:'row',alignItems:'center',gap:4,backgroundColor:'rgba(255,255,255,0.95)',borderRadius:radius.full,paddingHorizontal:12,paddingVertical:5,...shadow.sm},
   legendDot:{fontSize:11},

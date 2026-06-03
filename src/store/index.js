@@ -104,11 +104,22 @@ const useStore = create(
           bgColors: TRIP_BG_COLORS[Math.floor(Math.random() * TRIP_BG_COLORS.length)],
           itineraryPushed: false,
           families, days, expenses: [],
+          seenPlaces: [],   // Discover places opened on the web (persisted)
         };
 
         set(s => ({ trips: [trip, ...s.trips] }));
         return trip;
       },
+
+      // Mark a Discover place as "seen" (opened on the web) — persisted per trip so
+      // it stays greyed/de-emphasised across sessions, not just the current one.
+      markPlaceSeen: (tripId, name) => set(s => ({
+        trips: s.trips.map(t => {
+          if (t.id !== tripId || !name) return t;
+          const seen = t.seenPlaces || [];
+          return seen.includes(name) ? t : { ...t, seenPlaces: [...seen, name] };
+        }),
+      })),
 
       // ── DISTANCE CACHE ──────────────────────────────────────
       updateDistanceCache: (tripId, cache) => set(s => ({

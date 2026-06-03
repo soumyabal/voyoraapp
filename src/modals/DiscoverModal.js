@@ -443,7 +443,10 @@ function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearc
 
 export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime }) {
   const insets = useSafeAreaInsets();
-  const { addActivity } = useStore();
+  const { addActivity, markPlaceSeen } = useStore();
+  // Persisted "seen on web" set for THIS trip (survives across sessions).
+  const seenPlaces = useStore(s => (s.trips.find(t => t.id === trip?.id) || {}).seenPlaces);
+  const seenNames = new Set(seenPlaces || []);
   // Weekday of the day we're adding to → show each place's hours for that day.
   const dayWd = weekdayOf(trip?.days?.[dayIndex ?? 0]?.date);
 
@@ -466,9 +469,6 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   // added (✓ in the list, greyed on the map) the moment Discover opens.
   const [addedNames,     setAddedNames]     = useState(() =>
     new Set((trip?.days || []).flatMap(d => (d.activities || []).map(a => a.name))));
-  // Places the user has opened on the web (to check details / hotel rooms) →
-  // greyed on the map + list so they're easy to skip past next time.
-  const [seenNames,      setSeenNames]      = useState(new Set());
   const [activeFilters,  setActiveFilters]  = useState([]);
   const [pendingPlace,   setPendingPlace]   = useState(null);
   const [pickerDay,      setPickerDay]      = useState(dayIndex ?? 0);
@@ -669,7 +669,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const openWeb = place => {
     if (!place?.url) return;
     Linking.openURL(place.url).catch(() => {});
-    setSeenNames(prev => prev.has(place.name) ? prev : new Set([...prev, place.name]));
+    markPlaceSeen(trip.id, place.name);   // persisted per trip
   };
 
   // One-tap add to the CURRENT day at a smart time (non-stays). Stays open the

@@ -325,6 +325,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
 
   // Core fields
   const [name, setName]           = useState('');
+  const [nameTouched, setNameTouched] = useState(false);  // user typed their own → don't auto-fill from the type
   const [time, setTime]           = useState(defaultTime || '09:00');
   const [arriveTime, setArriveTime] = useState('');
   const [detail, setDetail]       = useState('');
@@ -363,6 +364,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
     if (editActivity) {
       setTile(findTile(editActivity.type, editActivity.subtype));
       setName(editActivity.name || '');
+      setNameTouched(true);   // existing name — never auto-overwrite on a type change
       setTime(editActivity.time || '09:00');
       setArriveTime(editActivity.arriveTime || '');
       setDetail(editActivity.detail || '');
@@ -382,6 +384,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       // manually" bridge (name only) OR a dropped map pin (lat/lng, maybe address).
       setTile(seed?.tile ? (findTile(seed.tile, null) || TILES[6]) : TILES[6]);
       setName(seed?.name || '');   // prefilled when opened from the Discover "add manually" bridge
+      setNameTouched(!!seed?.name);   // a seeded name is the user's → don't clobber on a type change
       setTime(defaultTime || '09:00');
       setArriveTime('');
       setDetail('');
@@ -464,11 +467,15 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = () => {
-    if (!name.trim()) return;
+    // Name is never required — like Calendar/Reminders/Things, an un-named entry
+    // still saves, defaulted from the type (+ place/time so a day of them stays
+    // distinct). So the primary button is never disabled / never a silent dead-end.
+    const place = address.trim().split(',')[0].trim();
+    const finalName = name.trim() || (place ? `${tile.label} · ${place}` : `${tile.label} · ${time}`);
     const base = {
       type:         tile.type,
       subtype:      tile.subtype || null,
-      name:         name.trim(),
+      name:         finalName,
       arriveTime:   tile.type === 'transport' && tile.subtype !== 'pitstop' && arriveTime ? arriveTime : null,
       durationMins: durationMins > 0 ? durationMins : null,
       meal:         tile.type === 'food' ? (meal || null) : null,
@@ -508,7 +515,6 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
             onClose={onClose}
             onAction={handleSave}
             actionLabel={isEdit ? 'Save' : allDays ? `Add ×${(trip.days || []).length}` : 'Add'}
-            actionDisabled={!name.trim()}
           />
 
           <ScrollView
@@ -527,7 +533,12 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                   <TouchableOpacity
                     key={tileKey(t)}
                     style={[s.tile, active && { borderColor: t.color, backgroundColor: t.color + '18' }]}
-                    onPress={() => setTile(t)}
+                    onPress={() => {
+                      setTile(t);
+                      // Pick a type → prefill an editable name, so the field is
+                      // satisfied without typing. Skipped once the user types their own.
+                      if (!nameTouched) setName(t.label);
+                    }}
                     activeOpacity={0.7}
                   >
                     <Text style={s.tileIcon}>{t.icon}</Text>
@@ -537,15 +548,18 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               })}
             </View>
 
-            {/* ── Name ── */}
-            <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>NAME *</Text>
+            {/* ── Name ── (optional — defaults from the type if left blank) */}
+            <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>
+              NAME <Text style={s.optional}>(optional — we'll name it from the type)</Text>
+            </Text>
             <TextInput
               style={s.nameInput}
               value={name}
-              onChangeText={setName}
+              onChangeText={v => { setName(v); setNameTouched(true); }}
               placeholder={tile.type === 'transport' ? `e.g. ${tile.label} to Paris` : tile.type === 'stay' ? 'e.g. Marriott Downtown' : tile.type === 'food' ? 'e.g. Breakfast at hotel' : 'e.g. Visit Eiffel Tower'}
               placeholderTextColor={colors.muted}
               autoFocus={!isEdit}
+              selectTextOnFocus
               returnKeyType="next"
             />
 

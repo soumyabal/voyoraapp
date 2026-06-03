@@ -56,6 +56,21 @@ Resolved to "two, clearly distinct" — Discover = find real places (FAB + every
 - [ ] **Default the manual editor to Drive when opened via the bridge** (initialTile), since
       the bridge is framed as "drive, flight, or custom" — claws back a tap. — `AddActivityModal.js`
 
+## Manual Add Activity — overwhelm (gate fixed, form still long)
+
+A test user forgot the NAME and the top-right "Add" button stayed greyed with no
+explanation (it's off-screen when scrolled — the textbook disabled-button trap). Two
+agents (forms-UX + first-time-user) both said: stop disabling submit, auto-name like
+Calendar/Reminders/Things. Shipped: NAME is now optional (defaults from the type +
+place/time, e.g. "Drive · 09:00"), the button never disables, and tapping a TYPE tile
+prefills an editable name. The broader "form is overwhelming" is NOT yet addressed:
+
+- [ ] **Progressive disclosure on Add Activity.** Collapse the long form (TYPE, NAME,
+      ADDRESS, DAY, WHEN, TIME, DURATION, COST, +Details/Notes/Reminder) to the essentials
+      first with an "Add details" expander (extend the existing `showMore` pattern upward).
+      Both reviewers stressed: KEEP the per-family COST field visible — it's the moat —
+      collapse only ADDRESS / DURATION / MEAL / Notes. — `AddActivityModal.js`
+
 ## Trip starting point (Day-1 origin) — shipped P0, generalize in P1
 
 `trip.origin = {label, lat, lng}` captured at create (wizard Step 1), in Edit Trip,

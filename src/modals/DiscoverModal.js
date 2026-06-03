@@ -112,38 +112,51 @@ function metersBetween(a, b) {
 }
 
 const PLACES_URL = 'https://places.googleapis.com/v1/places:searchText';
-const FIELD_MASK = ['places.displayName','places.formattedAddress','places.rating','places.userRatingCount','places.priceLevel','places.types','places.accessibilityOptions','places.websiteUri','places.location','places.photos'].join(',');
+const FIELD_MASK = ['nextPageToken','places.displayName','places.formattedAddress','places.rating','places.userRatingCount','places.priceLevel','places.types','places.accessibilityOptions','places.websiteUri','places.location','places.photos'].join(',');
 
 // Google Place Photos: a photo resource name → image URL (billed per fetch).
 const photoUrl = name => `https://places.googleapis.com/v1/${name}/media?maxWidthPx=640&maxHeightPx=420&key=${GOOGLE_PLACES_API_KEY}`;
 
-async function fetchPlaces(textQuery, bias = null) {
+function mapPlace(p) {
+  const place = {
+    name:p.displayName?.text??'Place', address:p.formattedAddress??'',
+    rating:p.rating??null, ratingCount:p.userRatingCount??0,
+    costPerPerson:PRICE_TO_COST[p.priceLevel]??0, priceLevel:p.priceLevel??null, types:p.types??[],
+    activityType:inferActivityType(p.types??[]),
+    wheelchairOk:p.accessibilityOptions?.wheelchairAccessibleEntrance??null,
+    url:p.websiteUri??'', lat:p.location?.latitude??null, lng:p.location?.longitude??null,
+    photo:p.photos?.[0]?.name ? photoUrl(p.photos[0].name) : null,
+  };
+  place.vegFriendly = isVegFriendly(place);
+  return place;
+}
+
+// Text Search (New) returns max 20 per page; follow `nextPageToken` for up to
+// `pages` pages (≤60 places). Surfaces MORE top attractions — the See layer was
+// silently capped at 20. Stops early when a page is empty or has no token.
+async function fetchPlaces(textQuery, bias = null, pages = 1) {
   if (!GOOGLE_PLACES_API_KEY) return [];
-  try {
-    const res = await fetch(PLACES_URL, {
-      method:'POST',
-      headers:{'Content-Type':'application/json','X-Goog-Api-Key':GOOGLE_PLACES_API_KEY,'X-Goog-FieldMask':FIELD_MASK},
-      body:JSON.stringify({
-        textQuery, maxResultCount:20,
-        ...(bias ? { locationBias: { circle: { center: { latitude: bias.lat, longitude: bias.lng }, radius: bias.radius || 15000 } } } : {}),
-      }),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.places ?? []).map(p => {
-      const place = {
-        name:p.displayName?.text??'Place', address:p.formattedAddress??'',
-        rating:p.rating??null, ratingCount:p.userRatingCount??0,
-        costPerPerson:PRICE_TO_COST[p.priceLevel]??0, priceLevel:p.priceLevel??null, types:p.types??[],
-        activityType:inferActivityType(p.types??[]),
-        wheelchairOk:p.accessibilityOptions?.wheelchairAccessibleEntrance??null,
-        url:p.websiteUri??'', lat:p.location?.latitude??null, lng:p.location?.longitude??null,
-        photo:p.photos?.[0]?.name ? photoUrl(p.photos[0].name) : null,
-      };
-      place.vegFriendly = isVegFriendly(place);
-      return place;
-    });
-  } catch(e) { console.warn('[DiscoverModal]',e.message); return []; }
+  const out = [];
+  let pageToken = null;
+  for (let i = 0; i < Math.max(1, pages); i++) {
+    try {
+      const res = await fetch(PLACES_URL, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-Goog-Api-Key':GOOGLE_PLACES_API_KEY,'X-Goog-FieldMask':FIELD_MASK},
+        body:JSON.stringify({
+          textQuery, pageSize:20,
+          ...(bias ? { locationBias: { circle: { center: { latitude: bias.lat, longitude: bias.lng }, radius: bias.radius || 15000 } } } : {}),
+          ...(pageToken ? { pageToken } : {}),
+        }),
+      });
+      if (!res.ok) break;
+      const data = await res.json();
+      out.push(...(data.places ?? []).map(mapPlace));
+      pageToken = data.nextPageToken || null;
+      if (!pageToken) break;
+    } catch(e) { console.warn('[DiscoverModal]', e.message); break; }
+  }
+  return out;
 }
 
 // Session-wide Places cache (module scope = survives Discover re-opens). Planning
@@ -155,15 +168,15 @@ const PLACES_TTL_MS = 30 * 60 * 1000;
 const placesCache    = new Map();   // key -> { ts, places }
 const placesInflight = new Map();   // key -> Promise<places>
 
-function placesKey(q, bias) {
-  return q + (bias ? `@${bias.lat.toFixed(2)},${bias.lng.toFixed(2)}` : '');
+function placesKey(q, bias, pages) {
+  return `${pages || 1}|` + q + (bias ? `@${bias.lat.toFixed(2)},${bias.lng.toFixed(2)}` : '');
 }
-async function cachedPlaces(q, bias) {
-  const key = placesKey(q, bias);
+async function cachedPlaces(q, bias, pages = 1) {
+  const key = placesKey(q, bias, pages);
   const hit = placesCache.get(key);
   if (hit && Date.now() - hit.ts < PLACES_TTL_MS) return hit.places;
   if (placesInflight.has(key)) return placesInflight.get(key);
-  const p = fetchPlaces(q, bias)
+  const p = fetchPlaces(q, bias, pages)
     .then(places => { placesCache.set(key, { ts: Date.now(), places }); placesInflight.delete(key); return places; })
     .catch(e => { placesInflight.delete(key); throw e; });
   placesInflight.set(key, p);
@@ -441,7 +454,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   }, [visible]);
 
   // Delegates to the module-level, session-wide cache (survives Discover opens).
-  const cachedFetch = (q, bias) => cachedPlaces(q, bias);
+  const cachedFetch = (q, bias, pages) => cachedPlaces(q, bias, pages);
 
   // Load whatever the current scope needs: free-text → one cross-type search;
   // otherwise → each enabled layer's default query (parallel). `area` biases to
@@ -461,14 +474,17 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
         : ps;
       if (text) {
         const q = (area ? text : `${text} near ${loc}`) + (diet ? ` ${diet}` : '');
-        const places = near(await cachedFetch(q, bias));
+        const places = near(await cachedFetch(q, bias, 2));   // up to 40 for a typed search
         setTextResults(places);
         if (!places.length) setError(`No results for "${text}".`);
       } else {
         const want = LAYERS.filter(l => layers[l.key]);
         const got  = await Promise.all(want.map(async L => {
           const q = (area ? L.query : `${L.query} in ${loc}`) + (L.key === 'eat' && diet ? ` ${diet}` : '');
-          const places = near(await cachedFetch(q, bias));
+          // Attractions ("See") are where Google's 20-cap hurt most → fetch up to
+          // 60; Eat/Stay rarely need more than the first 20.
+          const pages = L.key === 'see' ? 3 : 1;
+          const places = near(await cachedFetch(q, bias, pages));
           return [L.key, places.map(p => ({ ...p, activityType: L.type, _layer: L.key }))];
         }));
         const next = { see: [], eat: [], stay: [] };

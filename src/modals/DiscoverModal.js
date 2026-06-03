@@ -233,9 +233,12 @@ function buildMapHTML() {
 var TINT=${JSON.stringify(MAP_TINT)};
 var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([20,0],2);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
-var ms=[];
+var ms=[],programmatic=true;  // ignore the load-time setView/fitBounds moves
 function clearMarkers(){ms.forEach(function(m){map.removeLayer(m)});ms=[];}
+// Metres from centre to a map corner = the radius the user is currently viewing.
+function viewRadius(){var c=map.getCenter();return Math.round(c.distanceTo(map.getBounds().getNorthEast()));}
 window.setData=function(data,fit){
+  if(fit)programmatic=true;  // our own fit shouldn't trigger a "Search this area"
   clearMarkers();var pts2=[];
   (data||[]).forEach(function(d){
     var c=TINT[d.t]||'#e86c3a',lbl=d.r?d.r.toFixed(1):'•';
@@ -248,13 +251,18 @@ window.setData=function(data,fit){
     });})(d.i,m);
     ms.push(m);pts2.push([d.lat,d.lng]);
   });
-  // Only re-fit when asked (city/area/text change) — toggling a layer keeps the
-  // current view instead of zooming out.
-  if(fit){if(pts2.length===1)map.setView(pts2[0],14);else if(pts2.length)map.fitBounds(pts2,{padding:[44,44]});}
+  // Re-fit only when asked (city/area/text change). Area searches DON'T fit —
+  // they keep the user's current zoom (else searching a landmark zooms out).
+  if(fit&&pts2.length){if(pts2.length===1)map.setView(pts2[0],14);else map.fitBounds(pts2,{padding:[44,44]});}
+  setTimeout(function(){programmatic=false;},500);
 };
-map.on('dragend',function(){var c=map.getCenter();window.ReactNativeWebView.postMessage(JSON.stringify({type:'moved',lat:c.lat,lng:c.lng}));});
-map.on('dblclick',function(e){window.ReactNativeWebView.postMessage(JSON.stringify({type:'searchhere',lat:e.latlng.lat,lng:e.latlng.lng}));});
-map.on('contextmenu',function(e){window.ReactNativeWebView.postMessage(JSON.stringify({type:'longpress',lat:e.latlng.lat,lng:e.latlng.lng}));});
+// Report user pan/zoom (with the viewed radius) so RN can offer "Search this
+// area" scoped to what's actually on screen. Skip our own programmatic moves.
+function reportMove(){if(programmatic)return;var c=map.getCenter();window.ReactNativeWebView.postMessage(JSON.stringify({type:'moved',lat:c.lat,lng:c.lng,radius:viewRadius()}));}
+map.on('dragend',reportMove);
+map.on('zoomend',reportMove);
+map.on('dblclick',function(e){window.ReactNativeWebView.postMessage(JSON.stringify({type:'searchhere',lat:e.latlng.lat,lng:e.latlng.lng,radius:viewRadius()}));});
+map.on('contextmenu',function(e){window.ReactNativeWebView.postMessage(JSON.stringify({type:'longpress',lat:e.latlng.lat,lng:e.latlng.lng,radius:viewRadius()}));});
 window.ReactNativeWebView.postMessage(JSON.stringify({type:'ready'}));
 </script></body></html>`;
 }
@@ -288,10 +296,10 @@ function DiscoverMap({ places, onMoved, onSelect, onSearchHere, onLongPress, sho
         onMessage={e => {
           try {
             const d = JSON.parse(e.nativeEvent.data);
-            if (d.type === 'moved') onMoved && onMoved({ lat: d.lat, lng: d.lng });
+            if (d.type === 'moved') onMoved && onMoved({ lat: d.lat, lng: d.lng, radius: d.radius });
             else if (d.type === 'select' && withCoords[d.index]) onSelect && onSelect(withCoords[d.index]);
-            else if (d.type === 'searchhere') onSearchHere && onSearchHere({ lat: d.lat, lng: d.lng });
-            else if (d.type === 'longpress') onLongPress && onLongPress({ lat: d.lat, lng: d.lng });
+            else if (d.type === 'searchhere') onSearchHere && onSearchHere({ lat: d.lat, lng: d.lng, radius: d.radius });
+            else if (d.type === 'longpress') onLongPress && onLongPress({ lat: d.lat, lng: d.lng, radius: d.radius });
             else if (d.type === 'ready') onReady();
           } catch (_) {}
         }} />
@@ -438,13 +446,20 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     return () => clearTimeout(t);
   }, [visible, activeCity, areaSearch, layers, activeFilters, searchText]);
 
-  // Map panned → offer to re-search that area (Redfin "search this area").
+  // Map panned/zoomed → offer to re-search that area (Redfin "search this area").
   const handleMapMoved = c => { setMapCenter(c); setMapMoved(true); };
-  const searchThisArea = () => { if (mapCenter) { setMapMoved(false); setFitToken(t => t + 1); setAreaSearch({ ...mapCenter, radius: 12000 }); } };
-  // Re-search around a point — double-tap or long-press the map.
-  const searchAround = (pt, radius = 5000) => {
-    setMapMoved(false); setFitToken(t => t + 1);
-    setAreaSearch({ lat: pt.lat, lng: pt.lng, radius });
+  // Clamp the viewport radius to something sane for a Places locationBias circle.
+  const clampRadius = r => Math.min(50000, Math.max(800, Math.round(r || 6000)));
+  // Area searches re-use the CURRENT view radius and do NOT re-fit — the user
+  // already framed the area, so keep their zoom (don't bump fitToken).
+  const searchThisArea = () => {
+    if (!mapCenter) return;
+    setMapMoved(false);
+    setAreaSearch({ lat: mapCenter.lat, lng: mapCenter.lng, radius: clampRadius(mapCenter.radius) });
+  };
+  const searchAround = pt => {
+    setMapMoved(false);
+    setAreaSearch({ lat: pt.lat, lng: pt.lng, radius: clampRadius(pt.radius) });
   };
   // Pin tapped → scroll carousel to it and highlight its card.
   const handleMapSelect = place => {

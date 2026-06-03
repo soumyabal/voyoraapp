@@ -980,6 +980,24 @@ const useStore = create(
     {
       name: 'voyara-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      // Schema version. BUMP THIS + add a migrate case whenever the persisted
+      // shape changes (the store.test.js shape guard will fail to remind you).
+      // Previously there was NO version → the only way to change shape was to
+      // rename the key, which WIPES every user's trips. Versioning fixes that.
+      version: 1,
+      // v0 (unversioned, older builds) → v1: backfill optional trip fields added
+      // over time so an old saved blob rehydrates without missing-field surprises.
+      migrate: (state) => {
+        if (!state) return state;
+        state.trips = (state.trips || []).map((t) => ({
+          seenPlaces: [],
+          ignoredWarnings: [],
+          origin: null,
+          expenses: [],
+          ...t, // existing values always win over the backfilled defaults
+        }));
+        return state;
+      },
     }
   )
 );

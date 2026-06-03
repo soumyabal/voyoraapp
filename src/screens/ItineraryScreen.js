@@ -1176,8 +1176,6 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
             <Icon name={isDone ? 'checkmark-circle' : 'close-circle'} size={26} color={isDone ? colors.success : colors.danger} />
           ) : (
             <>
-              {/* Type emoji above the time — tells the purpose at a glance */}
-              <Text style={styles.actTypeEmoji}>{actIcon}</Text>
               <Text style={styles.actTime}>{act.time}</Text>
               {!!act.photo && <Image source={{ uri: act.photo }} style={styles.actThumb} />}
               {act.type === 'transport' && !!act.arriveTime && (
@@ -1201,7 +1199,7 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
                 isNote    && styles.actNameNote,
                 isDone    && styles.actNameDone,
                 isSkipped && styles.actNameSkipped,
-              ]} numberOfLines={2}>{act.name}</Text>
+              ]} numberOfLines={2}>{!dimmed && `${actIcon}  `}{act.name}</Text>
               {!!act.rating && !dimmed && (
                 <View style={styles.ratingBadge}><Text style={styles.ratingText}>⭐ {act.rating}</Text></View>
               )}
@@ -2065,7 +2063,6 @@ const styles = StyleSheet.create({
 
   // Time column
   actTimeCol:    { alignItems: 'center', justifyContent: 'center', minWidth: 44 },
-  actTypeEmoji:  { fontSize: 15, marginBottom: 1 },
   actThumb:      { width: 38, height: 38, borderRadius: 9, marginTop: 5, backgroundColor: colors.surface2 },
   actTime:       { ...typography.caption, color: colors.primary, fontWeight: '700' },
   actIcon:       { fontSize: 18, marginTop: 3 },

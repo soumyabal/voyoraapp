@@ -235,7 +235,7 @@ var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([20,0]
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
 var ms=[];
 function clearMarkers(){ms.forEach(function(m){map.removeLayer(m)});ms=[];}
-window.setData=function(data){
+window.setData=function(data,fit){
   clearMarkers();var pts2=[];
   (data||[]).forEach(function(d){
     var c=TINT[d.t]||'#e86c3a',lbl=d.r?d.r.toFixed(1):'•';
@@ -248,7 +248,9 @@ window.setData=function(data){
     });})(d.i,m);
     ms.push(m);pts2.push([d.lat,d.lng]);
   });
-  if(pts2.length===1)map.setView(pts2[0],14);else if(pts2.length)map.fitBounds(pts2,{padding:[44,44]});
+  // Only re-fit when asked (city/area/text change) — toggling a layer keeps the
+  // current view instead of zooming out.
+  if(fit){if(pts2.length===1)map.setView(pts2[0],14);else if(pts2.length)map.fitBounds(pts2,{padding:[44,44]});}
 };
 map.on('dragend',function(){var c=map.getCenter();window.ReactNativeWebView.postMessage(JSON.stringify({type:'moved',lat:c.lat,lng:c.lng}));});
 map.on('dblclick',function(e){window.ReactNativeWebView.postMessage(JSON.stringify({type:'searchhere',lat:e.latlng.lat,lng:e.latlng.lng}));});
@@ -260,19 +262,29 @@ window.ReactNativeWebView.postMessage(JSON.stringify({type:'ready'}));
 // Geographic context pane — merged, layer-coloured pins. The map persists; only
 // markers update (via injectJavaScript → window.setData). Adding still happens
 // in the carousel/list beneath, so the map itself is browse + anchor-search.
-function DiscoverMap({ places, onMoved, onSelect, onSearchHere, onLongPress, showSearchArea, onSearchArea }) {
+function DiscoverMap({ places, onMoved, onSelect, onSearchHere, onLongPress, showSearchArea, onSearchArea, fitToken }) {
   const ref = useRef(null);
+  const lastFit = useRef(-1);
+  const readyRef = useRef(false);   // don't push (or consume fitToken) until the map has loaded
   const withCoords = places.filter(p => p.lat != null && p.lng != null);
   const pts = withCoords.map((p, i) => ({ i, lat: p.lat, lng: p.lng, t: p.activityType, r: p.rating }));
   const ptsJSON = JSON.stringify(pts);
   const html = React.useMemo(() => buildMapHTML(), []);
-  const push = () => { ref.current?.injectJavaScript(`window.setData&&window.setData(${ptsJSON});true;`); };
-  useEffect(() => { push(); }, [ptsJSON]);
+  // Re-fit the view only when fitToken advanced (city/area/text change); a layer
+  // toggle changes the pins but not the token, so the map holds its position.
+  const push = () => {
+    if (!readyRef.current) return;
+    const fit = fitToken !== lastFit.current;
+    lastFit.current = fitToken;
+    ref.current?.injectJavaScript(`window.setData&&window.setData(${ptsJSON},${fit ? 1 : 0});true;`);
+  };
+  const onReady = () => { readyRef.current = true; push(); };
+  useEffect(() => { push(); }, [ptsJSON, fitToken]);
 
   return (
     <View style={s.mapPane}>
       <WebView ref={ref} originWhitelist={['*']} source={{ html }} style={{ flex: 1, backgroundColor: '#dfe6e9' }}
-        onLoadEnd={push}
+        onLoadEnd={onReady}
         onMessage={e => {
           try {
             const d = JSON.parse(e.nativeEvent.data);
@@ -280,7 +292,7 @@ function DiscoverMap({ places, onMoved, onSelect, onSearchHere, onLongPress, sho
             else if (d.type === 'select' && withCoords[d.index]) onSelect && onSelect(withCoords[d.index]);
             else if (d.type === 'searchhere') onSearchHere && onSearchHere({ lat: d.lat, lng: d.lng });
             else if (d.type === 'longpress') onLongPress && onLongPress({ lat: d.lat, lng: d.lng });
-            else if (d.type === 'ready') push();
+            else if (d.type === 'ready') onReady();
           } catch (_) {}
         }} />
       {withCoords.length === 0 && (
@@ -308,6 +320,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [mapCenter,  setMapCenter]  = useState(null);   // {lat,lng} of the map view
   const [mapMoved,   setMapMoved]   = useState(false);  // user panned → show "Search this area"
   const [areaSearch, setAreaSearch] = useState(null);   // committed map area; sticky scope for searches
+  const [fitToken,   setFitToken]   = useState(0);      // bumped only when the map SHOULD re-fit (city/area/text — NOT layer toggles)
   const [selectedName, setSelectedName] = useState(null); // pin-tapped place (highlight + scroll carousel)
   const carouselRef = useRef(null);
   const pendingCloseRef = useRef(false); // iOS: close Discover after the preview sheet dismisses
@@ -319,7 +332,6 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [layers,      setLayers]      = useState({ see: true, eat: true, stay: true }); // multi-select map layers
   const [layerData,   setLayerData]   = useState({ see: [], eat: [], stay: [] });       // per-layer fetched places
   const [textResults, setTextResults] = useState([]);                                   // free-text search results
-  const [anchorPlace, setAnchorPlace] = useState(null);                                 // pin tapped → "X nearby" actions
   const [searchText,  setSearchText]  = useState('');
   const [loading,     setLoading]     = useState(false);
   const [error,          setError]          = useState(null);
@@ -362,9 +374,10 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     const start  = parsed[0] || destination;
     setSearchText(''); setAddedNames(new Set());
     setLayers({ see: true, eat: true, stay: true });
-    setLayerData({ see: [], eat: [], stay: [] }); setTextResults([]); setAnchorPlace(null);
+    setLayerData({ see: [], eat: [], stay: [] }); setTextResults([]);
     setSelectMode(false); setBasket([]); setPreview(null); setArrangeHints({}); setEditingRow(null); setViewMode('list');
     setAreaSearch(null); setMapMoved(false); setMapCenter(null); setSelectedName(null);
+    setFitToken(t => t + 1);
     setCities(parsed.length ? parsed : (destination ? [destination] : []));
     setActiveCity(start);
     setCityPickerOpen(false); setNewCity('');
@@ -390,7 +403,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     const text = searchText.trim();
     const diet = [getDietaryBias(families), getFilterBias(activeFilters)].filter(Boolean).join(' ');
     const bias = area ? { lat: area.lat, lng: area.lng, radius: area.radius || 12000 } : null;
-    setError(null); setSelectedName(null); setAnchorPlace(null); setLoading(true);
+    setError(null); setSelectedName(null); setLoading(true);
     try {
       // Keep area searches tight: drop results outside ~1.6× the bias radius so
       // an outlier can't blow out the map's fit-to-bounds.
@@ -427,17 +440,14 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
   // Map panned → offer to re-search that area (Redfin "search this area").
   const handleMapMoved = c => { setMapCenter(c); setMapMoved(true); };
-  const searchThisArea = () => { if (mapCenter) { setMapMoved(false); setAreaSearch({ ...mapCenter, radius: 12000 }); } };
-  // Re-search around a point — double-tap, long-press, or an anchor "X nearby".
-  // Optionally force a layer on so e.g. "Stay nearby" guarantees hotels appear.
-  const searchAround = (pt, enableKey, radius = 5000) => {
-    setMapMoved(false); setAnchorPlace(null);
-    if (enableKey) setLayers(prev => ({ ...prev, [enableKey]: true }));
+  const searchThisArea = () => { if (mapCenter) { setMapMoved(false); setFitToken(t => t + 1); setAreaSearch({ ...mapCenter, radius: 12000 }); } };
+  // Re-search around a point — double-tap or long-press the map.
+  const searchAround = (pt, radius = 5000) => {
+    setMapMoved(false); setFitToken(t => t + 1);
     setAreaSearch({ lat: pt.lat, lng: pt.lng, radius });
   };
-  // Pin tapped → scroll carousel to it + reveal "X nearby" anchor actions.
+  // Pin tapped → scroll carousel to it and highlight its card.
   const handleMapSelect = place => {
-    setAnchorPlace(place);
     const idx = results.findIndex(p => p.name === place.name);
     if (idx >= 0) {
       setSelectedName(place.name);
@@ -445,7 +455,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     }
   };
 
-  const handleSearchChange = text => setSearchText(text);   // debounced by the load effect
+  const handleSearchChange = text => { setSearchText(text); setFitToken(t => t + 1); };   // debounced by the load effect
 
   // Layers are independent on/off — but at least one must stay on.
   const toggleLayer = key => setLayers(prev => {
@@ -457,7 +467,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setActiveFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
 
   // Selecting a city re-runs the search via the activeCity effect (resets area scope).
-  const chooseCity = c => { setCityPickerOpen(false); setAreaSearch(null); setMapMoved(false); setActiveCity(c); };
+  const chooseCity = c => { setCityPickerOpen(false); setAreaSearch(null); setMapMoved(false); setFitToken(t => t + 1); setActiveCity(c); };
 
   // Commit a freely-typed city (need not be in the trip's destination).
   const commitNewCity = () => {
@@ -466,7 +476,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     if (!c) { setCityPickerOpen(false); return; }
     setCities(prev => prev.some(x => cityLabel(x) === cityLabel(c)) ? prev : [...prev, c]);
     setCityPickerOpen(false);
-    setAreaSearch(null); setMapMoved(false);
+    setAreaSearch(null); setMapMoved(false); setFitToken(t => t + 1);
     setActiveCity(c);
   };
 
@@ -659,30 +669,17 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
           )}
 
           {viewMode === 'map' ? (
-            // Map stays mounted across searches (markers update live). Tap a pin
-            // for "X nearby"; double-tap or long-press to search that spot.
+            // Map stays mounted across searches (markers update live). Double-tap
+            // or long-press a spot to search that area; tap a pin to highlight it.
             <View style={{ flex: 1 }}>
               <DiscoverMap places={results} onMoved={handleMapMoved} onSelect={handleMapSelect}
                 onSearchHere={pt => searchAround(pt)} onLongPress={pt => searchAround(pt)}
+                fitToken={fitToken}
                 showSearchArea={mapMoved} onSearchArea={searchThisArea} />
               {loading && (
                 <View style={s.mapLoadPill} pointerEvents="none">
                   <ActivityIndicator size="small" color={colors.primary} />
                   <Text style={s.mapLoadText}>Searching…</Text>
-                </View>
-              )}
-              {anchorPlace && (
-                <View style={s.anchorBar}>
-                  <Text style={s.anchorName} numberOfLines={1}>Near {anchorPlace.name}</Text>
-                  <View style={s.anchorChips}>
-                    {LAYERS.map(L => (
-                      <TouchableOpacity key={L.key} style={[s.anchorChip, { borderColor: L.tint }]}
-                        onPress={() => searchAround({ lat: anchorPlace.lat, lng: anchorPlace.lng }, L.key)} activeOpacity={0.8}>
-                        <View style={[s.layerDot, { backgroundColor: L.tint }]} />
-                        <Text style={[s.anchorChipText, { color: L.tint }]}>{L.label} nearby</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
                 </View>
               )}
               <FlatList ref={carouselRef} data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
@@ -978,11 +975,6 @@ const s = StyleSheet.create({
   // Map overlays: searching pill + anchor "X nearby" actions
   mapLoadPill:{position:'absolute',top:10,right:12,flexDirection:'row',alignItems:'center',gap:6,backgroundColor:'rgba(255,255,255,0.95)',borderRadius:radius.full,paddingHorizontal:12,paddingVertical:6,...shadow.sm},
   mapLoadText:{fontSize:12,fontWeight:'700',color:colors.body},
-  anchorBar:{position:'absolute',left:spacing.md,right:spacing.md,top:10,backgroundColor:'#fff',borderRadius:radius.lg,padding:spacing.sm,borderWidth:1,borderColor:colors.hairline,...shadow.lg},
-  anchorName:{fontSize:12,fontWeight:'800',color:colors.ink,marginBottom:6},
-  anchorChips:{flexDirection:'row',gap:6},
-  anchorChip:{flexDirection:'row',alignItems:'center',gap:5,borderWidth:1.5,borderRadius:radius.full,paddingHorizontal:10,paddingVertical:6,backgroundColor:'#fff'},
-  anchorChipText:{fontSize:12,fontWeight:'800'},
   chipsScroll:{flexGrow:0,marginBottom:spacing.sm},
   chips:{paddingHorizontal:spacing.xxl,paddingVertical:4,gap:spacing.xs,alignItems:'center'},
   chip:{height:36,flexDirection:'row',alignItems:'center',justifyContent:'center',borderWidth:1.5,borderColor:colors.border,borderRadius:radius.full,paddingHorizontal:spacing.md,backgroundColor:'#fff'},
@@ -1140,7 +1132,9 @@ const mp = StyleSheet.create({
 // Map photo carousel card
 const mc = StyleSheet.create({
   card:{width:190,backgroundColor:'#fff',borderRadius:radius.lg,marginRight:spacing.sm,overflow:'hidden',borderWidth:1,borderColor:colors.hairline,...shadow.lg},
-  cardSel:{borderColor:colors.accent,borderWidth:2},
+  // Bright blue ring — deliberately NOT a layer colour (See green / Eat orange /
+  // Stay purple) so "selected" never reads as a place type.
+  cardSel:{borderColor:'#2563eb',borderWidth:3},
   photo:{width:'100%',height:104,backgroundColor:colors.surface2},
   photoPh:{alignItems:'center',justifyContent:'center'},
   check:{position:'absolute',top:8,right:8,width:30,height:30,borderRadius:15,backgroundColor:'rgba(255,255,255,0.95)',alignItems:'center',justifyContent:'center',...shadow.sm},

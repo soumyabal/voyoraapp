@@ -752,6 +752,11 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
               const slotActs     = acts;
               const doneCount    = slotActs.filter(a => a.status === 'done').length;
               const skippedCount = slotActs.filter(a => a.status === 'skipped').length;
+              // Last stop of the nearest earlier section — for the cross-section travel leg.
+              let prevSlotLast = null;
+              for (let k = slotIdx - 1; k >= 0; k--) {
+                if (slotActsMap[k].acts.length) { prevSlotLast = slotActsMap[k].acts[slotActsMap[k].acts.length - 1]; break; }
+              }
               // Trailing empty slot — render compact add button instead of full card
               if (slotActs.length === 0 && slotIdx > lastFilledIdx) {
                 return (
@@ -816,6 +821,11 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                       )}
                     </View>
                   </TouchableOpacity>
+
+                  {/* Travel from the previous section's last stop into this one */}
+                  {!isCollapsed && slotActs.length > 0 && prevSlotLast && (
+                    <TravelConnector from={prevSlotLast} to={slotActs[0]} />
+                  )}
 
                   {/* In-room dining — breakfast/lunch/dinner at the hotel for this slot */}
                   {!isCollapsed && renderHotelMealChip(slot.key)}

@@ -164,15 +164,3 @@ export function effectiveMember(member, travelers = []) {
     traveler: tv,
   };
 }
-
-// Credit estimation formula
-// adults: count of adult travelers, children: count of child travelers, needsCount: travelers with special needs
-export function calcCreditEstimate(days, adults, children, needsCount) {
-  const base = 10;
-  const daysCost = Math.max(days, 1) * 3;
-  const adultsCost = adults * 3;
-  const childrenCost = children * 1;
-  const needsCost = needsCount * 2;
-  const total = base + daysCost + adultsCost + childrenCost + needsCost;
-  return { base, daysCost, adultsCost, childrenCost, needsCost, total };
-}

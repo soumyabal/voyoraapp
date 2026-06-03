@@ -70,7 +70,7 @@ const useStore = create(
         return { trips: [newTrip, ...s.trips] };
       }),
 
-      createTrip: ({ name, destination, startDate, endDate, mode, pace = 'moderate', budget = 'mid-range', focus = [], familyForms = [], skipDefaultFamily = false }) => {
+      createTrip: ({ name, destination, startDate, endDate, mode, pace = 'moderate', budget = 'mid-range', focus = [], familyForms = [], skipDefaultFamily = false, origin = null }) => {
         const families = familyForms
           .filter(ff => ff.name || ff.members.some(m => m.name))
           .map((ff, fi) => ({
@@ -105,6 +105,9 @@ const useStore = create(
           itineraryPushed: false,
           families, days, expenses: [],
           seenPlaces: [],   // Discover places opened on the web (persisted)
+          // Where Day 1 begins (arrival airport / hotel / home) → anchors the
+          // first stop's travel leg + auto-arrange. { label, lat, lng } | null.
+          origin: origin && origin.label ? origin : null,
         };
 
         set(s => ({ trips: [trip, ...s.trips] }));

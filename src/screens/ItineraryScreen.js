@@ -3,6 +3,7 @@ import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensi
 import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import DiscoverModal from '../modals/DiscoverModal';
+import SetOriginModal from '../modals/SetOriginModal';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
@@ -135,6 +136,31 @@ function TravelConnector({ from, to }) {
       <View style={[styles.legDot, tight && styles.legDotTight]} />
       <Text style={[styles.legText, tight && styles.legTextTight]} numberOfLines={1}>
         {leg.mode === 'walk' ? '🚶' : '🚗'} {leg.min} min · {formatKm(leg.km)}{gapNote}
+      </Text>
+    </View>
+  );
+}
+
+// The drive estimate uses a city door-to-door speed (geo.js DRIVE_KMH = 26), so past
+// ~one metro area the minutes balloon into nonsense (a 215 km hop computes ~10 h, not
+// the real ~3 h highway run). Beyond this we show the RELIABLE straight-line distance
+// only — no fabricated time. The distance (haversine) is trustworthy at any range.
+const ORIGIN_FAR_KM = 60;
+
+// ── Origin leg: from the trip's starting point into Day 1's first stop ────────
+// The one place the normal between-stops connector can't reach (nothing precedes
+// stop 1). Informational only — never red. `origin` = trip.origin {label,lat,lng}.
+function OriginConnector({ origin, to }) {
+  const leg = travelLeg(origin, to);
+  if (!leg) return null;                         // origin or first stop missing coords
+  const farAway = leg.km > ORIGIN_FAR_KM;        // city-speed time estimate no longer believable
+  return (
+    <View style={styles.legRow}>
+      <View style={styles.legDot} />
+      <Text style={styles.legText} numberOfLines={1}>
+        {farAway
+          ? `🧭 ${formatKm(leg.km)} to your first stop`
+          : `${leg.mode === 'walk' ? '🚶' : '🚗'} ${leg.min} min · ${formatKm(leg.km)} to your first stop`}
       </Text>
     </View>
   );
@@ -418,6 +444,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const [showDiscover,          setShowDiscover]          = useState(false);
   const [discoverNear,          setDiscoverNear]          = useState(null);  // {lat,lng,label} when opened from an activity
   const [discoverSlot,          setDiscoverSlot]          = useState(null);  // slot key when Discover opened from a per-slot "+ Add"
+  const [showOrigin,            setShowOrigin]            = useState(false); // SetOriginModal (Day-1 starting point)
   const [movingAct,             setMovingAct]             = useState(null);
   const [snack,                 setSnack]                 = useState(null);  // undo toast
   const snackTimer = useRef(null);
@@ -532,7 +559,10 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     if (schedulable.length < 2) return;   // nothing to rearrange
     const prev = day.activities;
     const dayRole = currentDay === trip.days.length - 1 ? 'departure' : 'normal';
-    const scheduled = scheduleDay(day.activities, { dayRole, date: day.date });
+    // Day 1 has no prior-night hotel to route from — anchor it to the trip's
+    // starting point so the first stops cluster near where the group arrives.
+    const anchor = currentDay === 0 && trip.origin?.lat != null ? trip.origin : undefined;
+    const scheduled = scheduleDay(day.activities, { dayRole, date: day.date, anchor });
     setDayActivities(trip.id, currentDay, scheduled);
 
     const arranged = { ...trip, days: trip.days.map((d, i) => i === currentDay ? { ...d, activities: scheduled } : d) };
@@ -801,6 +831,23 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           </View>
         )}
 
+        {/* Day-1 starting point — the bookend to the "Sleeping at…" footer. Tap to
+            set/edit; when set, the first stop below shows its travel leg from here. */}
+        {day && currentDay === 0 && (
+          trip.origin?.label ? (
+            <TouchableOpacity style={styles.originChip} onPress={() => setShowOrigin(true)} activeOpacity={0.7}>
+              <Icon name="location" size={14} color={colors.smart} />
+              <Text style={styles.originChipText} numberOfLines={1}>Starting from {trip.origin.label}</Text>
+              <Icon name="create-outline" size={12} color={colors.subtle} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.originAddChip} onPress={() => setShowOrigin(true)} activeOpacity={0.7}>
+              <Icon name="add" size={14} color={colors.subtle} />
+              <Text style={styles.originAddText}>Add starting point</Text>
+            </TouchableOpacity>
+          )
+        )}
+
         {/* Reorder hint — shown briefly after ↑↓ tap */}
         {reorderHint && (
           <View style={styles.reorderHintBar}>
@@ -930,6 +977,12 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                     </View>
                   </TouchableOpacity>
 
+                  {/* Day 1's first stop: leg from the trip's starting point (nothing
+                      precedes it, so the normal connector below can't fire here). */}
+                  {!isCollapsed && slotActs.length > 0 && !prevSlotLast && currentDay === 0 && trip.origin?.lat != null && (
+                    <OriginConnector origin={trip.origin} to={slotActs[0]} />
+                  )}
+
                   {/* Travel from the previous section's last stop into this one */}
                   {!isCollapsed && slotActs.length > 0 && prevSlotLast && (
                     <TravelConnector from={prevSlotLast} to={slotActs[0]} />
@@ -1049,6 +1102,12 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           bottom={92}
         />
       )}
+
+      <SetOriginModal
+        visible={showOrigin}
+        trip={trip}
+        onClose={() => setShowOrigin(false)}
+      />
 
       <AddActivityModal
         visible={showAddActivity}
@@ -1881,6 +1940,12 @@ const styles = StyleSheet.create({
   lodgeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.smartSoft },
   lodgeChipText: { ...typography.caption, color: colors.smartDeep, fontWeight: '700' },
   lodgeChipMuted: { ...typography.caption, color: colors.subtle },
+
+  // Day-1 starting-point chip (bookend to lodgeChip) + its empty-state "add" affordance
+  originChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.smartSoft },
+  originChipText: { ...typography.caption, color: colors.smartDeep, fontWeight: '700', maxWidth: SCREEN_W * 0.6 },
+  originAddChip: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'center', marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, borderWidth: 1, borderColor: colors.hairline, borderStyle: 'dashed', backgroundColor: 'transparent' },
+  originAddText: { ...typography.caption, color: colors.subtle, fontWeight: '600' },
   empty: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { ...typography.body, color: colors.muted, marginBottom: spacing.lg },
   emptyAiBtn: {

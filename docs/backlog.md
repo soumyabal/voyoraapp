@@ -56,6 +56,29 @@ Resolved to "two, clearly distinct" — Discover = find real places (FAB + every
 - [ ] **Default the manual editor to Drive when opened via the bridge** (initialTile), since
       the bridge is framed as "drive, flight, or custom" — claws back a tap. — `AddActivityModal.js`
 
+## Trip starting point (Day-1 origin) — shipped P0, generalize in P1
+
+`trip.origin = {label, lat, lng}` captured at create (wizard Step 1), in Edit Trip,
+and via a tappable Day-1 chip (`SetOriginModal`). Day 1's first stop shows a leg from
+it; ≤60 km → "🚗 5 min · 1.3 km", beyond → "🧭 239 km" (distance only — the city-speed
+estimate is garbage at range). Also anchors Day-1 auto-arrange. Verified June 2026.
+The right general model (from the itinerary-architect consult): *every day starts where
+you slept the night before* — origin is just Day-0's boundary case.
+
+- [ ] **P1 · Opening leg on every day from the prior night's hotel.** Mirror of the
+      "🌙 Sleeping at…" footer: draw a leg from `lodgingForNight(trip, N-1).stay` into
+      day N's first stop (Day 1 already does this from `trip.origin`). — `ItineraryScreen.js`
+- [ ] **P1 · Last-day return leg.** A closing leg from the last stop back to the origin
+      (road trip) or the departure airport. Design `trip.origin` to double as the return
+      anchor; add a sibling `trip.returnTo` only if open-jaw (fly home from a different
+      city) is needed. — `ItineraryScreen.js`
+- [ ] **P1 · `origin.kind` (flight|drive|home).** Today flight vs drive is *inferred*
+      from distance (>60 km → distance-only). A `kind` would let a genuine long road-trip
+      show a real drive and a flight show "✈️ arrive", instead of one heuristic. — `SetOriginModal.js`
+- [ ] **P1 · Trip-Check origin rule.** The origin leg is informational (never red) since
+      there's no departure time to be "late" against. If a trip start-time is ever added,
+      a "leave by HH:MM to make your first stop" check becomes possible. — `tripValidator.js`
+
 ## Off-Places lodging (Airbnb) — shipped, one follow-up
 
 Adding a place that isn't a Google Places business (Airbnb/VRBO, a rental, a friend's

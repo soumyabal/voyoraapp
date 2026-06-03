@@ -422,6 +422,7 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
   const [mode, setMode]               = useState(null);
   const [name, setName]               = useState('');
   const [destination, setDestination] = useState('');
+  const [origin, setOrigin]           = useState(null); // { label, lat, lng } — where Day 1 begins
   const [startDate, setStartDate]     = useState('');
   const [endDate, setEndDate]         = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -448,7 +449,7 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
 
   // ── Reset ─────────────────────────────────────────────────────
   const reset = () => {
-    setStep(1); setMode(null); setName(''); setDestination('');
+    setStep(1); setMode(null); setName(''); setDestination(''); setOrigin(null);
     setStartDate(''); setEndDate('');
     setTripFamilies([]);
     setMustDos('');
@@ -478,6 +479,7 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
     const trip = createTrip({
       name, destination, startDate, endDate, mode,
       pace, budget, focus,
+      origin: origin && origin.label ? origin : null,
       familyForms: [],
       skipDefaultFamily: hasSelectedFamilies,
     });
@@ -611,6 +613,13 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
                     onSelect={setDestination}
                     placeholder="e.g. Bali, Indonesia"
                   />
+                  <LocationSearchField
+                    label="Starting Point"
+                    value={origin?.label || ''}
+                    onSelect={(label, coords) => setOrigin(label ? { label, lat: coords?.lat ?? null, lng: coords?.lng ?? null } : null)}
+                    placeholder="Arrival airport, hotel, or home (optional)"
+                  />
+                  <Text style={s.originHint}>📍 Sets where Day 1 begins — so the first stop shows its drive time.</Text>
                   <View style={s.formGroup}>
                     <Text style={s.label}>Travel Dates *</Text>
                     <TouchableOpacity style={s.dateBtn} onPress={() => setShowDatePicker(true)}>
@@ -991,6 +1000,7 @@ const s = StyleSheet.create({
   scroll: { flex: 1 },
   content: { padding: spacing.xxl, paddingBottom: 80 },
   stepHint: { ...typography.small, color: colors.muted, marginBottom: spacing.lg, lineHeight: 18 },
+  originHint: { ...typography.caption, color: colors.muted, marginTop: -spacing.md + 2, marginBottom: spacing.lg, lineHeight: 16 },
 
   formGroup: { marginBottom: spacing.lg },
   label: { fontSize: 12, fontWeight: '700', color: colors.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 },

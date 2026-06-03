@@ -7,11 +7,12 @@
  * Props:
  *   label        string
  *   value        string   — controlled value (the formatted place string)
- *   onSelect     fn(label: string) — called when user picks a result
+ *   onSelect     fn(label: string, coords?: {lat,lng}) — called when user picks a
+ *                result. coords come free from Photon's geometry (null on clear).
  *   placeholder  string
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
@@ -48,6 +49,11 @@ export default function LocationSearchField({
   const debounceRef = useRef(null);
   const justSelected = useRef(false);
 
+  // Re-seed the visible text when the controlled value changes from the parent
+  // (e.g. a modal reopening with a saved value). Safe during typing: `value` only
+  // changes on (re)select/clear, not on each keystroke, so it won't clobber input.
+  useEffect(() => { setQuery(value || ''); }, [value]);
+
   const fetchPlaces = useCallback(async (text) => {
     if (text.length < 2) { setResults([]); setShowResults(false); return; }
     setLoading(true);
@@ -66,6 +72,10 @@ export default function LocationSearchField({
           key: String(f.properties.osm_id || i),
           label: formatPlace(f.properties),
           type: f.properties.type,
+          // Photon GeoJSON: geometry.coordinates = [lng, lat]. Kept so callers
+          // that need a point (e.g. a trip's starting location) get it for free.
+          lng: f.geometry?.coordinates?.[0] ?? null,
+          lat: f.geometry?.coordinates?.[1] ?? null,
         }))
         // Deduplicate by label
         .filter((p, i, arr) => arr.findIndex(x => x.label === p.label) === i);
@@ -90,7 +100,7 @@ export default function LocationSearchField({
     setQuery(place.label);
     setResults([]);
     setShowResults(false);
-    onSelect(place.label);
+    onSelect(place.label, place.lat != null && place.lng != null ? { lat: place.lat, lng: place.lng } : null);
   };
 
   const handleBlur = () => {

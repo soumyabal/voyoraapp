@@ -15,6 +15,7 @@ export default function EditTripModal({ visible, trip, onClose }) {
 
   const [name, setName] = useState('');
   const [destination, setDestination] = useState('');
+  const [origin, setOrigin] = useState(null);   // { label, lat, lng } | null
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -24,6 +25,7 @@ export default function EditTripModal({ visible, trip, onClose }) {
     if (visible && trip) {
       setName(trip.name || '');
       setDestination(trip.destination || '');
+      setOrigin(trip.origin || null);
       setStartDate(trip.startDate || '');
       setEndDate(trip.endDate || '');
     }
@@ -44,6 +46,7 @@ export default function EditTripModal({ visible, trip, onClose }) {
     updateTrip(trip.id, {
       name: name.trim(),
       destination: destination.trim(),
+      origin: origin && origin.label ? origin : null,
       startDate,
       endDate,
     });
@@ -112,6 +115,13 @@ export default function EditTripModal({ visible, trip, onClose }) {
               onSelect={setDestination}
               placeholder="e.g. Bali, Indonesia"
             />
+            <LocationSearchField
+              label="Starting Point"
+              value={origin?.label || ''}
+              onSelect={(label, coords) => setOrigin(label ? { label, lat: coords?.lat ?? null, lng: coords?.lng ?? null } : null)}
+              placeholder="Arrival airport, hotel, or home (optional)"
+            />
+            <Text style={styles.originHint}>📍 Where Day 1 begins — anchors the first stop's travel time.</Text>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Travel Dates</Text>
@@ -153,6 +163,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xxl, paddingBottom: 80 },
   formGroup: { marginBottom: spacing.lg },
   label: { fontSize: 11, fontWeight: '700', color: colors.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
+  originHint: { ...typography.caption, color: colors.muted, marginTop: -spacing.md + 2, marginBottom: spacing.lg, lineHeight: 16 },
   dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: 13, paddingVertical: 12, backgroundColor: colors.surface },
   dateBtnIcon: { fontSize: 16 },
   dateBtnText: { ...typography.small, color: colors.text, fontWeight: '600' },

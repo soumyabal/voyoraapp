@@ -14,6 +14,7 @@ import useStore from '../store';
 import { uid, getAllMembers } from '../utils/helpers';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
+import { weekdayOf, hoursLabel } from '../utils/hours';
 import { WebView } from 'react-native-webview';
 import Icon from '../components/ui/Icon';
 
@@ -201,7 +202,9 @@ async function cachedPlaces(q, bias, pages = 1) {
   return p;
 }
 
-function PlaceCard({ place, onAdd, added }) {
+function PlaceCard({ place, onAdd, added, wd }) {
+  const hrs = hoursLabel(place.openHours, wd);
+  const closed = hrs === 'Closed';
   return (
     <View style={card.wrap}>
       {place.photo
@@ -219,6 +222,7 @@ function PlaceCard({ place, onAdd, added }) {
             : place.priceLevel==='PRICE_LEVEL_FREE'
               ? <View style={[card.costBadge,{backgroundColor:'#dcfce7'}]}><Text style={[card.costText,{color:'#15803d'}]}>Free</Text></View>
               : null}
+          {!!hrs && <Text style={[card.hours, closed && card.hoursClosed]} numberOfLines={1}>{'\u{1F552}'} {hrs}</Text>}
           {place.wheelchairOk && <Text style={card.badge}>{'♿'}</Text>}
         </View>
         {!!place.address && <Text style={card.address} numberOfLines={1}>{'\u{1F4CD}'} {place.address}</Text>}
@@ -242,7 +246,9 @@ function PlaceCard({ place, onAdd, added }) {
 // ─── Photo card for the map carousel (mindtrip-style) ────────────────
 // Tapping the card focuses the map on the place; the check circle toggles the
 // basket (separate touch targets so they don't fight).
-function PlaceMapCard({ place, checked, selected, onToggle, onFocus }) {
+function PlaceMapCard({ place, checked, selected, onToggle, onFocus, wd }) {
+  const hrs = hoursLabel(place.openHours, wd);
+  const closed = hrs === 'Closed';
   return (
     <TouchableOpacity style={[mc.card, selected && mc.cardSel]} activeOpacity={0.9} onPress={() => onFocus && onFocus(place)}>
       <View>
@@ -262,6 +268,7 @@ function PlaceMapCard({ place, checked, selected, onToggle, onFocus }) {
             ? <Text style={mc.cost}>~${place.costPerPerson}/p</Text>
             : place.priceLevel === 'PRICE_LEVEL_FREE' ? <Text style={mc.free}>Free</Text> : null}
         </View>
+        {!!hrs && <Text style={[mc.hours, closed && mc.hoursClosed]} numberOfLines={1}>{'\u{1F552}'} {hrs}</Text>}
       </View>
     </TouchableOpacity>
   );
@@ -298,8 +305,10 @@ window.setData=function(data,fit){
   if(fit)programmatic=true;  // our own fit shouldn't trigger a "Search this area"
   clearMarkers();var pts2=[];
   (data||[]).forEach(function(d){
-    var c=TINT[d.t]||'#e86c3a',lbl=d.r?d.r.toFixed(1):'•';
-    var ic=L.divIcon({className:'',html:'<div class="pin" style="background:'+c+'">'+lbl+'</div>',iconSize:[38,24],iconAnchor:[19,12]});
+    // Added places are greyed + ticked so the map clearly shows what's done.
+    var c=d.a?'#9aa7b0':(TINT[d.t]||'#e86c3a'),lbl=d.a?'✓':(d.r?d.r.toFixed(1):'•');
+    var extra=d.a?';opacity:.72':'';
+    var ic=L.divIcon({className:'',html:'<div class="pin'+(d.a?' added':'')+'" style="background:'+c+extra+'">'+lbl+'</div>',iconSize:[38,24],iconAnchor:[19,12]});
     var m=L.marker([d.lat,d.lng],{icon:ic}).addTo(map);
     (function(idx,mk){mk.on('click',function(){
       ms.forEach(function(x){if(x._icon)x._icon.firstChild.classList.remove('sel')});
@@ -341,12 +350,13 @@ window.ReactNativeWebView.postMessage(JSON.stringify({type:'ready'}));
 // Geographic context pane — merged, layer-coloured pins. The map persists; only
 // markers update (via injectJavaScript → window.setData). Adding still happens
 // in the carousel/list beneath, so the map itself is browse + anchor-search.
-function DiscoverMap({ places, onMoved, onSelect, onSearchHere, onLongPress, showSearchArea, onSearchArea, fitToken, focusTarget }) {
+function DiscoverMap({ places, addedNames, onMoved, onSelect, onSearchHere, onLongPress, showSearchArea, onSearchArea, fitToken, focusTarget }) {
   const ref = useRef(null);
   const lastFit = useRef(-1);
   const readyRef = useRef(false);   // don't push (or consume fitToken) until the map has loaded
   const withCoords = places.filter(p => p.lat != null && p.lng != null);
-  const pts = withCoords.map((p, i) => ({ i, lat: p.lat, lng: p.lng, t: p.activityType, r: p.rating }));
+  // `a` = already added to the trip → drawn greyed-out so it's clear what's done.
+  const pts = withCoords.map((p, i) => ({ i, lat: p.lat, lng: p.lng, t: p.activityType, r: p.rating, a: addedNames?.has(p.name) ? 1 : 0 }));
   const ptsJSON = JSON.stringify(pts);
   const html = React.useMemo(() => buildMapHTML(), []);
   // Re-fit the view only when fitToken advanced (city/area/text change); a layer
@@ -400,6 +410,8 @@ function DiscoverMap({ places, onMoved, onSelect, onSearchHere, onLongPress, sho
 export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime }) {
   const insets = useSafeAreaInsets();
   const { addActivity } = useStore();
+  // Weekday of the day we're adding to → show each place's hours for that day.
+  const dayWd = weekdayOf(trip?.days?.[dayIndex ?? 0]?.date);
 
   const [viewMode,   setViewMode]   = useState('list'); // 'list' | 'map'
   const [mapCenter,  setMapCenter]  = useState(null);   // {lat,lng} of the map view
@@ -416,7 +428,10 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [searchText,  setSearchText]  = useState('');
   const [loading,     setLoading]     = useState(false);
   const [error,          setError]          = useState(null);
-  const [addedNames,     setAddedNames]     = useState(new Set());
+  // Seed from everything already in the trip so previously-added places show as
+  // added (✓ in the list, greyed on the map) the moment Discover opens.
+  const [addedNames,     setAddedNames]     = useState(() =>
+    new Set((trip?.days || []).flatMap(d => (d.activities || []).map(a => a.name))));
   const [activeFilters,  setActiveFilters]  = useState([]);
   const [pendingPlace,   setPendingPlace]   = useState(null);
   const [pickerDay,      setPickerDay]      = useState(dayIndex ?? 0);
@@ -720,7 +735,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             // Map stays mounted across searches (markers update live). Double-tap
             // or long-press a spot to search that area; tap a pin to highlight it.
             <View style={{ flex: 1 }}>
-              <DiscoverMap places={results} onMoved={handleMapMoved} onSelect={handleMapSelect}
+              <DiscoverMap places={results} addedNames={addedNames} onMoved={handleMapMoved} onSelect={handleMapSelect}
                 onSearchHere={pt => searchAround(pt)} onLongPress={pt => searchAround(pt)}
                 fitToken={fitToken} focusTarget={focusTarget}
                 showSearchArea={mapMoved} onSearchArea={searchThisArea} />
@@ -736,7 +751,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
                 getItemLayout={(_,i)=>({length:198,offset:198*i+spacing.md,index:i})}
                 onScrollToIndexFailed={()=>{}}
                 renderItem={({item}) => (
-                  <PlaceMapCard place={item} checked={addedNames.has(item.name)} selected={selectedName===item.name} onToggle={quickAdd} onFocus={handleCarouselFocus}/>
+                  <PlaceMapCard place={item} checked={addedNames.has(item.name)} selected={selectedName===item.name} onToggle={quickAdd} onFocus={handleCarouselFocus} wd={dayWd}/>
                 )}
               />
             </View>
@@ -748,7 +763,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
               contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
               renderItem={({item}) => (
-                <PlaceCard place={item} onAdd={quickAdd} added={addedNames.has(item.name)}/>
+                <PlaceCard place={item} onAdd={quickAdd} added={addedNames.has(item.name)} wd={dayWd}/>
               )}
             />
           )}
@@ -1003,6 +1018,8 @@ const card = StyleSheet.create({
   rating:{fontSize:12,color:'#92400e',fontWeight:'700'},
   costBadge:{backgroundColor:'#e0faf4',borderRadius:radius.full,paddingHorizontal:8,paddingVertical:2},
   costText:{fontSize:11,fontWeight:'700',color:colors.green},
+  hours:{fontSize:11,color:'#516072',fontWeight:'600'},
+  hoursClosed:{color:'#dc2626',fontWeight:'700'},
   badge:{fontSize:13},
   address:{...typography.caption,color:colors.muted,lineHeight:16},
   addBtn:{width:36,height:36,borderRadius:18,backgroundColor:colors.primary,alignItems:'center',justifyContent:'center',flexShrink:0},
@@ -1074,4 +1091,6 @@ const mc = StyleSheet.create({
   rating:{fontSize:11,fontWeight:'700',color:'#92400e',marginRight:4},
   cost:{fontSize:11,fontWeight:'700',color:colors.green},
   free:{fontSize:11,fontWeight:'700',color:colors.green},
+  hours:{fontSize:10,color:'#516072',fontWeight:'600',marginTop:1},
+  hoursClosed:{color:'#dc2626',fontWeight:'700'},
 });

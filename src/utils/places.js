@@ -14,6 +14,53 @@ const photoUrl = name => `https://places.googleapis.com/v1/${name}/media?maxWidt
 
 const cache = new Map();   // "name@lat,lng" -> photo URL | null (avoids re-billing)
 
+/**
+ * Geocode a free-text address → { lat, lng, formattedAddress }. For lodging/stops
+ * that AREN'T in Google Places as businesses (Airbnb/VRBO, a friend's house): the
+ * address still resolves to coordinates, which is all the scheduling engine needs
+ * (anchors the day, draws travel legs). Uses Places Text Search. null on miss.
+ */
+export async function geocodeAddress(address) {
+  const q = (address || '').trim();
+  if (!GOOGLE_PLACES_API_KEY || !q) return null;
+  const key = `geo:${q}`;
+  if (cache.has(key)) return cache.get(key);
+  try {
+    const res = await fetch(PLACES_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
+        'X-Goog-FieldMask': 'places.location,places.formattedAddress,places.displayName',
+      },
+      body: JSON.stringify({ textQuery: q, pageSize: 1 }),
+    });
+    if (!res.ok) { cache.set(key, null); return null; }
+    const data = await res.json();
+    const p = (data.places || [])[0];
+    const loc = p?.location;
+    const out = loc ? { lat: loc.latitude, lng: loc.longitude, formattedAddress: p.formattedAddress || q } : null;
+    cache.set(key, out);
+    return out;
+  } catch (e) { cache.set(key, null); return null; }
+}
+
+/** Reverse-geocode lat/lng → a human address (for a map-dropped pin). Uses the
+ * classic Geocoding API; returns null if it's not enabled on the key (graceful). */
+export async function reverseGeocode(lat, lng) {
+  if (!GOOGLE_PLACES_API_KEY || lat == null || lng == null) return null;
+  const key = `rev:${lat.toFixed(5)},${lng.toFixed(5)}`;
+  if (cache.has(key)) return cache.get(key);
+  try {
+    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_PLACES_API_KEY}`);
+    if (!res.ok) { cache.set(key, null); return null; }
+    const data = await res.json();
+    const addr = (data.results && data.results[0]?.formatted_address) || null;
+    cache.set(key, addr);
+    return addr;
+  } catch (e) { cache.set(key, null); return null; }
+}
+
 /** Best-effort photo URL for a place by name, biased to its coords. null on miss. */
 export async function fetchPlacePhoto(name, lat, lng) {
   if (!GOOGLE_PLACES_API_KEY || !name) return null;

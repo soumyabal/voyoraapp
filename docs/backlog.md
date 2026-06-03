@@ -56,6 +56,20 @@ Resolved to "two, clearly distinct" — Discover = find real places (FAB + every
 - [ ] **Default the manual editor to Drive when opened via the bridge** (initialTile), since
       the bridge is framed as "drive, flight, or custom" — claws back a tap. — `AddActivityModal.js`
 
+## Off-Places lodging (Airbnb) — shipped, one follow-up
+
+Adding a place that isn't a Google Places business (Airbnb/VRBO, a rental, a friend's
+house) now works two ways: **(A)** type an address in the ✎ Manual editor → **Find**
+geocodes it to lat/lng; **(B)** long-press the Discover map → "Add a stop here" drops a
+pin → opens Manual seeded with those coords (Stay default). Either way the stop gets a
+lat/lng so it anchors the day + draws travel legs. Verified on device June 2026.
+
+- [ ] **Enable the classic Geocoding API on the Places key.** `reverseGeocode` (pin →
+      street address, for display only) returns `null` on the current key — confirmed on
+      device: a dropped pin shows "✓ Located" but no address text. Graceful (the pin's
+      coords are still saved + schedule fine), but the address line stays blank. Turn on
+      *Geocoding API* for that key to populate it. — `places.js reverseGeocode`
+
 ## Testing / architecture
 
 - [ ] **Extract + test Discover logic.** `placeScore`, added/seen/toggle derivation,

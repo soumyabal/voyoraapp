@@ -667,6 +667,19 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setMapMoved(false);
     setAreaSearch({ lat: pt.lat, lng: pt.lng, radius: clampRadius(pt.radius) });
   };
+  // Long-press the map → drop a pin for an off-Places stop (Airbnb, a friend's
+  // place). Hands the coords to the Manual editor, which schedules it like any stop.
+  const dropPin = pt => {
+    if (!onAddManual || pt.lat == null || pt.lng == null) return;
+    Alert.alert(
+      'Add a stop here?',
+      "Drop a pin for a place that isn't on the map — an Airbnb, a rental, a friend's house. You'll name it next; the location is saved so it schedules with the day.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Add a stop', onPress: () => onAddManual({ lat: pt.lat, lng: pt.lng }) },
+      ],
+    );
+  };
   // Pin tapped → scroll carousel to it and highlight its card.
   const handleMapSelect = place => {
     const idx = results.findIndex(p => p.name === place.name);
@@ -905,7 +918,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             // or long-press a spot to search that area; tap a pin to highlight it.
             <View style={{ flex: 1 }}>
               <DiscoverMap places={results} addedNames={addedNames} seenNames={seenNames} onMoved={handleMapMoved} onSelect={handleMapSelect}
-                onSearchHere={pt => searchAround(pt)} onLongPress={pt => searchAround(pt)}
+                onSearchHere={pt => searchAround(pt)} onLongPress={pt => dropPin(pt)}
                 fitToken={fitToken} focusTarget={focusTarget}
                 centerOn={nearLabel && nearby && nearby.lat != null ? { lat: nearby.lat, lng: nearby.lng } : null}
                 showSearchArea={mapMoved} onSearchArea={searchThisArea} />

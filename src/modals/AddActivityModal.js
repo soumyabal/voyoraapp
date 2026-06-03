@@ -14,12 +14,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal, View, Text, ScrollView, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, Dimensions, FlatList,
+  StyleSheet, KeyboardAvoidingView, Platform, Dimensions, FlatList, ActivityIndicator,
 } from 'react-native';
 import useStore from '../store';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { uid } from '../utils/helpers';
 import { estimateDuration, formatDuration } from '../utils/tripValidator';
+import { geocodeAddress, reverseGeocode } from '../utils/places';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
 import { ModalHeader } from '../components/ui';
 
@@ -315,7 +316,7 @@ function findTile(type, subtype) {
 }
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
-export default function AddActivityModal({ visible, trip, currentDay, onClose, editActivity, defaultTime, seedName }) {
+export default function AddActivityModal({ visible, trip, currentDay, onClose, editActivity, defaultTime, seed }) {
   const { addActivity, updateActivity } = useStore();
   const isEdit = !!editActivity;
 
@@ -348,6 +349,11 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
   const [memo, setMemo]           = useState('');
   const [reminder, setReminder]   = useState('');
 
+  // Address + geocode (for Airbnb / off-Places stops → lat/lng for scheduling)
+  const [address, setAddress]     = useState('');
+  const [geo, setGeo]             = useState(null);     // {lat,lng} once located
+  const [geoStatus, setGeoStatus] = useState('idle');   // idle | loading | ok | fail
+
   // Secondary fields (Details, Notes, Reminder) collapsed by default
   const [showMore, setShowMore]   = useState(false);
 
@@ -367,9 +373,15 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setDurationMins(editActivity.durationMins > 0 ? editActivity.durationMins : 0);
       setMeal(editActivity.meal || null);
       setShowMore(!!(editActivity.detail || editActivity.memo || editActivity.reminder));
+      setAddress(editActivity.address || '');
+      const hasGeo = editActivity.lat != null && editActivity.lng != null;
+      setGeo(hasGeo ? { lat: editActivity.lat, lng: editActivity.lng } : null);
+      setGeoStatus(hasGeo ? 'ok' : 'idle');
     } else {
-      setTile(TILES[6]);
-      setName(seedName || '');   // prefilled when opened from the Discover "add manually" bridge
+      // seed: { name?, address?, lat?, lng?, tile? } — from the Discover "add
+      // manually" bridge (name only) OR a dropped map pin (lat/lng, maybe address).
+      setTile(seed?.tile ? (findTile(seed.tile, null) || TILES[6]) : TILES[6]);
+      setName(seed?.name || '');   // prefilled when opened from the Discover "add manually" bridge
       setTime(defaultTime || '09:00');
       setArriveTime('');
       setDetail('');
@@ -383,8 +395,36 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setDayIdx(currentDay ?? 0);
       setAllDays(false);
       setSlotKey(getSlotKey(defaultTime || '09:00'));
+      setAddress(seed?.address || '');
+      const hasGeo = seed?.lat != null && seed?.lng != null;
+      setGeo(hasGeo ? { lat: seed.lat, lng: seed.lng } : null);
+      setGeoStatus(hasGeo ? 'ok' : 'idle');
     }
-  }, [visible, editActivity, defaultTime, currentDay, seedName]);
+  }, [visible, editActivity, defaultTime, currentDay, seed]);
+
+  // A dropped map pin arrives with coords but no address — fill it in for display.
+  useEffect(() => {
+    if (!visible || isEdit) return;
+    if (seed?.lat != null && seed?.lng != null && !seed?.address) {
+      reverseGeocode(seed.lat, seed.lng).then(a => { if (a) setAddress(a); }).catch(() => {});
+    }
+  }, [visible, seed, isEdit]);
+
+  // Geocode the typed address → lat/lng so the stop schedules with the rest of the day.
+  const locate = async () => {
+    const q = address.trim();
+    if (!q) return;
+    setGeoStatus('loading');
+    const r = await geocodeAddress(q);
+    if (r) {
+      setGeo({ lat: r.lat, lng: r.lng });
+      setAddress(r.formattedAddress);
+      setGeoStatus('ok');
+    } else {
+      setGeo(null);
+      setGeoStatus('fail');
+    }
+  };
 
   // ── Cost calculations ──────────────────────────────────────────────────────
   const totalMembers  = trip.families.reduce((s, f) => s + f.members.length, 0);
@@ -439,6 +479,9 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       memo:         memo.trim() || null,
       reminder:     reminder.trim() || null,
       access:       '',
+      address:      address.trim() || null,
+      lat:          geo ? geo.lat : (isEdit ? (editActivity.lat ?? null) : null),
+      lng:          geo ? geo.lng : (isEdit ? (editActivity.lng ?? null) : null),
     };
 
     if (isEdit) {
@@ -505,6 +548,42 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               autoFocus={!isEdit}
               returnKeyType="next"
             />
+
+            {/* ── Address → geocode (for Airbnb / off-map stops) ── */}
+            {tile.type !== 'transport' && (
+              <>
+                <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>
+                  ADDRESS <Text style={s.optional}>(Airbnb / off-map — locates it for scheduling)</Text>
+                </Text>
+                <View style={s.addrRow}>
+                  <TextInput
+                    style={s.addrInput}
+                    value={address}
+                    onChangeText={t => { setAddress(t); setGeo(null); setGeoStatus('idle'); }}
+                    placeholder="123 River Rd, Wisconsin Dells…"
+                    placeholderTextColor={colors.muted}
+                    returnKeyType="search"
+                    onSubmitEditing={locate}
+                  />
+                  <TouchableOpacity
+                    style={[s.addrFind, geoStatus === 'ok' && s.addrFindOk]}
+                    onPress={locate}
+                    disabled={geoStatus === 'loading' || !address.trim()}
+                    activeOpacity={0.85}
+                  >
+                    {geoStatus === 'loading'
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={s.addrFindText}>{geoStatus === 'ok' ? '✓ Located' : 'Find'}</Text>}
+                  </TouchableOpacity>
+                </View>
+                {geoStatus === 'ok' && (
+                  <Text style={s.addrOk}>📍 Pinned — this stop schedules with the rest of the day.</Text>
+                )}
+                {geoStatus === 'fail' && (
+                  <Text style={s.addrFail}>Couldn't find that address — try a fuller one (street, city).</Text>
+                )}
+              </>
+            )}
 
             {/* ── Day + smart When picker (Add mode only) ── */}
             {!isEdit && (trip.days || []).length > 0 && (
@@ -873,6 +952,33 @@ const s = StyleSheet.create({
     color: colors.text,
     ...shadow.sm,
   },
+
+  // Address → geocode row
+  addrRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'stretch' },
+  addrInput: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: 14,
+    color: colors.text,
+    ...shadow.sm,
+  },
+  addrFind: {
+    paddingHorizontal: spacing.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: radius.lg,
+    backgroundColor: colors.accent,
+    minWidth: 76,
+  },
+  addrFindOk:   { backgroundColor: colors.success || '#10b981' },
+  addrFindText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  addrOk:   { marginTop: spacing.xs, fontSize: 12, color: colors.success || '#10b981', fontWeight: '600' },
+  addrFail: { marginTop: spacing.xs, fontSize: 12, color: colors.danger || '#ef4444', fontWeight: '600' },
 
   // Day picker (chips) + smart When slot grid
   dayRow:    { gap: spacing.sm, paddingBottom: spacing.xs },

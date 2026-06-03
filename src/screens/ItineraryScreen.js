@@ -413,7 +413,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto } = useStore();
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
-  const [manualSeedName,        setManualSeedName]        = useState('');     // prefill name when manual is opened from the Discover bridge
+  const [manualSeed,            setManualSeed]            = useState(null);   // {name?,address?,lat?,lng?,tile?} prefill when manual is opened from the Discover bridge / a dropped pin
   const [defaultSlotTime,       setDefaultSlotTime]       = useState('09:00');
   const [showDiscover,          setShowDiscover]          = useState(false);
   const [discoverNear,          setDiscoverNear]          = useState(null);  // {lat,lng,label} when opened from an activity
@@ -476,9 +476,10 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
 
   const openEdit       = (act)  => { setEditActivity(act); setShowAddActivity(true); };
   // Manual editor — the deliberate "enter your own" path (transport, custom, per-family
-  // cost). `seedName` prefills the name (used by the Discover "add manually" bridge).
-  const openManual     = (seedName = '', time = '09:00') => { setManualSeedName(seedName); setDefaultSlotTime(time); setEditActivity(null); setShowAddActivity(true); };
-  const openAdd        = ()     => openManual('', '09:00');
+  // cost). `seed` ({name?,address?,lat?,lng?,tile?}) prefills it — used by the Discover
+  // "add manually" bridge (name) and a dropped map pin (lat/lng → Stay default).
+  const openManual     = (seed = null, time = '09:00') => { setManualSeed(seed); setDefaultSlotTime(time); setEditActivity(null); setShowAddActivity(true); };
+  const openAdd        = ()     => openManual(null, '09:00');
   // Per-slot "+ Add" is now SEARCH-FIRST: it opens Discover scoped to that slot
   // (manual is one tap away via the header button / the Discover "add manually" bridge).
   const openAddInSlot  = (time) => { setDiscoverNear(null); setDiscoverSlot(getSlotKey(time)); setDefaultSlotTime(time); setShowDiscover(true); };
@@ -1055,7 +1056,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         currentDay={currentDay}
         editActivity={editActivity}
         defaultTime={defaultSlotTime}
-        seedName={manualSeedName}
+        seed={manualSeed}
         onClose={closeModal}
       />
 
@@ -1067,7 +1068,15 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         defaultTime={defaultSlotTime}
         defaultSlot={discoverSlot}
         nearby={discoverNear}
-        onAddManual={(q) => { setShowDiscover(false); setDiscoverNear(null); setDiscoverSlot(null); openManual(q || '', defaultSlotTime); }}
+        onAddManual={(arg) => {
+          // arg is a search string (the "add manually" bridge) OR a {lat,lng}
+          // object (a pin dropped on the map → seed Stay with that location).
+          setShowDiscover(false); setDiscoverNear(null); setDiscoverSlot(null);
+          const seed = (arg && typeof arg === 'object')
+            ? { lat: arg.lat, lng: arg.lng, address: arg.address || '', tile: 'stay' }
+            : { name: arg || '' };
+          openManual(seed, defaultSlotTime);
+        }}
       />
 
       {/* ── Day picker — move activity to another day ── */}

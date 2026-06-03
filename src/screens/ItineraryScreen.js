@@ -8,7 +8,7 @@ import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
 import { fmt, fmtM, getActivityIcon } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
-import { validateTrip, summariseWarnings, estimateDuration, formatDuration } from '../utils/tripValidator';
+import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight } from '../utils/tripValidator';
 import { exportDayAsPDF } from '../utils/exportPlan';
 
 // ─── Dietary warning helper ───────────────────────────────────────
@@ -703,6 +703,41 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             });
             })()
           )}
+
+          {/* Where the group sleeps tonight — DERIVED from the one check-in stay,
+              never an editable row (so the booking cost can't be duplicated). */}
+          {day && (() => {
+            const lod = lodgingForNight(trip, currentDay);
+            if (lod?.overnightTransit) {
+              return (
+                <View style={styles.lodgeChip}>
+                  <Icon name="transport" size={14} color={colors.smart} />
+                  <Text style={styles.lodgeChipText}>Overnight — {lod.overnightTransit.name}</Text>
+                </View>
+              );
+            }
+            if (lod?.stay) {
+              return (
+                <View style={styles.lodgeChip}>
+                  <Icon name="hotel" size={14} color={colors.smart} />
+                  <Text style={styles.lodgeChipText}>Night {lod.nightNumber} of {lod.nights} · {lod.stay.name}</Text>
+                  {!lod.isCheckInDay && <Text style={styles.lodgeChipMuted}>· no extra charge</Text>}
+                </View>
+              );
+            }
+            const isLast = currentDay === (trip.days?.length || 0) - 1;
+            const hasAnyStay = (trip.days || []).some(d =>
+              d.activities.some(a => a.type === 'stay' && a.status !== 'skipped'));
+            if (isLast && hasAnyStay) {
+              return (
+                <View style={styles.lodgeChip}>
+                  <Icon name="location" size={14} color={colors.subtle} />
+                  <Text style={styles.lodgeChipText}>No hotel tonight — heading home</Text>
+                </View>
+              );
+            }
+            return null;
+          })()}
         </View>
       </ScrollView>
 
@@ -1496,6 +1531,10 @@ const styles = StyleSheet.create({
 
   // ── Activities list ──────────────────────────────────────────────
   activities: { paddingTop: spacing.sm },
+  // Derived "where you sleep tonight" footer chip
+  lodgeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.smartSoft },
+  lodgeChipText: { ...typography.caption, color: colors.smartDeep, fontWeight: '700' },
+  lodgeChipMuted: { ...typography.caption, color: colors.subtle },
   empty: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { ...typography.body, color: colors.muted, marginBottom: spacing.lg },
   emptyAiBtn: {

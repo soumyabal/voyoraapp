@@ -165,6 +165,50 @@ export function formatDuration(mins) {
   return rounded === Math.floor(rounded) ? `${rounded}h` : `~${rounded}h`;
 }
 
+// ─── Lodging derivation ───────────────────────────────────────────
+/**
+ * Where the group sleeps the NIGHT OF trip.days[dayIndex].
+ *
+ * A hotel is stored as ONE check-in `stay` activity carrying the booking total
+ * and a `nights` count — never duplicated per night. This derives which days a
+ * booking covers (so the cost stays on a single record and can't double-bill).
+ *
+ * Returns one of:
+ *   { stay, checkInDayIndex, nights, nightNumber, isCheckInDay, isLastNight }
+ *   { overnightTransit: activity }   // red-eye / sleeper train → no hotel tonight
+ *   null                             // unbooked (or home-base / heading-home) night
+ */
+export function lodgingForNight(trip, dayIndex) {
+  const days = trip?.days || [];
+  const day = days[dayIndex];
+  if (!day) return null;
+
+  // Overnight travel wins: a transport that crosses midnight = you sleep en route.
+  // (Same midnight-cross signal Rule 8 uses: arriveTime earlier than departTime.)
+  const overnight = (day.activities || []).find(a =>
+    a.type === 'transport' && a.status !== 'skipped' && a.arriveTime && a.arriveTime < (a.time || '00:00'));
+  if (overnight) return { overnightTransit: overnight };
+
+  // Scan back to the most recent check-in; it covers night i when
+  // checkInIdx <= i < checkInIdx + nights. The first stay we hit decides it —
+  // if it has already checked out, tonight is unbooked (you don't reopen it).
+  for (let i = dayIndex; i >= 0; i--) {
+    const stay = (days[i]?.activities || []).find(a => a.type === 'stay' && a.status !== 'skipped');
+    if (!stay) continue;
+    const nights = Math.max(1, stay.nights || 1);
+    if (dayIndex < i + nights) {
+      return {
+        stay, checkInDayIndex: i, nights,
+        nightNumber: dayIndex - i + 1,
+        isCheckInDay: dayIndex === i,
+        isLastNight: dayIndex === i + nights - 1,
+      };
+    }
+    return null;
+  }
+  return null;
+}
+
 // ─── Per-day validation ───────────────────────────────────────────
 
 function validateDay(day, dayIndex, families = []) {
@@ -481,6 +525,50 @@ export function validateTrip(trip) {
       });
     }
   });
+
+  // ── Trip rule: unbooked nights (lodging coverage gaps) ───────────
+  // Only when the trip actually uses hotels and isn't a home-base trip. We flag
+  // INTERIOR nights only (not the first or last day): the last night you head
+  // home, and the first night's check-in may simply not be added yet — flagging
+  // those would nag. A gap between two bookings is the real, actionable case.
+  const hasAnyStay = trip.days.some(d =>
+    d.activities.some(a => a.type === 'stay' && a.status !== 'skipped'));
+  if (hasAnyStay && !trip.homeBase) {
+    for (let i = 1; i < trip.days.length - 1; i++) {
+      const day = trip.days[i];
+      if (day.activities.filter(a => a.status !== 'skipped').length === 0) continue; // empty_day covers it
+      if (lodgingForNight(trip, i) === null) {
+        warnings.push({
+          type:     'unbooked_night',
+          severity: 'warning',
+          icon:     '🛏️',
+          title:    'No hotel that night',
+          message:  `No accommodation is booked for the night of ${day.label} (${day.date}).`,
+          hint:     'Add a hotel check-in (set its nights), or mark it as an overnight journey or a stay at home.',
+          dayIndex: i,
+        });
+      }
+    }
+  }
+
+  // ── Trip rule: last day has no check-out / way home ──────────────
+  const lastIdx = trip.days.length - 1;
+  if (hasAnyStay && lastIdx >= 1) {
+    const lastDay     = trip.days[lastIdx];
+    const lastActs    = lastDay.activities.filter(a => a.status !== 'skipped');
+    const hasDeparture = lastActs.some(a => a.type === 'transport');
+    if (lastActs.length > 0 && !hasDeparture) {
+      warnings.push({
+        type:     'lastday_missing_checkout',
+        severity: 'info',
+        icon:     '🧳',
+        title:    'No way home planned',
+        message:  `${lastDay.label} (${lastDay.date}) is your last day but has no check-out or trip home.`,
+        hint:     'Add your hotel check-out and the journey home (flight, train, or drive).',
+        dayIndex: lastIdx,
+      });
+    }
+  }
 
   // ── Trip rule: long journey days ─────────────────────────────────
   // Transport activities >= 6h with other activities on the same day.

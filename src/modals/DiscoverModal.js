@@ -543,9 +543,11 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     // existing expense-split (costPerPerson × members) totals correctly.
     let cost = { costPerPerson: pendingPlace.costPerPerson, costMode: 'per_person', costAmount: pendingPlace.costPerPerson };
     let detail = '';
+    // Persist nights as a NUMBER on the check-in so lodgingForNight() can derive
+    // which days this booking covers. The booking cost stays on this one record.
+    const nights = isStay ? Math.max(1, parseInt(hotelNights, 10) || 1) : undefined;
     const rate = parseFloat(hotelRate);
     if (isStay && rate > 0) {
-      const nights  = Math.max(1, parseInt(hotelNights, 10) || 1);
       const total   = rate * nights;
       const members = Math.max(1, getAllMembers(trip).length);
       cost   = { costPerPerson: parseFloat((total / members).toFixed(2)), costMode: 'total', costAmount: total };
@@ -556,6 +558,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
       id:uid(), type:pendingPlace.activityType, time:smartTime,
       name:pendingPlace.name, detail,
       ...cost,
+      ...(isStay ? { nights } : {}),
       address:pendingPlace.address, url:pendingPlace.url,
       rating:pendingPlace.rating, lat:pendingPlace.lat, lng:pendingPlace.lng,
       city:cityLabel(activeCity),   // tag the source city → Trip Check flags multi-city days

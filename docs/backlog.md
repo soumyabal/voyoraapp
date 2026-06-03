@@ -42,6 +42,20 @@ include the detour factor (so the two aren't on the same basis).
       minutes are on the same basis, or label the distance "straight-line". — `geo.js` /
       `ItineraryScreen.js TravelConnector`
 
+## Add flow (from the June 2026 planner + UX review)
+
+Resolved to "two, clearly distinct" — Discover = find real places (FAB + every slot's
+"+ Add"); "✎ Manual" = enter your own (transport/custom/per-family cost). Shipped
+`22ba724`. Remaining:
+
+- [ ] **Dedupe the day/slot/time picker.** The slot + suggested-time logic is duplicated
+      across `AddActivityModal` (the WHEN grid) and `DiscoverModal` (`handleConfirmAdd`/
+      `quickAdd`); `utils/slots.js` centralizes the math but the picker UI/placement still
+      drifts. Extract to one shared component so the two add paths can't diverge. Both
+      reviewers flagged this. — `AddActivityModal.js` / `DiscoverModal.js` / `utils/slots.js`
+- [ ] **Default the manual editor to Drive when opened via the bridge** (initialTile), since
+      the bridge is framed as "drive, flight, or custom" — claws back a tap. — `AddActivityModal.js`
+
 ## Testing / architecture
 
 - [ ] **Extract + test Discover logic.** `placeScore`, added/seen/toggle derivation,

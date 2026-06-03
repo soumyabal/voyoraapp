@@ -202,15 +202,16 @@ async function cachedPlaces(q, bias, pages = 1) {
   return p;
 }
 
-function PlaceCard({ place, onAdd, added, wd }) {
+function PlaceCard({ place, onAdd, added, wd, seen, onOpenWeb }) {
   const hrs = hoursLabel(place.openHours, wd);
   const closed = hrs === 'Closed';
+  const dim = seen && !added;   // looked at on the web → fade so it's easy to skip
   return (
     <View style={card.wrap}>
       {place.photo
-        ? <Image source={{uri:place.photo}} style={card.thumb} />
-        : <View style={[card.thumb, card.thumbPh]}><Icon name={TYPE_ICON[place.activityType]||'activity'} size={20} color={TYPE_TINT[place.activityType]||colors.subtle} /></View>}
-      <View style={card.body}>
+        ? <Image source={{uri:place.photo}} style={[card.thumb, dim && card.seenDim]} />
+        : <View style={[card.thumb, card.thumbPh, dim && card.seenDim]}><Icon name={TYPE_ICON[place.activityType]||'activity'} size={20} color={TYPE_TINT[place.activityType]||colors.subtle} /></View>}
+      <View style={[card.body, dim && card.seenDim]}>
         <View style={card.nameRow}>
           <Text style={card.name} numberOfLines={2}>{place.name}</Text>
           {place.vegFriendly && <View style={card.vegBadge}><Text style={card.vegBadgeText}>{'\u{1F966} Veg'}</Text></View>}
@@ -227,9 +228,9 @@ function PlaceCard({ place, onAdd, added, wd }) {
         </View>
         {!!place.address && <Text style={card.address} numberOfLines={1}>{'\u{1F4CD}'} {place.address}</Text>}
         {!!place.url && (
-          <TouchableOpacity style={card.linkRow} onPress={() => Linking.openURL(place.url)} hitSlop={{top:6,bottom:6,left:6,right:6}}>
-            <Icon name="open-outline" size={12} color={colors.accent} />
-            <Text style={card.linkText}>{place.activityType==='stay' ? 'Book rooms ↗' : 'Visit website ↗'}</Text>
+          <TouchableOpacity style={card.linkRow} onPress={() => (onOpenWeb ? onOpenWeb(place) : Linking.openURL(place.url))} hitSlop={{top:6,bottom:6,left:6,right:6}}>
+            <Icon name={seen ? 'checkmark-circle' : 'open-outline'} size={12} color={seen ? colors.subtle : colors.accent} />
+            <Text style={[card.linkText, seen && {color:colors.subtle}]}>{place.activityType==='stay' ? (seen?'Rooms seen ↗':'Book rooms ↗') : (seen?'Seen ↗':'Visit website ↗')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -246,27 +247,36 @@ function PlaceCard({ place, onAdd, added, wd }) {
 // ─── Photo card for the map carousel (mindtrip-style) ────────────────
 // Tapping the card focuses the map on the place; the check circle toggles the
 // basket (separate touch targets so they don't fight).
-function PlaceMapCard({ place, checked, selected, onToggle, onFocus, wd }) {
+function PlaceMapCard({ place, checked, selected, onToggle, onFocus, onOpenWeb, seen, wd }) {
   const hrs = hoursLabel(place.openHours, wd);
   const closed = hrs === 'Closed';
+  const dim = seen && !checked;
   return (
     <TouchableOpacity style={[mc.card, selected && mc.cardSel]} activeOpacity={0.9} onPress={() => onFocus && onFocus(place)}>
       <View>
         {place.photo
-          ? <Image source={{ uri: place.photo }} style={mc.photo} />
-          : <View style={[mc.photo, mc.photoPh]}><Icon name={TYPE_ICON[place.activityType]||'activity'} size={26} color={TYPE_TINT[place.activityType]||colors.subtle} /></View>}
+          ? <Image source={{ uri: place.photo }} style={[mc.photo, dim && mc.seenDim]} />
+          : <View style={[mc.photo, mc.photoPh, dim && mc.seenDim]}><Icon name={TYPE_ICON[place.activityType]||'activity'} size={26} color={TYPE_TINT[place.activityType]||colors.subtle} /></View>}
+        {/* Open the place's site (hotel rooms, menus, tickets) — marks it "seen" */}
+        {!!place.url && (
+          <TouchableOpacity style={mc.web} onPress={() => onOpenWeb && onOpenWeb(place)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.8}>
+            <Icon name={place.activityType === 'stay' ? 'hotel' : 'open-outline'} size={14} color="#fff" />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={[mc.check, checked && mc.checkOn]} onPress={() => onToggle(place)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.8}>
           <Icon name={checked ? 'check' : 'add'} size={16} color={checked ? '#fff' : colors.accent} />
         </TouchableOpacity>
       </View>
-      <View style={mc.body}>
+      <View style={[mc.body, dim && mc.seenDim]}>
         <Text style={mc.name} numberOfLines={1}>{place.name}</Text>
         <View style={mc.meta}>
           {place.rating != null && <><Icon name="star" size={11} color="#e0a93c" /><Text style={mc.rating}>{place.rating.toFixed(1)}</Text></>}
           {place.costPerPerson > 0
             ? <Text style={mc.cost}>~${place.costPerPerson}/p</Text>
             : place.priceLevel === 'PRICE_LEVEL_FREE' ? <Text style={mc.free}>Free</Text> : null}
+          {seen && <Text style={mc.seenTag}>{'✓'} seen</Text>}
         </View>
         {!!hrs && <Text style={[mc.hours, closed && mc.hoursClosed]} numberOfLines={1}>{'\u{1F552}'} {hrs}</Text>}
       </View>
@@ -324,10 +334,14 @@ window.setData=function(data,fit){
   if(fit)programmatic=true;  // our own fit shouldn't trigger a "Search this area"
   clearMarkers();var pts2=[];
   (data||[]).forEach(function(d){
-    // Added places are greyed + ticked so the map clearly shows what's done.
-    var c=d.a?'#9aa7b0':(TINT[d.t]||'#e86c3a'),lbl=d.a?'✓':(d.r?d.r.toFixed(1):'•');
-    var extra=d.a?';opacity:.72':'';
-    var ic=L.divIcon({className:'',html:'<div class="pin'+(d.a?' added':'')+'" style="background:'+c+extra+'">'+lbl+'</div>',iconSize:[38,24],iconAnchor:[19,12]});
+    // Three states, rating ALWAYS shown: available = colour + rating; seen on web
+    // = grey + rating; added to plan = grey + rating + ✓. Greying what's seen/added
+    // lets a busy map fade to just the options still worth a look.
+    var dim=d.a||d.s;
+    var c=dim?'#9aa7b0':(TINT[d.t]||'#e86c3a');
+    var lbl=(d.r?d.r.toFixed(1):'•')+(d.a?' ✓':'');
+    var extra=dim?';opacity:.72':'';
+    var ic=L.divIcon({className:'',html:'<div class="pin'+(dim?' dim':'')+'" style="background:'+c+extra+'">'+lbl+'</div>',iconSize:[44,24],iconAnchor:[22,12]});
     var m=L.marker([d.lat,d.lng],{icon:ic}).addTo(map);
     (function(idx,mk){mk.on('click',function(){
       ms.forEach(function(x){if(x._icon)x._icon.firstChild.classList.remove('sel')});
@@ -369,13 +383,14 @@ window.ReactNativeWebView.postMessage(JSON.stringify({type:'ready'}));
 // Geographic context pane — merged, layer-coloured pins. The map persists; only
 // markers update (via injectJavaScript → window.setData). Adding still happens
 // in the carousel/list beneath, so the map itself is browse + anchor-search.
-function DiscoverMap({ places, addedNames, onMoved, onSelect, onSearchHere, onLongPress, showSearchArea, onSearchArea, fitToken, focusTarget }) {
+function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearchHere, onLongPress, showSearchArea, onSearchArea, fitToken, focusTarget }) {
   const ref = useRef(null);
   const lastFit = useRef(-1);
   const readyRef = useRef(false);   // don't push (or consume fitToken) until the map has loaded
   const withCoords = places.filter(p => p.lat != null && p.lng != null);
-  // `a` = already added to the trip → drawn greyed-out so it's clear what's done.
-  const pts = withCoords.map((p, i) => ({ i, lat: p.lat, lng: p.lng, t: p.activityType, r: p.rating, a: addedNames?.has(p.name) ? 1 : 0 }));
+  // `a` = added to the trip (grey + ✓), `s` = seen on the web (grey) → fade what's
+  // handled so the bright pins are the options still worth a look.
+  const pts = withCoords.map((p, i) => ({ i, lat: p.lat, lng: p.lng, t: p.activityType, r: p.rating, a: addedNames?.has(p.name) ? 1 : 0, s: seenNames?.has(p.name) ? 1 : 0 }));
   const ptsJSON = JSON.stringify(pts);
   const html = React.useMemo(() => buildMapHTML(), []);
   // Re-fit the view only when fitToken advanced (city/area/text change); a layer
@@ -451,6 +466,9 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   // added (✓ in the list, greyed on the map) the moment Discover opens.
   const [addedNames,     setAddedNames]     = useState(() =>
     new Set((trip?.days || []).flatMap(d => (d.activities || []).map(a => a.name))));
+  // Places the user has opened on the web (to check details / hotel rooms) →
+  // greyed on the map + list so they're easy to skip past next time.
+  const [seenNames,      setSeenNames]      = useState(new Set());
   const [activeFilters,  setActiveFilters]  = useState([]);
   const [pendingPlace,   setPendingPlace]   = useState(null);
   const [pickerDay,      setPickerDay]      = useState(dayIndex ?? 0);
@@ -646,6 +664,14 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setPendingPlace(null);
   };
 
+  // Open the place's website (hotel rooms, menus, tickets) and mark it "seen" so
+  // its pin/card greys out — a lightweight way to track what you've looked at.
+  const openWeb = place => {
+    if (!place?.url) return;
+    Linking.openURL(place.url).catch(() => {});
+    setSeenNames(prev => prev.has(place.name) ? prev : new Set([...prev, place.name]));
+  };
+
   // One-tap add to the CURRENT day at a smart time (non-stays). Stays open the
   // sheet to capture the nightly rate + nights. Auto-arrange (on the day view)
   // tidies the times later — here we just drop it on the least-full slot.
@@ -754,7 +780,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             // Map stays mounted across searches (markers update live). Double-tap
             // or long-press a spot to search that area; tap a pin to highlight it.
             <View style={{ flex: 1 }}>
-              <DiscoverMap places={results} addedNames={addedNames} onMoved={handleMapMoved} onSelect={handleMapSelect}
+              <DiscoverMap places={results} addedNames={addedNames} seenNames={seenNames} onMoved={handleMapMoved} onSelect={handleMapSelect}
                 onSearchHere={pt => searchAround(pt)} onLongPress={pt => searchAround(pt)}
                 fitToken={fitToken} focusTarget={focusTarget}
                 showSearchArea={mapMoved} onSearchArea={searchThisArea} />
@@ -770,7 +796,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
                 getItemLayout={(_,i)=>({length:198,offset:198*i+spacing.md,index:i})}
                 onScrollToIndexFailed={()=>{}}
                 renderItem={({item}) => (
-                  <PlaceMapCard place={item} checked={addedNames.has(item.name)} selected={selectedName===item.name} onToggle={quickAdd} onFocus={handleCarouselFocus} wd={dayWd}/>
+                  <PlaceMapCard place={item} checked={addedNames.has(item.name)} seen={seenNames.has(item.name)} selected={selectedName===item.name} onToggle={quickAdd} onFocus={handleCarouselFocus} onOpenWeb={openWeb} wd={dayWd}/>
                 )}
               />
             </View>
@@ -782,7 +808,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
               contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
               renderItem={({item}) => (
-                <PlaceCard place={item} onAdd={quickAdd} added={addedNames.has(item.name)} wd={dayWd}/>
+                <PlaceCard place={item} onAdd={quickAdd} added={addedNames.has(item.name)} seen={seenNames.has(item.name)} onOpenWeb={openWeb} wd={dayWd}/>
               )}
             />
           )}
@@ -1039,6 +1065,7 @@ const card = StyleSheet.create({
   costText:{fontSize:11,fontWeight:'700',color:colors.green},
   hours:{fontSize:11,color:'#516072',fontWeight:'600'},
   hoursClosed:{color:'#dc2626',fontWeight:'700'},
+  seenDim:{opacity:0.5},
   badge:{fontSize:13},
   address:{...typography.caption,color:colors.muted,lineHeight:16},
   addBtn:{width:36,height:36,borderRadius:18,backgroundColor:colors.primary,alignItems:'center',justifyContent:'center',flexShrink:0},
@@ -1104,12 +1131,15 @@ const mc = StyleSheet.create({
   photoPh:{alignItems:'center',justifyContent:'center'},
   check:{position:'absolute',top:8,right:8,width:30,height:30,borderRadius:15,backgroundColor:'rgba(255,255,255,0.95)',alignItems:'center',justifyContent:'center',...shadow.sm},
   checkOn:{backgroundColor:colors.accent},
+  web:{position:'absolute',top:8,left:8,width:30,height:30,borderRadius:15,backgroundColor:'rgba(0,0,0,0.55)',alignItems:'center',justifyContent:'center'},
   body:{padding:spacing.sm,gap:3},
   name:{...typography.smallBold,color:colors.ink,fontSize:13},
   meta:{flexDirection:'row',alignItems:'center',gap:4},
   rating:{fontSize:11,fontWeight:'700',color:'#92400e',marginRight:4},
   cost:{fontSize:11,fontWeight:'700',color:colors.green},
   free:{fontSize:11,fontWeight:'700',color:colors.green},
+  seenTag:{fontSize:10,fontWeight:'700',color:colors.subtle,marginLeft:'auto'},
+  seenDim:{opacity:0.45},
   hours:{fontSize:10,color:'#516072',fontWeight:'600',marginTop:1},
   hoursClosed:{color:'#dc2626',fontWeight:'700'},
 });

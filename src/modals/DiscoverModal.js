@@ -312,8 +312,7 @@ function buildMapHTML() {
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>html,body,#map{height:100%;margin:0;background:#eee}
 .pin{display:flex;align-items:center;justify-content:center;min-width:30px;height:24px;padding:0 7px;border-radius:13px;color:#fff;font:700 12px -apple-system,system-ui,sans-serif;box-shadow:0 1px 5px rgba(0,0,0,.35);border:2px solid #fff;white-space:nowrap}
-.pin.sel{transform:scale(1.25)}
-.pin.focus{background:#111827;min-width:26px;border-color:#fff;transform:scale(1.1)}</style></head><body><div id="map"></div>
+.pin.sel{transform:scale(1.3);z-index:1000!important}</style></head><body><div id="map"></div>
 <script>
 var TINT=${JSON.stringify(MAP_TINT)};
 var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([20,0],2);
@@ -328,9 +327,7 @@ function viewRadius(){var c=map.getCenter();return Math.round(c.distanceTo(map.g
 // dense core — while never showing more than a ~15-mile radius. A tight cluster
 // still gets a sensible max zoom so pins stay readable.
 var FIT_R=24140; // 15 miles in metres — hard cap on how far the fit can reach
-var focusMarker=null;  // the "explore nearby" anchor (★) — kept across marker updates
 function fitDense(pts){
-  if(focusMarker){map.removeLayer(focusMarker);focusMarker=null;}  // leaving focus mode
   if(!pts.length)return;
   if(pts.length===1){map.setView(pts[0],14);return;}
   var la=pts.map(function(p){return p[0]}).sort(function(a,b){return a-b});
@@ -382,13 +379,10 @@ window.focusPin=function(lat,lng){
     programmatic=false;
   },350);
 };
-// "Explore nearby" → drop a ★ anchor on the chosen place and centre+zoom on it,
-// so it sits in the middle of the map with what's around it. Programmatic move.
+// "Explore nearby" → centre+zoom the map on the chosen place (no synthetic marker;
+// the place shows as its REAL pin and its carousel card gets selected by RN).
 window.centerOn=function(lat,lng,z){
   programmatic=true;
-  if(focusMarker)map.removeLayer(focusMarker);
-  var ic=L.divIcon({className:'',html:'<div class="pin focus">★</div>',iconSize:[28,24],iconAnchor:[14,12]});
-  focusMarker=L.marker([lat,lng],{icon:ic,zIndexOffset:1000}).addTo(map);
   map.setView([lat,lng],z||14,{animate:false});
   setTimeout(function(){programmatic=false;},450);
 };
@@ -529,8 +523,20 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             .flatMap(l => layerData[l.key] || [])
             .filter(p => { if (seen.has(p.name)) return false; seen.add(p.name); return true; });
         })();
-    return base.slice().sort((a, b) => placeScore(b) - placeScore(a));
-  }, [searchText, textResults, layerData, layers]);
+    const ranked = base.slice().sort((a, b) => placeScore(b) - placeScore(a));
+    // Explore-nearby: the area search usually doesn't return the stop you came
+    // from (a niche place). Inject it so IT shows as a real pin + selectable card.
+    if (nearLabel && nearby && nearby.lat != null && !ranked.some(p => p.name === nearby.label)) {
+      ranked.unshift({
+        name: nearby.label, lat: nearby.lat, lng: nearby.lng,
+        rating: nearby.rating ?? null, ratingCount: nearby.ratingCount ?? 0,
+        address: nearby.address || '', url: nearby.url || '', photo: nearby.photo || null,
+        openHours: nearby.openHours ?? null, activityType: nearby.type || 'activity',
+        priceLevel: null, costPerPerson: 0,
+      });
+    }
+    return ranked;
+  }, [searchText, textResults, layerData, layers, nearLabel, nearby]);
 
   useEffect(() => {
     if (!visible) return;
@@ -610,6 +616,23 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     const t = setTimeout(() => { loadScope(); }, searchText.trim() ? 450 : 0);
     return () => clearTimeout(t);
   }, [visible, activeCity, areaSearch, layers, activeFilters, searchText]);
+
+  // Explore-nearby: once results arrive, select the explored place itself — its
+  // real pin gets highlighted and its card (thumbnail) is selected + scrolled into
+  // view, so the user sees exactly which place they're exploring around (no
+  // synthetic marker). Runs once per nearby target.
+  const nearSelRef = useRef(null);
+  useEffect(() => {
+    if (!nearLabel || !nearby || nearby.lat == null) { nearSelRef.current = null; return; }
+    if (nearSelRef.current === nearby.label) return;
+    const idx = results.findIndex(p => p.name === nearby.label);
+    if (idx < 0) return;                       // not in results yet (or not returned)
+    nearSelRef.current = nearby.label;
+    const match = results[idx];
+    setSelectedName(match.name);
+    setFocusTarget({ lat: match.lat, lng: match.lng, n: ++focusSeq.current });
+    setTimeout(() => { try { carouselRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 }); } catch (_) {} }, 350);
+  }, [results, nearLabel, nearby]);
 
   // Map panned/zoomed → offer to re-search that area (Redfin "search this area").
   const handleMapMoved = c => { setMapCenter(c); setMapMoved(true); };
@@ -702,6 +725,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
       address:pendingPlace.address, url:pendingPlace.url,
       rating:pendingPlace.rating, lat:pendingPlace.lat, lng:pendingPlace.lng,
       openHours:pendingPlace.openHours ?? null,   // hours of operation → smart meal slotting on Arrange
+      photo:pendingPlace.photo ?? null,           // thumbnail (for explore-nearby + future card art)
       city:cityLabel(activeCity),   // tag the source city → Trip Check flags multi-city days
       note:null, status:null,
     });
@@ -740,6 +764,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
       address: place.address || '', url: place.url || '',
       rating: place.rating ?? null, lat: place.lat ?? null, lng: place.lng ?? null,
       openHours: place.openHours ?? null,   // hours of operation → smart meal slotting on Arrange
+      photo: place.photo ?? null,           // thumbnail (for explore-nearby + future card art)
       city: cityLabel(activeCity), note: null, status: null,
     });
   };

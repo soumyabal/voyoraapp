@@ -459,10 +459,16 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const openAdd        = ()     => { setDefaultSlotTime('09:00'); setEditActivity(null); setShowAddActivity(true); };
   const openAddInSlot  = (time) => { setDefaultSlotTime(time);    setEditActivity(null); setShowAddActivity(true); };
   const closeModal     = ()     => { setShowAddActivity(false); setEditActivity(null); };
-  // Open Discover's map centred on an activity → "what's around this place?"
+  // Open Discover's map centred on an activity → "what's around this place?".
+  // Pass the place's own details so Discover can show IT (the search often won't
+  // return a niche stop) as a real pin + selected card, not a blank anchor.
   const exploreNearby  = (act)  => {
     if (act?.lat == null || act?.lng == null) return;
-    setDiscoverNear({ lat: act.lat, lng: act.lng, label: act.name });
+    setDiscoverNear({
+      lat: act.lat, lng: act.lng, label: act.name,
+      rating: act.rating ?? null, address: act.address || '', url: act.url || '',
+      openHours: act.openHours ?? null, type: act.type, photo: act.photo ?? null,
+    });
     setShowDiscover(true);
   };
 

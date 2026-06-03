@@ -397,9 +397,12 @@ function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearc
   // toggle changes the pins but not the token, so the map holds its position.
   const push = () => {
     if (!readyRef.current) return;
-    const fit = fitToken !== lastFit.current;
-    lastFit.current = fitToken;
-    ref.current?.injectJavaScript(`window.setData&&window.setData(${ptsJSON},${fit ? 1 : 0});true;`);
+    // Only consume the fit token once we actually have points to fit — otherwise
+    // an early empty push (e.g. opening straight into the map before results load)
+    // would burn the token and the results would arrive with no re-fit.
+    const wantFit = fitToken !== lastFit.current && pts.length > 0;
+    if (wantFit) lastFit.current = fitToken;
+    ref.current?.injectJavaScript(`window.setData&&window.setData(${ptsJSON},${wantFit ? 1 : 0});true;`);
   };
   const onReady = () => { readyRef.current = true; push(); };
   useEffect(() => { push(); }, [ptsJSON, fitToken]);
@@ -441,12 +444,14 @@ function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearc
   );
 }
 
-export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime }) {
+export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime, nearby }) {
   const insets = useSafeAreaInsets();
   const { addActivity, markPlaceSeen, clearSeenPlaces } = useStore();
-  // Persisted "seen on web" set for THIS trip (survives across sessions).
-  const seenPlaces = useStore(s => (s.trips.find(t => t.id === trip?.id) || {}).seenPlaces);
-  const seenNames = new Set(seenPlaces || []);
+  // Read the LIVE trip from the store so "added" (grey + ✓) and "seen" (grey)
+  // always reflect the real plan, reactively — no stale snapshot to wipe on open.
+  const liveTrip   = useStore(s => s.trips.find(t => t.id === trip?.id)) || trip;
+  const seenNames  = new Set(liveTrip?.seenPlaces || []);
+  const addedNames = new Set((liveTrip?.days || []).flatMap(d => (d.activities || []).map(a => a.name)));
   // Weekday of the day we're adding to → show each place's hours for that day.
   const dayWd = weekdayOf(trip?.days?.[dayIndex ?? 0]?.date);
 
@@ -465,11 +470,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [searchText,  setSearchText]  = useState('');
   const [loading,     setLoading]     = useState(false);
   const [error,          setError]          = useState(null);
-  // Seed from everything already in the trip so previously-added places show as
-  // added (✓ in the list, greyed on the map) the moment Discover opens.
-  const [addedNames,     setAddedNames]     = useState(() =>
-    new Set((trip?.days || []).flatMap(d => (d.activities || []).map(a => a.name))));
   const [activeFilters,  setActiveFilters]  = useState([]);
+  const [nearLabel,      setNearLabel]      = useState(null);   // "exploring near X" banner
   const [pendingPlace,   setPendingPlace]   = useState(null);
   const [pickerDay,      setPickerDay]      = useState(dayIndex ?? 0);
   const [pickerSlot,     setPickerSlot]     = useState('morning');
@@ -504,17 +506,30 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     if (!visible) return;
     const parsed = parseLocations(destination);
     const start  = parsed[0] || destination;
-    setSearchText(''); setAddedNames(new Set());
+    setSearchText('');
     setLayers({ see: true, eat: true, stay: true });
     setLayerData({ see: [], eat: [], stay: [] }); setTextResults([]);
-    setViewMode('list');
-    setAreaSearch(null); setMapMoved(false); setMapCenter(null); setSelectedName(null); setFocusTarget(null);
-    setFitToken(t => t + 1);
+    setSelectedName(null); setFocusTarget(null); setMapMoved(false);
     setCities(parsed.length ? parsed : (destination ? [destination] : []));
     setActiveCity(start);
     setCityPickerOpen(false); setNewCity('');
     setActiveFilters(FILTER_OPTS.filter(f => allDietary.includes(f.key)).map(f => f.key));
+    if (nearby && nearby.lat != null) {
+      // "Explore nearby" from an activity → open straight into the map, biased to
+      // that place's spot, so the user sees what's around it.
+      setViewMode('map');
+      setAreaSearch({ lat: nearby.lat, lng: nearby.lng, radius: 8000 });   // ~5 mi
+      setMapCenter({ lat: nearby.lat, lng: nearby.lng });
+      setNearLabel(nearby.label || 'this spot');
+    } else {
+      setViewMode('list');
+      setAreaSearch(null); setMapCenter(null); setNearLabel(null);
+    }
+    setFitToken(t => t + 1);
   }, [visible]);
+
+  // Drop the "near X" scope → search the whole city again.
+  const clearNearby = () => { setNearLabel(null); setAreaSearch(null); setMapMoved(false); setFitToken(t => t + 1); };
 
   // Delegates to the module-level, session-wide cache (survives Discover opens).
   const cachedFetch = (q, bias, pages) => cachedPlaces(q, bias, pages);
@@ -608,7 +623,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setActiveFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
 
   // Selecting a city re-runs the search via the activeCity effect (resets area scope).
-  const chooseCity = c => { setCityPickerOpen(false); setAreaSearch(null); setMapMoved(false); setFitToken(t => t + 1); setActiveCity(c); };
+  const chooseCity = c => { setCityPickerOpen(false); setAreaSearch(null); setMapMoved(false); setNearLabel(null); setFitToken(t => t + 1); setActiveCity(c); };
 
   // Commit a freely-typed city (need not be in the trip's destination).
   const commitNewCity = () => {
@@ -617,7 +632,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     if (!c) { setCityPickerOpen(false); return; }
     setCities(prev => prev.some(x => cityLabel(x) === cityLabel(c)) ? prev : [...prev, c]);
     setCityPickerOpen(false);
-    setAreaSearch(null); setMapMoved(false); setFitToken(t => t + 1);
+    setAreaSearch(null); setMapMoved(false); setNearLabel(null); setFitToken(t => t + 1);
     setActiveCity(c);
   };
 
@@ -660,7 +675,6 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
       city:cityLabel(activeCity),   // tag the source city → Trip Check flags multi-city days
       note:null, status:null,
     });
-    setAddedNames(prev => new Set([...prev, pendingPlace.name]));
     setPendingPlace(null);
   };
 
@@ -698,7 +712,6 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
       openHours: place.openHours ?? null,   // hours of operation → smart meal slotting on Arrange
       city: cityLabel(activeCity), note: null, status: null,
     });
-    setAddedNames(prev => new Set([...prev, place.name]));
   };
 
   return (
@@ -740,6 +753,17 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <Text style={s.locBarChange}>Change</Text>
             <Icon name="forward" size={14} color={colors.accent} />
           </TouchableOpacity>
+
+          {/* "Explore nearby" scope — shown when opened from an activity */}
+          {!!nearLabel && (
+            <View style={s.nearBar}>
+              <Icon name="map" size={14} color={colors.accent} />
+              <Text style={s.nearBarText} numberOfLines={1}>Near {nearLabel}</Text>
+              <TouchableOpacity onPress={clearNearby} hitSlop={{top:8,bottom:8,left:8,right:8}} activeOpacity={0.7}>
+                <Text style={s.nearBarClear}>Show all ✕</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Map layers — independent See / Eat / Stay toggles. Each carries its
               type colour (= the map-pin legend); turn on any mix. */}
@@ -995,6 +1019,9 @@ const s = StyleSheet.create({
   locBarCaption:{fontSize:9,fontWeight:'800',color:colors.accent,letterSpacing:0.8},
   locBarCity:{fontSize:15,fontWeight:'800',color:colors.accentDark},
   locBarChange:{fontSize:13,fontWeight:'800',color:colors.accent},
+  nearBar:{flexDirection:'row',alignItems:'center',gap:spacing.sm,marginHorizontal:spacing.xxl,marginBottom:spacing.sm,marginTop:-spacing.xs,paddingHorizontal:spacing.md,paddingVertical:6,backgroundColor:colors.surface2,borderRadius:radius.md},
+  nearBarText:{flex:1,fontSize:12,fontWeight:'700',color:colors.ink},
+  nearBarClear:{fontSize:11,fontWeight:'800',color:colors.accent},
   // City picker sheet
   cityPickWrap:{flexDirection:'row',flexWrap:'wrap',gap:spacing.sm,marginBottom:spacing.lg},
   cityPick:{flexDirection:'row',alignItems:'center',gap:6,borderWidth:1.5,borderColor:colors.border,borderRadius:radius.full,paddingHorizontal:spacing.md,paddingVertical:spacing.sm,backgroundColor:'#fff'},

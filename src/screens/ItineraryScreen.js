@@ -414,6 +414,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const [editActivity,          setEditActivity]          = useState(null);
   const [defaultSlotTime,       setDefaultSlotTime]       = useState('09:00');
   const [showDiscover,          setShowDiscover]          = useState(false);
+  const [discoverNear,          setDiscoverNear]          = useState(null);  // {lat,lng,label} when opened from an activity
   const [movingAct,             setMovingAct]             = useState(null);
   const [snack,                 setSnack]                 = useState(null);  // undo toast
   const snackTimer = useRef(null);
@@ -458,6 +459,12 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const openAdd        = ()     => { setDefaultSlotTime('09:00'); setEditActivity(null); setShowAddActivity(true); };
   const openAddInSlot  = (time) => { setDefaultSlotTime(time);    setEditActivity(null); setShowAddActivity(true); };
   const closeModal     = ()     => { setShowAddActivity(false); setEditActivity(null); };
+  // Open Discover's map centred on an activity → "what's around this place?"
+  const exploreNearby  = (act)  => {
+    if (act?.lat == null || act?.lng == null) return;
+    setDiscoverNear({ lat: act.lat, lng: act.lng, label: act.name });
+    setShowDiscover(true);
+  };
 
   const cycleStatus = (act) => {
     const next = !act.status ? 'done' : act.status === 'done' ? 'skipped' : null;
@@ -940,6 +947,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                           onDelete={() => deleteWithUndo(act)}
                           onMoveRequest={() => setMovingAct(act)}
                           onSlotMove={() => openSlotMove(act)}
+                          onExploreNearby={() => exploreNearby(act)}
                         />
                         </>
                       )}
@@ -991,7 +999,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
       {/* ── Discover FAB — single primary action, bottom-right ── */}
       <TouchableOpacity
         style={styles.discoverFab}
-        onPress={() => setShowDiscover(true)}
+        onPress={() => { setDiscoverNear(null); setShowDiscover(true); }}
         activeOpacity={0.85}
       >
         <Icon name="search" size={16} color="#fff" />
@@ -1021,10 +1029,11 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
 
       <DiscoverModal
         visible={showDiscover}
-        onClose={() => setShowDiscover(false)}
+        onClose={() => { setShowDiscover(false); setDiscoverNear(null); }}
         trip={trip}
         dayIndex={currentDay}
         defaultTime={defaultSlotTime}
+        nearby={discoverNear}
       />
 
       {/* ── Day picker — move activity to another day ── */}
@@ -1076,7 +1085,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   );
 }
 
-function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onMarkSkipped, onEdit, onDelete, onMoveRequest, onSlotMove }) {
+function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onMarkSkipped, onEdit, onDelete, onMoveRequest, onSlotMove, onExploreNearby }) {
   const status    = act.status ?? null;
   const isDone    = status === 'done';
   const isSkipped = status === 'skipped';
@@ -1094,7 +1103,8 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
     ? formatDuration(duration)
     : null;
 
-  const hasSecondary = !!(act.detail || act.memo || act.reminder || act.note || act.address || act.url);
+  const hasCoords    = act.lat != null && act.lng != null;
+  const hasSecondary = !!(act.detail || act.memo || act.reminder || act.note || act.address || act.url || hasCoords);
   const [cardExpanded, setCardExpanded] = useState(false);
 
   const famChips = act.costPerPerson > 0 ? trip.families.map(fam => ({
@@ -1255,6 +1265,13 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
                       {act.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
                     </Text>
                     <Text style={styles.locationArrow}>›</Text>
+                  </TouchableOpacity>
+                )}
+                {hasCoords && !!onExploreNearby && (
+                  <TouchableOpacity style={styles.nearbyRow} onPress={onExploreNearby} activeOpacity={0.7}>
+                    <Text style={styles.locationIcon}>🧭</Text>
+                    <Text style={styles.nearbyText} numberOfLines={1}>Explore nearby places</Text>
+                    <Text style={[styles.locationArrow, { color: colors.accent }]}>›</Text>
                   </TouchableOpacity>
                 )}
                 {famChips.length > 0 && !dimmed && (
@@ -2111,6 +2128,8 @@ const styles = StyleSheet.create({
   urlRow:      { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
   urlIcon:     { fontSize: 13 },
   urlText:     { ...typography.caption, color: colors.primary, flex: 1 },
+  nearbyRow:   { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
+  nearbyText:  { ...typography.caption, color: colors.accent, fontWeight: '700', flex: 1 },
 
   // Family chips
   famChips:         { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },

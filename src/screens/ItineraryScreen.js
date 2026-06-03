@@ -575,15 +575,14 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     );
   };
 
-  const confirmDelete = (act) => {
-    Alert.alert(
-      'Delete Activity',
-      `Remove "${act.name}" from the itinerary?${trip.itineraryPushed && act.costPerPerson > 0 ? '\n\nThe linked Splitwise expense will also be removed.' : ''}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deleteActivity(trip.id, act.id) },
-      ],
-    );
+  // Swipe delete → remove now, offer undo (consistent with Done / Didn't-do, no
+  // interrupting dialog). The snapshot restores the activity with its original id;
+  // addActivity re-links its Splitwise expense. (A costed item's expense comes
+  // back at the default per-family split, not any custom tweaks.)
+  const deleteWithUndo = (act) => {
+    const snapshot = { ...act };
+    deleteActivity(trip.id, act.id);
+    showUndoAction('Activity deleted', 'trash-outline', () => addActivity(trip.id, currentDay, snapshot));
   };
 
   return (
@@ -858,7 +857,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                           onMarkDone={() => setDone(act)}
                           onMarkSkipped={() => setSkipped(act)}
                           onEdit={() => openEdit(act)}
-                          onDelete={() => confirmDelete(act)}
+                          onDelete={() => deleteWithUndo(act)}
                           onMoveRequest={() => setMovingAct(act)}
                           onSlotMove={() => openSlotMove(act)}
                         />
@@ -919,7 +918,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         <Text style={styles.discoverFabText}>Discover</Text>
       </TouchableOpacity>
 
-      {/* Undo toast — appears above the FAB after a done/didn't-do swipe */}
+      {/* Undo toast — appears above the FAB after any swipe action (done/didn't-do/delete) */}
       {snack && (
         <Snackbar
           key={snack.nonce}

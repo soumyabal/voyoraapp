@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import useStore from '../store';
 import { colors, spacing, radius, typography, shadow } from '../theme';
-import { uid } from '../utils/helpers';
+import { uid, defaultNightsFor } from '../utils/helpers';
 import { estimateDuration, formatDuration } from '../utils/tripValidator';
 import { geocodeAddress, reverseGeocode } from '../utils/places';
 import { APP_NAME } from '../config';
@@ -347,6 +347,9 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
   // Meal slot for food (null = auto from opening hours when ✨ Arrange runs)
   const [meal, setMeal]           = useState(null);
 
+  // Hotel nights (stay only) — drives lodgingForNight() coverage + day-routing anchors
+  const [nights, setNights]       = useState(1);
+
   // Notes + Reminder
   const [memo, setMemo]           = useState('');
   const [reminder, setReminder]   = useState('');
@@ -375,6 +378,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setReminder(editActivity.reminder || '');
       setDurationMins(editActivity.durationMins > 0 ? editActivity.durationMins : 0);
       setMeal(editActivity.meal || null);
+      setNights(editActivity.nights > 0 ? editActivity.nights : 1);
       setShowMore(!!(editActivity.detail || editActivity.memo || editActivity.reminder));
       setAddress(editActivity.address || '');
       const hasGeo = editActivity.lat != null && editActivity.lng != null;
@@ -393,6 +397,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setCostInput('');
       setDurationMins(0);
       setMeal(null);
+      setNights(defaultNightsFor(trip, currentDay ?? 0));   // cover the rest of the trip by default
       setMemo('');
       setReminder('');
       setShowMore(false);
@@ -480,6 +485,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       arriveTime:   tile.type === 'transport' && tile.subtype !== 'pitstop' && arriveTime ? arriveTime : null,
       durationMins: durationMins > 0 ? durationMins : null,
       meal:         tile.type === 'food' ? (meal || null) : null,
+      nights:       tile.type === 'stay' ? Math.max(1, nights) : undefined,
       detail:       detail.trim(),
       costMode,
       costAmount:   parsedCost,
@@ -597,6 +603,25 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                 {geoStatus === 'fail' && (
                   <Text style={s.addrFail}>Couldn't find that address — try a fuller one (street, city).</Text>
                 )}
+              </>
+            )}
+
+            {/* ── Nights (stay only) — sets which nights this hotel covers, so each
+                   day knows where you sleep + where the next day's route starts ── */}
+            {tile.type === 'stay' && (
+              <>
+                <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>
+                  NIGHTS <Text style={s.optional}>(how many nights at this hotel)</Text>
+                </Text>
+                <View style={s.nightsRow}>
+                  <TouchableOpacity style={s.nightsBtn} onPress={() => setNights(n => Math.max(1, n - 1))} activeOpacity={0.7}>
+                    <Text style={s.nightsBtnText}>−</Text>
+                  </TouchableOpacity>
+                  <Text style={s.nightsValue}>🌙 {nights} night{nights !== 1 ? 's' : ''}</Text>
+                  <TouchableOpacity style={s.nightsBtn} onPress={() => setNights(n => n + 1)} activeOpacity={0.7}>
+                    <Text style={s.nightsBtnText}>+</Text>
+                  </TouchableOpacity>
+                </View>
               </>
             )}
 
@@ -994,6 +1019,12 @@ const s = StyleSheet.create({
   addrFindText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   addrOk:   { marginTop: spacing.xs, fontSize: 12, color: colors.success || '#10b981', fontWeight: '600' },
   addrFail: { marginTop: spacing.xs, fontSize: 12, color: colors.danger || '#ef4444', fontWeight: '600' },
+
+  // Nights stepper (stay)
+  nightsRow:    { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  nightsBtn:    { width: 44, height: 44, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
+  nightsBtnText:{ fontSize: 22, fontWeight: '700', color: colors.accent, lineHeight: 24 },
+  nightsValue:  { fontSize: 15, fontWeight: '700', color: colors.text, minWidth: 96, textAlign: 'center' },
 
   // Day picker (chips) + smart When slot grid
   dayRow:    { gap: spacing.sm, paddingBottom: spacing.xs },

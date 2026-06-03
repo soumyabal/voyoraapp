@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GOOGLE_PLACES_API_KEY } from '../config';
 import useStore from '../store';
-import { uid, getAllMembers } from '../utils/helpers';
+import { uid, getAllMembers, defaultNightsFor } from '../utils/helpers';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
 import { weekdayOf, hoursLabel } from '../utils/hours';
@@ -754,7 +754,10 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const handleAdd = place => {
     setPickerDay(dayIndex ?? 0);
     setPickerSlot(getSlotKey(defaultTime || '09:00'));
-    setHotelRate(''); setHotelNights('1');
+    // Default nights to cover the rest of the trip (not 1) so a single hotel anchors
+    // every night/day; the user can still adjust. The old '1' default was the cause
+    // of "Night 1 of 1" on a multi-night trip.
+    setHotelRate(''); setHotelNights(String(defaultNightsFor(trip, dayIndex ?? 0)));
     setPendingPlace(place);
   };
 

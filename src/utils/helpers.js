@@ -133,6 +133,26 @@ export const familyPalette = [
 ];
 
 /**
+ * Smart default for a hotel's `nights`: cover from the check-in day to the next
+ * existing check-in (multi-hotel trips) or the trip's last night. So a single
+ * hotel on a 2-night trip defaults to 2 nights instead of 1 (the old trap that
+ * left later nights — and their day-routing anchor — uncovered). Always >= 1.
+ */
+export function defaultNightsFor(trip, checkInDayIdx) {
+  const days = trip?.days || [];
+  if (!days.length) return 1;
+  let nextStayDay = -1;
+  for (let i = checkInDayIdx + 1; i < days.length; i++) {
+    if ((days[i].activities || []).some((a) => a.type === 'stay' && a.status !== 'skipped')) {
+      nextStayDay = i;
+      break;
+    }
+  }
+  const end = nextStayDay !== -1 ? nextStayDay : days.length - 1;
+  return Math.max(1, end - checkInDayIdx);
+}
+
+/**
  * effectiveMember(member, travelers)
  *
  * Returns the "merged" view of a trip member:

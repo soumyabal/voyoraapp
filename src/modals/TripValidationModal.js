@@ -172,7 +172,7 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
               activeOpacity={0.7}
             >
               <Text style={[s.summaryPillText, { color: SEV.error.text }]}>
-                🔴 {summary.errors} conflict{summary.errors !== 1 ? 's' : ''}{activeFilter === 'error' ? ' ✕' : ''}
+                🔴 {summary.errors} to fix{activeFilter === 'error' ? ' ✕' : ''}
               </Text>
             </TouchableOpacity>
           )}
@@ -183,7 +183,7 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
               activeOpacity={0.7}
             >
               <Text style={[s.summaryPillText, { color: SEV.warning.text }]}>
-                🟠 {summary.warnings} warning{summary.warnings !== 1 ? 's' : ''}{activeFilter === 'warning' ? ' ✕' : ''}
+                🟠 {summary.warnings} to check{activeFilter === 'warning' ? ' ✕' : ''}
               </Text>
             </TouchableOpacity>
           )}
@@ -194,7 +194,7 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
               activeOpacity={0.7}
             >
               <Text style={[s.summaryPillText, { color: SEV.info.text }]}>
-                🔵 {summary.infos} suggestion{summary.infos !== 1 ? 's' : ''}{activeFilter === 'info' ? ' ✕' : ''}
+                🔵 {summary.infos} tip{summary.infos !== 1 ? 's' : ''}{activeFilter === 'info' ? ' ✕' : ''}
               </Text>
             </TouchableOpacity>
           )}

@@ -25,7 +25,7 @@ describe('distance-aware travel rule', () => {
     const w = travelWarns([act('A', '09:00', NEAR), act('B', '11:10', FAR)]);
     expect(w).toHaveLength(1);
     expect(w[0].actIds).toEqual(['A', 'B']);
-    expect(w[0].severity).toBe('error');     // 20 min short
+    expect(w[0].severity).toBe('info');      // estimate-based → a soft tip, never red
     expect(w[0].icon).toBe('🚗');
   });
 

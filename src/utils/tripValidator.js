@@ -6,6 +6,18 @@
  * Given a trip's day-by-day itinerary, produces a list of warnings
  * with severity levels: 'error' | 'warning' | 'info'
  *
+ * Severity philosophy (so we don't "cry wolf" — most rules are heuristics):
+ *   error   → a PROVABLE, blocking conflict the app is sure of (venue closed at
+ *             that time; a 6h+ journey crammed with other stops that can't fit).
+ *             Only these reach the trip's status badge and read as "needs fixing".
+ *   warning → a real, data-backed thing worth checking (unbooked night, big
+ *             overlap, dietary clash, duplicate, multi-city day).
+ *   info    → a soft, ESTIMATE-based heads-up / suggestion (tight travel time,
+ *             busy day, no meal). These are tips, never alarms.
+ * Estimate-driven rules (travel time, packed day, small overlaps) are deliberately
+ * kept at 'info' — the duration/distance model is approximate, so dressing a guess
+ * in red trains users to distrust the signal.
+ *
  * Duration estimates are drawn from industry tourism data:
  *   - Theme parks: 6-8h (TripAdvisor/Lonely Planet guidelines)
  *   - Museums: 1.5-4h depending on size
@@ -240,7 +252,9 @@ function validateDay(day, dayIndex, families = []) {
       const overlapMin = curr.endMin - next.startMin;
       warnings.push({
         type:          'overlap',
-        severity:      overlapMin >= 90 ? 'error' : 'warning',
+        // Estimate-based (durations are guessed) → big overlap = worth checking,
+        // small = a tip. Never an 'error' (we're not sure enough to alarm).
+        severity:      overlapMin >= 90 ? 'warning' : 'info',
         icon:          '⏱',
         title:         'Schedule overlap',
         message:       `"${curr.act.name}" typically takes ${formatDuration(curr.duration)}, overlapping with "${next.act.name}" by ~${overlapMin} min.`,
@@ -278,7 +292,9 @@ function validateDay(day, dayIndex, families = []) {
     if (short < 5) continue;                        // within rounding noise
     warnings.push({
       type:     'travel_time',
-      severity: short >= 20 ? 'error' : 'warning',
+      // Straight-line estimate (not real routing) — the biggest false-alarm risk,
+      // so it's always a soft tip, never red.
+      severity: 'info',
       icon:     leg.mode === 'walk' ? '🚶' : '🚗',
       title:    'Tight travel time',
       message:  `"${next.act.name}" starts ${formatDuration(gap)} after "${curr.act.name}" ends, but they're ~${formatKm(leg.km)} apart (~${leg.min} min ${leg.mode}).`,
@@ -306,7 +322,7 @@ function validateDay(day, dayIndex, families = []) {
     if (others.length >= 2) {
       warnings.push({
         type:     'full_day_conflict',
-        severity: 'error',
+        severity: 'warning',   // estimate-based (full-day duration is a guess) → check, not block
         icon:     '🎡',
         title:    'Full-day venue',
         message:  `"${act.name}" typically takes a full day (${formatDuration(estimateDuration(act))}). ${others.length} other activities may not fit.`,
@@ -322,9 +338,9 @@ function validateDay(day, dayIndex, families = []) {
   if (substantialActs.length >= 8) {
     warnings.push({
       type:     'packed',
-      severity: 'warning',
+      severity: 'info',   // a heuristic count → a gentle tip, not a warning
       icon:     '😓',
-      title:    'Very packed day',
+      title:    'Busy day',
       message:  `${substantialActs.length} activities in one day is ambitious. You may feel rushed.`,
       hint:     'Spread some activities to adjacent days for a more relaxed pace.',
       dayIndex,
@@ -410,7 +426,7 @@ function validateDay(day, dayIndex, families = []) {
       if (startMin < 9 * 60 && lateFamilies.length > 0) {
         warnings.push({
           type:     'wake_time',
-          severity: 'warning',
+          severity: 'info',   // a soft preference heads-up, not a hard problem
           icon:     '🦉',
           title:    'Early for late risers',
           message:  `"${act.name}" starts at ${act.time} — ${lateFamilies.join(', ')} tend to wake late (after 9am).`,
@@ -520,7 +536,7 @@ function validateDay(day, dayIndex, families = []) {
     const lbl = hoursLabel(act.openHours, venueWd);
     warnings.push({
       type:     'closed_venue',
-      severity: 'warning',
+      severity: 'error',   // provable from real opening hours — you genuinely can't get in
       icon:     '🔒',
       title:    'Likely closed then',
       message:  `"${act.name}" looks closed at ${act.time}.` +

@@ -2,9 +2,16 @@
 
 > Validation rules for the Trip-Check engine (`src/utils/tripValidator.js`),
 > grounded in published travel-planning guidance, not guesswork. Each rule is a
-> small, pure, unit-testable check. **Severity discipline (anti-nag):** `error`
-> = will break the day; `warning` = likely problem; `info` = FYI (dismissible,
-> NOT counted in the headline badge). Over-warning is the failure mode.
+> small, pure, unit-testable check. **Severity discipline (anti-nag), retuned
+> June 2026 to stop scaring first-timers:** `error` = a PROVABLE, blocking conflict
+> the app is sure of (venue closed from real hours; 6h+ journey that can't fit) —
+> ONLY these reach the headline trip badge and read as "to fix". `warning` = a
+> real, data-backed thing worth a look (unbooked night, big overlap, dietary clash,
+> duplicate, multi-city). `info` = a soft, ESTIMATE-based tip (tight travel time,
+> busy day, small overlap) — never red, never on the badge. Estimate-driven rules
+> are kept at `info` on purpose: dressing a guess in red is the failure mode (you
+> train users to ignore the signal). The trip badge is green ✓ unless an `error`
+> survives; the inline per-day row is ONE calm summary pill, not a wall of chips.
 >
 > Status: ✅ exists today · 🆕 new (add) · 🔶 new, needs a data field we don't persist yet.
 
@@ -38,7 +45,7 @@ Sources at the bottom.
 
 | # | id | sev | condition | data |
 |---|---|---|---|---|
-| ✅ | `packed` | warning | ≥8 substantial activities/day | have |
+| ✅ | `packed` | info | ≥8 substantial activities/day (heuristic → a tip) | have |
 | 🆕 | `ambitious_day` | info | substantial activities > pace cap (relaxed>3 / moderate>4 / packed>6) but <8 | have (`trip.pace`) |
 | 🆕 | `no_breathing_room` | info | a day where every consecutive pair is back-to-back (<15 min between) for ≥3 items | have (times + durations) |
 | 🆕 | `over_scheduled_minutes` | info | sum of activity-minutes > ~70% of the active window (i.e. <30% unscheduled) | have |
@@ -96,7 +103,7 @@ Sources at the bottom.
 
 | # | id | sev | condition | data |
 |---|---|---|---|---|
-| ✅ | `overlap` | error (≥90m) / warning | next item starts before previous est. end | have |
+| ✅ | `overlap` | warning (≥90m) / info | next item starts before previous est. end (estimate-based → never red) | have |
 | ✅ | `long_journey_conflict` | error | ≥6h transport + other activities same day | have |
 | 🆕 | `back_to_back_long_travel` | warning | two consecutive days each with a ≥6h transport | have |
 | 🆕 | `tight_connection` | info | a time-sensitive activity within <60 min of a transport arrival | needs `arriveTime` (sometimes present) |
@@ -107,7 +114,7 @@ Sources at the bottom.
 |---|---|---|---|---|
 | ✅ | `past_midnight` | info | last item ends after 24:00 | have |
 | ✅ | `early_start` | info | first non-transport item before 06:00 | have |
-| ✅ | `wake_time` | warning/info | activity before family wake time | have |
+| ✅ | `wake_time` | info | activity before family wake time (soft preference → a tip) | have |
 | ✅ | `multi_day_journey` | info | transport `arriveTime` < `time` | have |
 | 🆕 | `monday_closure_risk` | info | a museum/gallery on a **Monday** ("many close Mondays — verify") | have (`day.date`) |
 | 🆕 | `sunday_closure_risk` | info | shops/markets on a **Sunday** (region-dependent) | have |

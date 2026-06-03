@@ -99,6 +99,16 @@ const SEV_CHIP = {
   info:    { backgroundColor: '#f0ede8', color: '#6b6259' },
 };
 
+// One calm per-day summary pill (replaces the wall of red chips). Tone is set by
+// the worst severity present; the icon SHAPE + the words carry severity (not just
+// colour — WCAG 1.4.1). Deliberately soft: even "to fix" is amber, never alarm-red.
+const DAY_PILL = {
+  fix:   { bg: '#fdf3e2', fg: '#b45309', icon: 'warning-outline' },          // a genuine conflict
+  check: { bg: '#fdf3e2', fg: '#b45309', icon: 'information-circle-outline' },// real, worth a look
+  tip:   { bg: '#eef1f4', fg: '#5b6470', icon: 'bulb-outline' },             // soft heuristic heads-up
+  ok:    { bg: '#e9f7f0', fg: '#0e9f6e', icon: 'checkmark-circle' },         // all good
+};
+
 // A day slot ↔ the meal you'd eat at the hotel in it (in-room dining / hotel
 // restaurant) — handy when the group is tired or unwell and doesn't want to go out.
 const SLOT_MEAL  = { morning: 'breakfast', afternoon: 'lunch', evening: 'dinner' };
@@ -300,21 +310,28 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
           </View>
         </View>
 
-        {/* Check Trip — severity-colored status chip (tap to open the checker) */}
+        {/* Trip health — a CALM status pip, not a defect tally. Only genuine,
+            provable conflicts (errors) surface here; warnings/tips live in the
+            per-day pill + the checker. Green ✓ when clear; amber + count for the
+            rare real conflict — never alarm-red, never the inflated total. */}
         {!!onCheckTrip && (() => {
-          const issues = validateTrip(trip);
           const ignored = trip.ignoredWarnings || [];
-          const visible = issues.filter(w => !ignored.includes(`${w.type}:${w.dayIndex ?? 'trip'}`));
-          const errs  = visible.filter(w => w.severity === 'error').length;
-          const warns = visible.filter(w => w.severity === 'warning').length;
-          const infos = visible.filter(w => w.severity === 'info').length;
-          const total = visible.length;
-          const color = errs ? colors.danger : warns ? colors.warn : infos ? colors.expert : colors.success;
-          const icon  = errs ? 'close-circle' : warns ? 'warning-outline' : infos ? 'bulb-outline' : 'checkmark-circle';
+          const conflicts = validateTrip(trip)
+            .filter(w => w.severity === 'error' && !ignored.includes(`${w.type}:${w.dayIndex ?? 'trip'}`))
+            .length;
+          const clear = conflicts === 0;
           return (
-            <TouchableOpacity style={[ch.checkChip, { backgroundColor: color }]} onPress={onCheckTrip} activeOpacity={0.85}>
-              <Icon name={icon} size={13} color="#fff" />
-              {total > 0 && <Text style={ch.checkChipText}>{total}</Text>}
+            <TouchableOpacity
+              style={[ch.checkChip, { backgroundColor: clear ? colors.success : colors.warn }]}
+              onPress={onCheckTrip}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={clear
+                ? 'Trip check: looks good'
+                : `Trip check: ${conflicts} thing${conflicts > 1 ? 's' : ''} to fix`}
+            >
+              <Icon name={clear ? 'checkmark-circle' : 'warning-outline'} size={13} color="#fff" />
+              {conflicts > 0 && <Text style={ch.checkChipText}>{conflicts}</Text>}
             </TouchableOpacity>
           );
         })()}
@@ -815,21 +832,40 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           </View>
         )}
 
-        {/* Inline Trip Check for THIS day — tap a chip to open the full checker */}
-        {day && dayWarnings.length > 0 && (
-          <View style={styles.dayWarnings}>
-            {dayWarnings.map((w, i) => (
-              <TouchableOpacity
-                key={`${w.type}-${i}`}
-                style={[styles.dayWarnChip, { backgroundColor: SEV_CHIP[w.severity].backgroundColor }]}
-                onPress={onCheckTrip} activeOpacity={0.8}
-              >
-                <Text style={styles.dayWarnIcon}>{w.icon}</Text>
-                <Text style={[styles.dayWarnText, { color: SEV_CHIP[w.severity].color }]} numberOfLines={1}>{w.title}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+        {/* Inline Trip Check for THIS day — ONE calm summary pill (positive-first),
+            not a wall of red chips. Tap to open the full checker. */}
+        {day && day.activities.length > 0 && (() => {
+          const nErr  = dayWarnings.filter(w => w.severity === 'error').length;
+          const nWarn = dayWarnings.filter(w => w.severity === 'warning').length;
+          const nTip  = dayWarnings.filter(w => w.severity === 'info').length;
+          const tipWord = n => `${n} tip${n !== 1 ? 's' : ''}`;
+          let tone, label;
+          if (nErr > 0) {
+            const rest = nWarn + nTip;
+            tone = 'fix';  label = `${nErr} to fix${rest ? ` · ${tipWord(rest)}` : ''}`;
+          } else if (nWarn > 0) {
+            tone = 'check'; label = `${nWarn} to check${nTip ? ` · ${tipWord(nTip)}` : ''}`;
+          } else if (nTip > 0) {
+            tone = 'tip';  label = `${tipWord(nTip)} for this day`;
+          } else {
+            tone = 'ok';   label = 'Looks well-paced';
+          }
+          const pal = DAY_PILL[tone];
+          return (
+            <TouchableOpacity
+              style={[styles.dayPill, { backgroundColor: pal.bg }]}
+              onPress={onCheckTrip}
+              activeOpacity={tone === 'ok' ? 1 : 0.8}
+              disabled={tone === 'ok'}
+              accessibilityRole={tone === 'ok' ? 'text' : 'button'}
+              accessibilityLabel={`This day: ${label}.${tone === 'ok' ? '' : ' Tap to review.'}`}
+            >
+              <Icon name={pal.icon} size={14} color={pal.fg} />
+              <Text style={[styles.dayPillText, { color: pal.fg }]} numberOfLines={1}>{label}</Text>
+              {tone !== 'ok' && <Icon name="forward" size={13} color={pal.fg} />}
+            </TouchableOpacity>
+          );
+        })()}
 
         {/* Day-1 starting point — the bookend to the "Sleeping at…" footer. Tap to
             set/edit; when set, the first stop below shows its travel leg from here. */}
@@ -1850,6 +1886,8 @@ const styles = StyleSheet.create({
   legDotTight: { backgroundColor: '#dc2626' },
   legText:     { fontSize: 11, color: colors.subtle, fontWeight: '600' },
   legTextTight:{ color: '#dc2626', fontWeight: '800' },
+  dayPill: { flexDirection: 'row', alignItems: 'center', gap: 7, alignSelf: 'flex-start', maxWidth: '100%', borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 7, marginBottom: spacing.sm },
+  dayPillText: { fontSize: 12.5, fontWeight: '700', flexShrink: 1 },
   dayWarnings: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
   dayWarnChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 6 },
   dayWarnIcon: { fontSize: 12 },

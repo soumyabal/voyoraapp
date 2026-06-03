@@ -56,6 +56,30 @@ Resolved to "two, clearly distinct" — Discover = find real places (FAB + every
 - [ ] **Default the manual editor to Drive when opened via the bridge** (initialTile), since
       the bridge is framed as "drive, flight, or custom" — claws back a tap. — `AddActivityModal.js`
 
+## Trip Check — "wall of red" de-alarmed (shipped P0, polish deferred)
+
+A first-timer opened a fresh/sample trip and was greeted by a red "6" badge + a row
+of red chips ("Schedule overlap ×3 · Tight travel time · Very packed day"). Three
+agents (UX + travel + a11y) agreed: the engine's fine, the alarm is manufactured —
+heuristic guesses dressed as errors (cry-wolf), severity by colour alone (WCAG 1.4.1).
+Shipped: **re-tiered severities** (red/`error` only for provable conflicts — closed
+venue, 6h+ journey; estimate-based overlap/travel-time/packed → `info` tips); the
+inline red row → **one calm summary pill** ("1 to check · 3 tips" / "✓ Looks
+well-paced"); the trip badge → **green ✓ unless a real conflict survives** (no inflated
+count); checker copy "conflict/warning" → "to fix / to check / tips". Verified June 2026.
+
+- [ ] **Per-day health dot (option #6).** Put a small green/amber dot on each Day tab
+      so "which day has something" is glanceable, and the trip badge can retire. — `ItineraryScreen.js`
+- [ ] **Calm-on-arrival (option #7).** Don't even compute-and-show the pill on a fresh
+      AI/sample trip until the user engages (edits/taps). Safe now that #1 distinguishes
+      conflict from tip. — `ItineraryScreen.js`
+- [ ] **A11y polish (a11y consult).** Add a single `accessibilityLiveRegion`/
+      `announceForAccessibility` summary (fired only on count change, not every render);
+      let the day pill wrap under Dynamic Type (drop `numberOfLines={1}` / raise the tap
+      target to 44pt); verify severity icon strokes hit WCAG 1.4.11 (3:1). — `ItineraryScreen.js`
+- [ ] **Remove dead code.** `SEV_CHIP` + `dayWarnChip`/`dayWarnings` styles are now
+      unused after the pill replaced the chip row. — `ItineraryScreen.js`
+
 ## Manual Add Activity — overwhelm (gate fixed, form still long)
 
 A test user forgot the NAME and the top-right "Add" button stayed greyed with no

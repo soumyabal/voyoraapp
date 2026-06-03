@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, Modal, TouchableOpacity, StyleSheet,
   ScrollView, FlatList, TextInput, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Image, Linking,
+  KeyboardAvoidingView, Platform, Image, Linking, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GOOGLE_PLACES_API_KEY } from '../config';
@@ -443,7 +443,7 @@ function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearc
 
 export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime }) {
   const insets = useSafeAreaInsets();
-  const { addActivity, markPlaceSeen } = useStore();
+  const { addActivity, markPlaceSeen, clearSeenPlaces } = useStore();
   // Persisted "seen on web" set for THIS trip (survives across sessions).
   const seenPlaces = useStore(s => (s.trips.find(t => t.id === trip?.id) || {}).seenPlaces);
   const seenNames = new Set(seenPlaces || []);
@@ -672,6 +672,16 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     markPlaceSeen(trip.id, place.name);   // persisted per trip
   };
 
+  // Un-grey everything you've looked at — start the browse fresh.
+  const resetSeen = () => {
+    const n = seenNames.size;
+    if (!n) return;
+    Alert.alert('Reset seen', `Un-grey the ${n} place${n !== 1 ? 's' : ''} you've looked at?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Reset', style: 'destructive', onPress: () => clearSeenPlaces(trip.id) },
+    ]);
+  };
+
   // One-tap add to the CURRENT day at a smart time (non-stays). Stays open the
   // sheet to capture the nightly rate + nights. Auto-arrange (on the day view)
   // tidies the times later — here we just drop it on the least-full slot.
@@ -763,7 +773,14 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
           {/* Results count + List/Map toggle (stays put while re-searching) */}
           {!error && results.length > 0 && (
             <View style={s.resultsBar}>
-              <Text style={s.resultCount}>{results.length} place{results.length !== 1 ? 's' : ''}{loading ? ' · searching…' : ''}</Text>
+              <View style={s.resultLeft}>
+                <Text style={s.resultCount}>{results.length} place{results.length !== 1 ? 's' : ''}{loading ? ' · searching…' : ''}</Text>
+                {seenNames.size > 0 && (
+                  <TouchableOpacity onPress={resetSeen} hitSlop={{top:8,bottom:8,left:6,right:6}} activeOpacity={0.7}>
+                    <Text style={s.resetSeen}>{'↺'} reset {seenNames.size} seen</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               <View style={s.viewToggle}>
                 {[{ k: 'list', ic: 'list' }, { k: 'map', ic: 'map' }].map(v => (
                   <TouchableOpacity key={v.k} style={[s.viewToggleBtn, viewMode === v.k && s.viewToggleBtnOn]}
@@ -1002,7 +1019,9 @@ const s = StyleSheet.create({
   searchAreaBtn:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:colors.ink,borderRadius:radius.full,paddingHorizontal:spacing.lg,paddingVertical:spacing.sm,...shadow.lg},
   searchAreaText:{color:'#fff',fontWeight:'800',fontSize:13},
   resultsBar:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:spacing.xxl,paddingVertical:spacing.xs},
+  resultLeft:{flexDirection:'row',alignItems:'center',gap:spacing.md,flexShrink:1},
   resultCount:{...typography.caption,color:colors.muted},
+  resetSeen:{...typography.caption,color:colors.accent,fontWeight:'700'},
   viewToggle:{flexDirection:'row',backgroundColor:colors.surface2,borderRadius:radius.full,padding:3,gap:2},
   viewToggleBtn:{flexDirection:'row',alignItems:'center',gap:4,paddingHorizontal:spacing.md,paddingVertical:5,borderRadius:radius.full},
   viewToggleBtnOn:{backgroundColor:colors.accent},

@@ -121,6 +121,11 @@ const useStore = create(
         }),
       })),
 
+      // Clear all "seen on web" marks for a trip — a fresh browse.
+      clearSeenPlaces: (tripId) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : { ...t, seenPlaces: [] }),
+      })),
+
       // ── DISTANCE CACHE ──────────────────────────────────────
       updateDistanceCache: (tripId, cache) => set(s => ({
         trips: s.trips.map(t => t.id !== tripId ? t : { ...t, distanceCache: cache }),

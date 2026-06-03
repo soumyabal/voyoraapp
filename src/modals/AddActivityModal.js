@@ -315,7 +315,7 @@ function findTile(type, subtype) {
 }
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
-export default function AddActivityModal({ visible, trip, currentDay, onClose, editActivity, defaultTime }) {
+export default function AddActivityModal({ visible, trip, currentDay, onClose, editActivity, defaultTime, seedName }) {
   const { addActivity, updateActivity } = useStore();
   const isEdit = !!editActivity;
 
@@ -369,7 +369,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setShowMore(!!(editActivity.detail || editActivity.memo || editActivity.reminder));
     } else {
       setTile(TILES[6]);
-      setName('');
+      setName(seedName || '');   // prefilled when opened from the Discover "add manually" bridge
       setTime(defaultTime || '09:00');
       setArriveTime('');
       setDetail('');
@@ -384,7 +384,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setAllDays(false);
       setSlotKey(getSlotKey(defaultTime || '09:00'));
     }
-  }, [visible, editActivity, defaultTime, currentDay]);
+  }, [visible, editActivity, defaultTime, currentDay, seedName]);
 
   // ── Cost calculations ──────────────────────────────────────────────────────
   const totalMembers  = trip.families.reduce((s, f) => s + f.members.length, 0);

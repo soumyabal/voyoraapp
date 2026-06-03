@@ -413,9 +413,11 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto } = useStore();
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
+  const [manualSeedName,        setManualSeedName]        = useState('');     // prefill name when manual is opened from the Discover bridge
   const [defaultSlotTime,       setDefaultSlotTime]       = useState('09:00');
   const [showDiscover,          setShowDiscover]          = useState(false);
   const [discoverNear,          setDiscoverNear]          = useState(null);  // {lat,lng,label} when opened from an activity
+  const [discoverSlot,          setDiscoverSlot]          = useState(null);  // slot key when Discover opened from a per-slot "+ Add"
   const [movingAct,             setMovingAct]             = useState(null);
   const [snack,                 setSnack]                 = useState(null);  // undo toast
   const snackTimer = useRef(null);
@@ -473,8 +475,13 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const handlePush = () => { pushItineraryToSplitwise(trip.id); switchTab('splitwise'); };
 
   const openEdit       = (act)  => { setEditActivity(act); setShowAddActivity(true); };
-  const openAdd        = ()     => { setDefaultSlotTime('09:00'); setEditActivity(null); setShowAddActivity(true); };
-  const openAddInSlot  = (time) => { setDefaultSlotTime(time);    setEditActivity(null); setShowAddActivity(true); };
+  // Manual editor — the deliberate "enter your own" path (transport, custom, per-family
+  // cost). `seedName` prefills the name (used by the Discover "add manually" bridge).
+  const openManual     = (seedName = '', time = '09:00') => { setManualSeedName(seedName); setDefaultSlotTime(time); setEditActivity(null); setShowAddActivity(true); };
+  const openAdd        = ()     => openManual('', '09:00');
+  // Per-slot "+ Add" is now SEARCH-FIRST: it opens Discover scoped to that slot
+  // (manual is one tap away via the header button / the Discover "add manually" bridge).
+  const openAddInSlot  = (time) => { setDiscoverNear(null); setDiscoverSlot(getSlotKey(time)); setDefaultSlotTime(time); setShowDiscover(true); };
   const closeModal     = ()     => { setShowAddActivity(false); setEditActivity(null); };
   // Open Discover's map centred on an activity → "what's around this place?".
   // Pass the place's own details so Discover can show IT (the search often won't
@@ -770,7 +777,8 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                 </TouchableOpacity>
               )}
               <TouchableOpacity style={styles.addActBtn} onPress={openAdd}>
-                <Text style={styles.addActBtnText}>+ Activity</Text>
+                <Icon name="create-outline" size={13} color="#fff" />
+                <Text style={styles.addActBtnText}>Manual</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1022,7 +1030,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
       {/* ── Discover FAB — single primary action, bottom-right ── */}
       <TouchableOpacity
         style={styles.discoverFab}
-        onPress={() => { setDiscoverNear(null); setShowDiscover(true); }}
+        onPress={() => { setDiscoverNear(null); setDiscoverSlot(null); setShowDiscover(true); }}
         activeOpacity={0.85}
       >
         <Icon name="search" size={16} color="#fff" />
@@ -1047,16 +1055,19 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         currentDay={currentDay}
         editActivity={editActivity}
         defaultTime={defaultSlotTime}
+        seedName={manualSeedName}
         onClose={closeModal}
       />
 
       <DiscoverModal
         visible={showDiscover}
-        onClose={() => { setShowDiscover(false); setDiscoverNear(null); }}
+        onClose={() => { setShowDiscover(false); setDiscoverNear(null); setDiscoverSlot(null); }}
         trip={trip}
         dayIndex={currentDay}
         defaultTime={defaultSlotTime}
+        defaultSlot={discoverSlot}
         nearby={discoverNear}
+        onAddManual={(q) => { setShowDiscover(false); setDiscoverNear(null); setDiscoverSlot(null); openManual(q || '', defaultSlotTime); }}
       />
 
       {/* ── Day picker — move activity to another day ── */}
@@ -1751,9 +1762,12 @@ const styles = StyleSheet.create({
   dayTitle: { ...typography.h4, color: colors.text, flex: 1, marginRight: spacing.sm },
   dayHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   addActBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: colors.primary,
     borderRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
   addActBtnText: { ...typography.caption, color: '#fff', fontWeight: '800' },

@@ -465,7 +465,7 @@ function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearc
   );
 }
 
-export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime, nearby }) {
+export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime, defaultSlot, nearby, onAddManual }) {
   const insets = useSafeAreaInsets();
   const { addActivity, deleteActivity, markPlaceSeen, clearSeenPlaces } = useStore();
   // Read the LIVE trip from the store so "added" (grey + ✓) and "seen" (grey)
@@ -774,7 +774,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const quickAdd = place => {
     if (place.activityType === 'stay') { handleAdd(place); return; }
     const day  = dayIndex ?? 0;
-    const slot = [...SLOTS].sort((a, b) => getSlotCount(trip, day, a.key) - getSlotCount(trip, day, b.key))[0]?.key || 'morning';
+    // Opened from a per-slot "+ Add" → drop it in THAT slot; otherwise the least-full one.
+    const slot = defaultSlot || [...SLOTS].sort((a, b) => getSlotCount(trip, day, a.key) - getSlotCount(trip, day, b.key))[0]?.key || 'morning';
     addActivity(trip.id, day, {
       id: uid(), type: place.activityType, time: getSuggestedTime(trip, day, slot),
       name: place.name, detail: '',
@@ -927,7 +928,17 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
           ) : loading ? (
             <View style={s.center}><ActivityIndicator size="large" color={colors.primary}/><Text style={s.loadingText}>Searching {cityLabel(activeCity) || destination}…</Text></View>
           ) : error ? (
-            <View style={s.center}><Icon name="search" size={34} color={colors.subtle} /><Text style={s.errorText}>{error}</Text></View>
+            <View style={s.center}>
+              <Icon name="search" size={34} color={colors.subtle} />
+              <Text style={s.errorText}>{error}</Text>
+              {/* Bridge: not in Google Places? enter it by hand (drive/flight/custom) */}
+              {!!onAddManual && (
+                <TouchableOpacity style={s.manualBridge} onPress={() => onAddManual(searchText.trim())} activeOpacity={0.85}>
+                  <Icon name="create-outline" size={15} color={colors.accent} />
+                  <Text style={s.manualBridgeText}>{searchText.trim() ? `Add "${searchText.trim()}" manually` : 'Add it manually'}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           ) : (
             <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
               contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
@@ -1138,6 +1149,8 @@ const s = StyleSheet.create({
   viewToggleText:{fontSize:12,fontWeight:'800',color:colors.subtle},
   center:{flex:1,alignItems:'center',justifyContent:'center',padding:spacing.xxxl},
   loadingText:{...typography.body,color:colors.muted,marginTop:spacing.lg},
+  manualBridge:{flexDirection:'row',alignItems:'center',gap:6,marginTop:spacing.xl,backgroundColor:colors.accentSoft,borderWidth:1,borderColor:'#f0c9b5',borderRadius:radius.lg,paddingHorizontal:spacing.lg,paddingVertical:spacing.md},
+  manualBridgeText:{fontSize:13,fontWeight:'800',color:colors.accent},
   errorEmoji:{fontSize:36,marginBottom:spacing.md},
   errorText:{...typography.body,color:colors.muted,textAlign:'center',lineHeight:22},
 });

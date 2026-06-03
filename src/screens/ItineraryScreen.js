@@ -11,6 +11,7 @@ import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcF
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight } from '../utils/tripValidator';
 import { scheduleDay } from '../utils/autoArrange';
 import { travelLeg, formatKm } from '../utils/geo';
+import { weekdayOf, isOpenAt, hoursLabel } from '../utils/hours';
 import { exportDayAsPDF } from '../utils/exportPlan';
 
 // ─── Dietary warning helper ───────────────────────────────────────
@@ -849,6 +850,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                         <ActivityCard
                           activity={act}
                           trip={trip}
+                          dayDate={day.date}
                           isHighlighted={highlightedActIds.includes(act.id)}
                           isFirst={index === 0}
                           isLast={index === slotActs.length - 1}
@@ -1006,13 +1008,20 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   );
 }
 
-function ActivityCard({ activity: act, trip, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onMarkSkipped, onEdit, onDelete, onMoveRequest, onSlotMove }) {
+function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onMarkSkipped, onEdit, onDelete, onMoveRequest, onSlotMove }) {
   const status    = act.status ?? null;
   const isDone    = status === 'done';
   const isSkipped = status === 'skipped';
   const dimmed    = isDone || isSkipped;
   const dietWarn  = getDietaryWarning(act, trip.families || []);
   const duration  = estimateDuration(act);
+
+  // Hours of operation (attractions + restaurants) for this day. Closed-at-time
+  // turns the badge red — the same call Trip Check's closed_venue rule makes.
+  const showsHours  = act.type === 'activity' || act.type === 'food';
+  const hoursWd     = showsHours ? weekdayOf(dayDate) : null;
+  const hoursStr    = showsHours ? hoursLabel(act.openHours, hoursWd) : '';
+  const openAtTime  = showsHours && act.time ? isOpenAt(act.openHours, hoursWd, toMin(act.time)) : null;
   const durationLabel = act.type !== 'note' && act.type !== 'stay' && duration > 0
     ? formatDuration(duration)
     : null;
@@ -1114,6 +1123,13 @@ function ActivityCard({ activity: act, trip, isHighlighted, isFirst, isLast, onM
                 {!!durationLabel && (
                   <View style={styles.durationBadge}>
                     <Text style={styles.durationBadgeText}>~{durationLabel}</Text>
+                  </View>
+                )}
+                {!!hoursStr && (
+                  <View style={[styles.hoursBadge, openAtTime === false && styles.hoursBadgeClosed]}>
+                    <Text style={[styles.hoursBadgeText, openAtTime === false && styles.hoursBadgeClosedText]}>
+                      {openAtTime === false ? '🔴' : '🕒'} {hoursStr}
+                    </Text>
                   </View>
                 )}
                 {!!dietWarn && (
@@ -1972,6 +1988,17 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
   },
   durationBadgeText: { fontSize: 11, color: colors.muted, fontWeight: '600' },
+  hoursBadge: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    backgroundColor: '#eef2f6',
+    borderWidth: 1,
+    borderColor: '#cdd7e1',
+  },
+  hoursBadgeText: { fontSize: 11, color: '#516072', fontWeight: '600' },
+  hoursBadgeClosed: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
+  hoursBadgeClosedText: { color: '#dc2626', fontWeight: '800' },
   dietWarnBadge: {
     borderRadius: radius.full,
     paddingHorizontal: spacing.sm,

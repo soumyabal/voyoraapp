@@ -28,6 +28,7 @@
 import { timeToMin, minToTime } from './slots';
 import { estimateDuration, validateTrip } from './tripValidator';
 import { travelLeg } from './geo';
+import { weekdayOf } from './hours';
 
 // Substantial activities allowed per day, by pace. Meals/notes/stays don't count.
 const PACE_CAP = { relaxed: 3, moderate: 4, packed: 6 };
@@ -67,15 +68,6 @@ const MEAL_CHECK = {
   dinner:    [17 * 60 + 30,  21 * 60],
 };
 const MEAL_ORDER = { breakfast: 0, lunch: 1, dinner: 2 };
-
-// Local weekday (0=Sun…6=Sat) for a 'YYYY-MM-DD' string; null if unparseable.
-// Parsed field-by-field so it stays in local time (new Date('YYYY-MM-DD') is UTC).
-function weekdayOf(date) {
-  if (!date || typeof date !== 'string') return null;
-  const [y, m, d] = date.split('-').map(Number);
-  if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d).getDay();
-}
 
 // Which meals a place (compact openHours: [{d,o,c}] in minutes) is open for on
 // weekday `wd`. Returns null when hours are unknown (so the caller falls back to

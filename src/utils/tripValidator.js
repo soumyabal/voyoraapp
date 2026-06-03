@@ -27,6 +27,7 @@
  */
 
 import { travelLeg, formatKm } from './geo';
+import { weekdayOf, isOpenAt, hoursLabel } from './hours';
 
 // ─── Dietary conflict patterns ────────────────────────────────────
 const MEAT_RE = /\b(beef|pork|lamb|chicken|mutton|fish|prawn|shrimp|seafood|lobster|crab|oyster|sashimi|sushi|steak|burger|bbq|barbecue|bacon|ham|salami|pepperoni|chorizo|meat|non.?veg)\b/i;
@@ -508,6 +509,27 @@ function validateDay(day, dayIndex, families = []) {
       actIds:   cityTagged.map(a => a.id),
     });
   }
+
+  // ── Rule 13: Scheduled while the venue is closed ──
+  // Uses the hours of operation captured from Discover. Only attractions and
+  // restaurants are checked; unknown hours stay silent (isOpenAt → null).
+  const venueWd = weekdayOf(day.date);
+  timeline.forEach(({ act, startMin }) => {
+    if (act.type !== 'activity' && act.type !== 'food') return;
+    if (isOpenAt(act.openHours, venueWd, startMin) !== false) return;   // open / unknown
+    const lbl = hoursLabel(act.openHours, venueWd);
+    warnings.push({
+      type:     'closed_venue',
+      severity: 'warning',
+      icon:     '🔒',
+      title:    'Likely closed then',
+      message:  `"${act.name}" looks closed at ${act.time}.` +
+                (lbl && lbl !== 'Closed' ? ` It's open ${lbl} that day.` : ' It looks closed that day.'),
+      hint:     'Move it into the venue’s opening hours, or double-check the schedule.',
+      dayIndex,
+      actIds:   [act.id],
+    });
+  });
 
   return warnings;
 }

@@ -23,6 +23,7 @@ import NewTripModal from '../modals/NewTripModal';
 import AuthModal from '../modals/AuthModal';
 import AddProfileModal from '../modals/AddProfileModal';
 import { colors, spacing, radius, typography, shadow } from '../theme';
+import { APP_NAME } from '../config';
 import { avatarColor, getAllMembers, fmt } from '../utils/helpers';
 import InfoBanner from '../components/ui/InfoBanner';
 import Icon from '../components/ui/Icon';
@@ -595,7 +596,7 @@ export default function HomeScreen({ navigation }) {
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
       >
         <View style={styles.heroNav}>
-          <Text style={styles.logo}>Voy<Text style={{ color: colors.yellow }}>ara</Text></Text>
+          <Text style={styles.logo}>{APP_NAME}</Text>
           {account.loggedIn ? (
             <TouchableOpacity style={styles.creditPill} onPress={() => setShowAuth(true)}>
               <Text style={styles.creditPillText}>

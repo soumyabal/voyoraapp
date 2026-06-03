@@ -4,6 +4,7 @@ import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import DiscoverModal from '../modals/DiscoverModal';
 import SetOriginModal from '../modals/SetOriginModal';
+import { APP_NAME } from '../config';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
@@ -73,7 +74,7 @@ function generateDayShareText(trip, day) {
   });
 
   if (dayCost > 0) text += `💰 Day estimate: ${fmtM(dayCost)}/person\n`;
-  text += `\n_Shared via Voyara_`;
+  text += `\n_Shared via ${APP_NAME}_`;
   return text;
 }
 

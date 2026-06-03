@@ -13,6 +13,7 @@
  */
 
 import { effectiveMember } from './helpers';
+import { APP_NAME } from '../config';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // Suggestion: { id, type, severity, day (optional), title, body, icon }
@@ -346,7 +347,7 @@ export function buildTripContext(trip, travelers = []) {
     ? trip.days.flatMap(d => d.activities).reduce((s, a) => s + (a.costPerPerson || 0) * allMembers.length, 0)
     : 0;
 
-  return `You are Jordan, a senior travel consultant at Voyara with 15 years of experience planning family trips. You have deep knowledge of North American destinations, family logistics, hotels, restaurants, and transport options.
+  return `You are Jordan, a senior travel consultant at ${APP_NAME} with 15 years of experience planning family trips. You have deep knowledge of North American destinations, family logistics, hotels, restaurants, and transport options.
 
 YOUR STYLE:
 - Warm and direct — like a knowledgeable friend, not a chatbot

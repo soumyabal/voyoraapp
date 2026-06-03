@@ -3,7 +3,7 @@ import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography } from '../theme';
-import { BYPASS_SUBSCRIPTION, PRO_MONTHLY_PRICE, RELEASE_FLAGS } from '../config';
+import { BYPASS_SUBSCRIPTION, PRO_MONTHLY_PRICE, RELEASE_FLAGS, APP_NAME } from '../config';
 
 const MODES = [
   { key: 'manual', flag: 'manualPlanner', icon: '✍️', label: 'Plan Manually',    desc: 'Build and edit your itinerary yourself',            color: colors.primary },
@@ -138,7 +138,7 @@ export default function ChangeModeModal({ visible, trip, onClose }) {
           {/* Upgrade panel — shown when AI selected but quota exhausted */}
           {selected === 'ai' && !canUseAIPlanner && (
             <View style={st.upgradePanel}>
-              <Text style={st.upgradeTitle}>🚀 Upgrade to Voyara Pro</Text>
+              <Text style={st.upgradeTitle}>🚀 Upgrade to {APP_NAME} Pro</Text>
               <Text style={st.upgradeSub}>
                 Unlimited AI trip plans · Unlimited AI trip reviews · {PRO_MONTHLY_PRICE}/month · Cancel anytime
               </Text>

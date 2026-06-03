@@ -11,6 +11,15 @@
  *   2. For development, provide it from a local safe source.
  *   3. For production, move API keys to a backend — never ship them in a mobile app.
  */
+// ─── App identity ───────────────────────────────────────────────────────────
+// The product's display name. Rename the app here (e.g. 'Voymiro') and it updates
+// everywhere it's shown to users and used in AI prompts — one line, no code hunt.
+// ⚠️ This does NOT (and must not) change two load-bearing identifiers:
+//    · the native app name in app.json
+//    · the AsyncStorage persist key 'voyara-storage' in src/store/index.js
+//      (changing that key wipes every existing user's saved trips).
+export const APP_NAME = 'Voyara';
+
 export const CLAUDE_API_KEY          = null;
 export const CLAUDE_MODEL            = 'claude-haiku-4-5-20251001';
 export const GOOGLE_PLACES_API_KEY   = 'AIzaSyCSNyoh6JVdOi2GxZmvmhTnRTk5SZ0X0SA';

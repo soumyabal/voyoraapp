@@ -16,7 +16,7 @@ import { colors, spacing, typography, radius } from '../theme';
 import Icon from '../components/ui/Icon';
 import { fmt, getAllMembers } from '../utils/helpers';
 import { exportTripAsPDF } from '../utils/exportPlan';
-import { RELEASE_FLAGS } from '../config';
+import { RELEASE_FLAGS, APP_NAME } from '../config';
 
 // AI tab removed — plan is triggered directly from header / People screen
 const TABS = [
@@ -76,7 +76,7 @@ export default function TripScreen({ navigation }) {
       `📅 ${fmt(trip.startDate)} – ${fmt(trip.endDate)}  (${totalDays} day${totalDays !== 1 ? 's' : ''})`,
       `👥 ${members.length} traveler${members.length !== 1 ? 's' : ''}${members.length ? ': ' + members.map(m => m.name).join(', ') : ''}`,
       '',
-      'Planned with Voyara 🗺️',
+      `Planned with ${APP_NAME} 🗺️`,
     ].join('\n');
     try { await Share.share({ message: text, title: trip.name }); } catch (_) {}
   };

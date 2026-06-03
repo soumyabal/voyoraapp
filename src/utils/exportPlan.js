@@ -10,6 +10,7 @@
 
 import { Alert } from 'react-native';
 import { getAllMembers, fmt, fmtM } from './helpers';
+import { APP_NAME } from '../config';
 
 // ─── Activity type metadata ───────────────────────────────────────────────────
 
@@ -241,7 +242,7 @@ function buildHTML(trip, travelers = []) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escHtml(trip.name)} — Voyara</title>
+  <title>${escHtml(trip.name)} — ${APP_NAME}</title>
   <style>${css}</style>
 </head>
 <body>
@@ -250,7 +251,7 @@ function buildHTML(trip, travelers = []) {
   <!-- Header -->
   <div class="header">
     <div class="header-left">
-      <div class="brand">Voyara · Trip Plan</div>
+      <div class="brand">${APP_NAME} · Trip Plan</div>
       <div class="trip-title">${escHtml(trip.emoji || '✈️')} ${escHtml(trip.name)}</div>
       <div class="trip-dest">📍 ${escHtml(trip.destination)}</div>
       <div class="trip-meta">
@@ -306,7 +307,7 @@ function buildHTML(trip, travelers = []) {
   <!-- Footer -->
   <div class="footer">
     <div>
-      <span class="footer-brand">Voyara</span> · Multi-family group travel planner
+      <span class="footer-brand">${APP_NAME}</span> · Multi-family group travel planner
     </div>
     <div>${escHtml(trip.name)} · ${fmt(trip.startDate)} – ${fmt(trip.endDate)}</div>
   </div>
@@ -416,7 +417,7 @@ function buildDayHTML(trip, day, dayIndex) {
 </head>
 <body>
 <div class="page">
-  <div class="brand">Voyara · ${escHtml(trip.name)}</div>
+  <div class="brand">${APP_NAME} · ${escHtml(trip.name)}</div>
   <div class="day-title">${escHtml(day.label)}</div>
   <div class="day-meta">📅 ${fmt(day.date)} · 📍 ${escHtml(trip.destination)}</div>
   <div class="families">${familiesHTML}</div>
@@ -431,7 +432,7 @@ function buildDayHTML(trip, day, dayIndex) {
       <div class="sum-label">${(day.activities || []).length} activities</div>
     </div>
   </div>
-  <div class="footer">Generated ${now} · Voyara multi-family travel planner</div>
+  <div class="footer">Generated ${now} · ${APP_NAME} multi-family travel planner</div>
 </div>
 </body>
 </html>`;

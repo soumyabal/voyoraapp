@@ -11,6 +11,7 @@
  */
 
 import { uid } from './helpers';
+import { APP_NAME } from '../config';
 
 // ─── Timing ───────────────────────────────────────────────────────────────────
 
@@ -224,7 +225,7 @@ export function buildSystemPrompt() {
     .map(([k, v]) => `  "${k}": ${v}`)
     .join('\n');
 
-  return `You are Voyara's AI travel planner. You create detailed, family-aware, day-by-day itineraries.
+  return `You are ${APP_NAME}'s AI travel planner. You create detailed, family-aware, day-by-day itineraries.
 
 ${DAY_STRUCTURE_RULES}
 

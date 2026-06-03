@@ -21,6 +21,7 @@ import { colors, spacing, radius, typography, shadow } from '../theme';
 import { uid } from '../utils/helpers';
 import { estimateDuration, formatDuration } from '../utils/tripValidator';
 import { geocodeAddress, reverseGeocode } from '../utils/places';
+import { APP_NAME } from '../config';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
 import { ModalHeader } from '../components/ui';
 
@@ -794,7 +795,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               <View style={s.costHint}>
                 <Text style={s.costHintText}>📊 {costHintText}</Text>
                 {costMode === 'per_family' && (
-                  <Text style={s.costHintSub}>Each family pays equally — the Voyara moat ✦</Text>
+                  <Text style={s.costHintSub}>Each family pays equally — the {APP_NAME} moat ✦</Text>
                 )}
                 {costMode === 'total' && (
                   <Text style={s.costHintSub}>Total shared cost — ideal for Airbnbs, vans, group tickets ✦</Text>

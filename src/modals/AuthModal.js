@@ -4,6 +4,7 @@ import useStore from '../store';
 import { colors, spacing, radius, typography } from '../theme';
 import { FormField, InfoBanner } from '../components/ui';
 import { useKeyboardOffset } from '../utils/useKeyboardOffset';
+import { APP_NAME } from '../config';
 
 const TAB_OPTIONS = [
   { key: 'signup', label: 'Create Account' },
@@ -51,7 +52,7 @@ export default function AuthModal({ visible, onClose, defaultTab = 'signup' }) {
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
               <Text style={styles.closeText}>✕</Text>
             </TouchableOpacity>
-            <Text style={styles.logo}>✈️ Voyara</Text>
+            <Text style={styles.logo}>✈️ {APP_NAME}</Text>
           </View>
 
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -104,7 +105,7 @@ export default function AuthModal({ visible, onClose, defaultTab = 'signup' }) {
               </TouchableOpacity>
             )}
 
-            <Text style={styles.footer}>By continuing you agree to Voyara's Terms of Service and Privacy Policy.</Text>
+            <Text style={styles.footer}>By continuing you agree to {APP_NAME}'s Terms of Service and Privacy Policy.</Text>
           </ScrollView>
         </View>
     </Modal>

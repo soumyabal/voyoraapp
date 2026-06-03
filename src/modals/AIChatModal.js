@@ -18,7 +18,7 @@ import {
 import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { analyzeItinerary, buildTripContext } from '../utils/aiAssist';
-import { CLAUDE_API_KEY, CLAUDE_MODEL, CLAUDE_API_URL, FREE_AI_REVIEW_USES, PRO_MONTHLY_PRICE, BYPASS_SUBSCRIPTION } from '../config';
+import { CLAUDE_API_KEY, CLAUDE_MODEL, CLAUDE_API_URL, FREE_AI_REVIEW_USES, PRO_MONTHLY_PRICE, BYPASS_SUBSCRIPTION, APP_NAME } from '../config';
 import { uid } from '../utils/helpers';
 
 // ─── Quick prompts ────────────────────────────────────────────────────────────
@@ -443,7 +443,7 @@ export default function AIChatModal({ visible, trip, onClose, initialMessage }) 
           {showUpgrade && (
             <View style={s.upgradeBanner}>
               <View style={{ flex: 1 }}>
-                <Text style={s.upgradeTitle}>Upgrade to Voyara Pro</Text>
+                <Text style={s.upgradeTitle}>Upgrade to {APP_NAME} Pro</Text>
                 <Text style={s.upgradeSub}>Unlimited AI chat · {PRO_MONTHLY_PRICE}/month · Cancel anytime</Text>
               </View>
               <TouchableOpacity style={s.upgradeBtn} onPress={() => { upgradeToPro(); setShowUpgrade(false); }}>

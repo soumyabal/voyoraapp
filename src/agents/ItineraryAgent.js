@@ -16,13 +16,13 @@
  *   (same shape as plannerAPI produces — zero changes to screens needed)
  */
 
-import { CLAUDE_API_KEY, CLAUDE_MODEL, CLAUDE_API_URL } from '../config';
+import { CLAUDE_API_KEY, CLAUDE_MODEL, CLAUDE_API_URL, APP_NAME } from '../config';
 import { uid } from '../utils/helpers';
 
 // ─── System prompt ─────────────────────────────────────────────────────────────
 
 function buildSystemPrompt() {
-  return `You are Voyara's ItineraryAgent — an expert multi-family travel planner.
+  return `You are ${APP_NAME}'s ItineraryAgent — an expert multi-family travel planner.
 
 Your job is to synthesise hotel options, activities, and transit data into a day-by-day itinerary.
 

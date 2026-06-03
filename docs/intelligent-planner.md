@@ -107,6 +107,11 @@ ordering. Pure function: returns sorted copies, never mutates, preserves notes/s
 | Transport with a set time | anchors the day | departures/arrivals fixed |
 | Everything else | flows from 09:00 | nearest-neighbour around the day's hotel |
 
+**Hours-aware placement.** A daytime stop is never placed before it opens (or after it
+closes): the slot search is bounded to the venue's open interval for that weekday, so a
+10 AM–7 PM spot lands at 10:00, not 09:00 — and re-arranging keeps it there. Unknown hours
+flow freely; closed-all-day falls back (the `closed_venue` check still flags it).
+
 **Travel-aware spacing.** The gap after each daytime stop is the *estimated travel time* to
 the next one (`geo.travelLeg`), so an arranged day already clears the `travel_time` rule
 instead of tripping it. No coords → a plain 15-min buffer.
@@ -198,7 +203,7 @@ member count** — not a shared average. Invariants (never break):
 | **Seen = persisted** | Opening a place's website marks it *seen*, stored per-trip (survives app restarts); a "↺ reset N seen" control clears it |
 | **Toggle** | The ✓ is a real toggle — tap to add, tap again to remove from the plan (and its linked expense) |
 | **Open on web** | A web button (🏨 for stays) opens the place's site to check rooms/menus/tickets |
-| **Explore nearby** | From an activity's details, "🧭 Explore nearby places" opens Discover's map biased ~5 mi around that stop, with a "Near {place} · Show all" banner |
+| **Explore nearby** | From an activity's details, "🧭 Explore nearby places" opens Discover's map **centred on that stop** (a ★ anchor in the middle, zoomed to street level) biased ~5 mi around it, with a "Near {place} · Show all" banner |
 | **Hours** | Each card shows its opening hours for the day being planned (red when closed) |
 | **Per-day scope** | Discover is scoped to the day you're adding to; costs auto-flow into the per-family split |
 | **Caching** | Session-wide Places cache (30-min TTL + in-flight dedupe) so day-by-day planning doesn't re-bill the same search; "See" paginates to ~60 results |

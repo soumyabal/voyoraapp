@@ -301,6 +301,25 @@ var ms=[],programmatic=true;  // ignore the load-time setView/fitBounds moves
 function clearMarkers(){ms.forEach(function(m){map.removeLayer(m)});ms=[];}
 // Metres from centre to a map corner = the radius the user is currently viewing.
 function viewRadius(){var c=map.getCenter();return Math.round(c.distanceTo(map.getBounds().getNorthEast()));}
+// Fit to the HEAT, not the outliers. A few far-flung results would zoom the whole
+// map out and pile the real cluster into a single dot. So: centre on the MEDIAN
+// point (robust to outliers), then fit only the nearest ~75% of points — the
+// dense core — while never showing more than a ~15-mile radius. A tight cluster
+// still gets a sensible max zoom so pins stay readable.
+var FIT_R=24140; // 15 miles in metres — hard cap on how far the fit can reach
+function fitDense(pts){
+  if(!pts.length)return;
+  if(pts.length===1){map.setView(pts[0],14);return;}
+  var la=pts.map(function(p){return p[0]}).sort(function(a,b){return a-b});
+  var ln=pts.map(function(p){return p[1]}).sort(function(a,b){return a-b});
+  var ctr=L.latLng(la[la.length>>1],ln[ln.length>>1]);
+  var byDist=pts.map(function(p){return [p,ctr.distanceTo(L.latLng(p[0],p[1]))];})
+                .sort(function(a,b){return a[1]-b[1];});
+  var keep=Math.max(2,Math.ceil(byDist.length*0.75));         // the densest 75%
+  var core=byDist.slice(0,keep).filter(function(x){return x[1]<=FIT_R;}).map(function(x){return x[0];});
+  if(core.length<2){map.setView(ctr,14);return;}
+  map.fitBounds(core,{padding:[40,40],maxZoom:16});
+}
 window.setData=function(data,fit){
   if(fit)programmatic=true;  // our own fit shouldn't trigger a "Search this area"
   clearMarkers();var pts2=[];
@@ -319,7 +338,7 @@ window.setData=function(data,fit){
   });
   // Re-fit only when asked (city/area/text change). Area searches DON'T fit —
   // they keep the user's current zoom (else searching a landmark zooms out).
-  if(fit&&pts2.length){if(pts2.length===1)map.setView(pts2[0],14);else map.fitBounds(pts2,{padding:[44,44]});}
+  if(fit&&pts2.length){fitDense(pts2);}
   setTimeout(function(){programmatic=false;},500);
 };
 // Centre + zoom in on a place (tapping its carousel card), and highlight its

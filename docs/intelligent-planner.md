@@ -196,7 +196,7 @@ member count** — not a shared average. Invariants (never break):
 
 | Behaviour | Rule |
 |---|---|
-| **Sort** | Results ranked by rating (and footfall via `userRatingCount`) — best first |
+| **Sort** | Results ranked by `placeScore` = rating + 0.5·log₁₀(1 + review count) — quality *and* popularity (footfall), so a 5.0 with 3 reviews can't outrank a proven 4.7 with thousands |
 | **Map heat-zoom** | Fit to the **dense core**, not outliers: centre on the median point, fit the nearest ~75% within a ~15-mile cap, max zoom 16. A few far-flung results can't blow the view out to a county-wide blob |
 | **Three states** | **Available** = colour pin + rating · **Seen on web** = grey + rating · **Added to plan** = grey + rating + ✓. Greying what's handled fades a busy map to just the options still worth a look |
 | **Added = live** | "Added" is derived live from the trip's activities (by name), so it's always correct and reactive — never a stale snapshot |
@@ -263,6 +263,21 @@ member count** — not a shared average. Invariants (never break):
 | 7 | **Multi-city sequencing** | Order days so inter-city hops are minimised |
 | 8 | **Gemini destination intelligence** | Replace mock activity DB with live "what's worth doing" |
 | 9 | **LangGraph backend** | Streaming, resumable, server-side rule pipeline (keys off device) |
+| 10 | **Intensity / fatigue spacing** | Don't stack physically demanding stops (long hike + theme park) — a placement nudge + a `tiring_day` check |
+| 11 | **Distance-weighted ranking** | Add a `− w·distance` term to `placeScore` when there's a focus point (explore-nearby) so closer options rank higher |
+
+### Evaluated & intentionally *not* adopted
+
+So we don't re-litigate these — they were considered and rejected for **this** app (RN/Expo
+Go, on-device, ~5 stops/day, local store):
+
+- **TSP solver / Google OR-Tools** — native C++; cannot run in Expo Go, and nearest-neighbour
+  is within rounding error of optimal at ~5 stops. *Only* reconsider for the Phase-2 Python
+  backend, never on-device.
+- **K-Means / DBSCAN day-clustering** — heavy, and it fights the chosen **day-by-day,
+  user-driven** model. We cluster lightly by `city` tag + flag `multi_city_day` instead.
+- **Server-side ledger schema** — the split *math* (greedy debtor/creditor matching) already
+  lives in `costs.js calcSettlements`; we don't need a DB to do it.
 
 ---
 

@@ -135,6 +135,16 @@ function compactHours(oh) {
   return out.length ? out : null;
 }
 
+// Deterministic relevance score for ranking Discover results: quality (rating,
+// 0–5) + popularity (log of review count, damped so a 50k-review landmark doesn't
+// bury a great 4.9, but a 5.0 with 3 reviews can't outrank a proven 4.7 with
+// thousands). Higher = better. Distance is handled separately by the map. Pure.
+function placeScore(p) {
+  const rating  = p?.rating || 0;
+  const reviews = p?.ratingCount || 0;
+  return rating + Math.log10(1 + reviews) * 0.5;
+}
+
 function mapPlace(p) {
   const place = {
     name:p.displayName?.text??'Place', address:p.formattedAddress??'',
@@ -507,16 +517,19 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
   // Merged, layer-filtered results feeding the list, carousel and map. Free-text
   // mode searches across all types then filters by enabled layers; default mode
-  // concatenates each enabled layer's results (deduped, best-rated first).
+  // concatenates each enabled layer's results (deduped). Both rank by placeScore —
+  // quality + popularity (footfall), so a 5.0 with 3 reviews doesn't outrank a
+  // proven 4.7 with thousands.
   const results = React.useMemo(() => {
-    if (searchText.trim()) {
-      return textResults.filter(p => layers[TYPE_TO_LAYER[p.activityType]] !== false);
-    }
-    const seen = new Set();
-    return LAYERS.filter(l => layers[l.key])
-      .flatMap(l => layerData[l.key] || [])
-      .filter(p => { if (seen.has(p.name)) return false; seen.add(p.name); return true; })
-      .sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    const base = searchText.trim()
+      ? textResults.filter(p => layers[TYPE_TO_LAYER[p.activityType]] !== false)
+      : (() => {
+          const seen = new Set();
+          return LAYERS.filter(l => layers[l.key])
+            .flatMap(l => layerData[l.key] || [])
+            .filter(p => { if (seen.has(p.name)) return false; seen.add(p.name); return true; });
+        })();
+    return base.slice().sort((a, b) => placeScore(b) - placeScore(a));
   }, [searchText, textResults, layerData, layers]);
 
   useEffect(() => {

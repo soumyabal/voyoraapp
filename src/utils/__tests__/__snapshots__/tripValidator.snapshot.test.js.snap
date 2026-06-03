@@ -1,0 +1,175 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`validateTrip — golden snapshots (characterization) allClear: full warnings array is stable 1`] = `[]`;
+
+exports[`validateTrip — golden snapshots (characterization) closedVenue: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "Gallery",
+    ],
+    "dayIndex": 0,
+    "hint": "Move it into the venue’s opening hours, or double-check the schedule.",
+    "icon": "🔒",
+    "message": ""Gallery" looks closed at 20:00. It's open 9 AM–5 PM that day.",
+    "severity": "error",
+    "title": "Likely closed then",
+    "type": "closed_venue",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) longJourney: full warnings array is stable 1`] = `
+[
+  {
+    "dayIndex": 1,
+    "hint": "Add arrival/departure transport, hotel check-in, or any planned activities.",
+    "icon": "📅",
+    "message": "Day 2 (2026-06-13) has nothing planned.",
+    "severity": "info",
+    "title": "No activities planned",
+    "type": "empty_day",
+  },
+  {
+    "actIds": [
+      "Flight",
+      "Museum",
+      "Dinner",
+    ],
+    "dayIndex": 0,
+    "hint": "Move the other activities to Day 2.",
+    "icon": "✈️",
+    "impactedActivities": [
+      {
+        "id": "Museum",
+        "name": "Museum",
+        "suggestedDayIndex": 1,
+        "suggestedDayLabel": "Day 2",
+        "time": "15:00",
+      },
+      {
+        "id": "Dinner",
+        "name": "Dinner",
+        "suggestedDayIndex": 1,
+        "suggestedDayLabel": "Day 2",
+        "time": "19:00",
+      },
+    ],
+    "message": ""Flight" takes 7h. The 2 other activities on this day may not be reachable.",
+    "severity": "error",
+    "title": "Long journey — other activities affected",
+    "type": "long_journey_conflict",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) multiCity: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "Louvre",
+      "Basilica",
+    ],
+    "dayIndex": 0,
+    "hint": "Keep each city to its own day, or add the inter-city transport.",
+    "icon": "🗺️",
+    "message": "This day mixes Paris and Lyon. Travelling between cities mid-day can eat hours.",
+    "severity": "warning",
+    "title": "Activities in multiple cities",
+    "type": "multi_city_day",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) overlapBig: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "Tour",
+      "Show",
+    ],
+    "dayIndex": 0,
+    "hint": "Move "Show" to 12:00 or later.",
+    "icon": "⏱",
+    "impactedActivities": [
+      {
+        "id": "Show",
+        "name": "Show",
+        "suggestedTime": "12:00",
+        "time": "10:00",
+      },
+    ],
+    "message": ""Tour" typically takes 3h, overlapping with "Show" by ~120 min.",
+    "moveActId": "Show",
+    "moveActName": "Show",
+    "severity": "warning",
+    "suggestedTime": "12:00",
+    "title": "Schedule overlap",
+    "type": "overlap",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) travelTight: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "Spot A",
+      "Spot B",
+    ],
+    "dayIndex": 0,
+    "hint": "Start "Spot B" around 11:30 or later, or add the drive between them.",
+    "icon": "🚗",
+    "impactedActivities": [
+      {
+        "id": "Spot B",
+        "name": "Spot B",
+        "suggestedTime": "11:30",
+        "time": "11:10",
+      },
+    ],
+    "message": ""Spot B" starts 10 min after "Spot A" ends, but they're ~10.0 km apart (~30 min drive).",
+    "moveActId": "Spot B",
+    "moveActName": "Spot B",
+    "severity": "info",
+    "suggestedTime": "11:30",
+    "title": "Tight travel time",
+    "type": "travel_time",
+  },
+]
+`;
+
+exports[`validateTrip — invariants that must survive any refactor summary counts are locked per fixture (survives jest -u) 1`] = `
+{
+  "allClear": {
+    "errors": 0,
+    "infos": 0,
+    "warnings": 0,
+  },
+  "closedVenue": {
+    "errors": 1,
+    "infos": 0,
+    "warnings": 0,
+  },
+  "longJourney": {
+    "errors": 1,
+    "infos": 1,
+    "warnings": 0,
+  },
+  "multiCity": {
+    "errors": 0,
+    "infos": 0,
+    "warnings": 1,
+  },
+  "overlapBig": {
+    "errors": 0,
+    "infos": 0,
+    "warnings": 1,
+  },
+  "travelTight": {
+    "errors": 0,
+    "infos": 1,
+    "warnings": 0,
+  },
+}
+`;

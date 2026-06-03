@@ -150,8 +150,12 @@ Surfaces:
   "only N min gap" / "overlaps" when there isn't time to travel — *the same call the rule
   makes, so the cue and the warning always agree*. Legs bridge across time-of-day sections.
 
-> Phase 2: swap `travelLeg` for a real routing call (OSRM / Google Routes) without touching
-> callers — same shape in, same shape out.
+> **Reliability (be honest with users):** this is a free *estimate*, not routing. The
+> displayed km is **straight-line**; the minutes apply the 1.3 detour + a fixed speed. It's
+> directionally trustworthy (good for the `travel_time` check — close vs. far) but NOT
+> minute-accurate, and it **under**estimates around rivers/lakes/highways (e.g. the Dells
+> river). Phase 2: swap `travelLeg` for a real routing call (OSRM / Google Routes) without
+> touching callers — same shape in, same shape out — for true road distance + time + traffic.
 
 ---
 

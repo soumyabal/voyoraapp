@@ -429,7 +429,10 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     snackTimer.current = setTimeout(() => setSnack(null), 4500);
   };
 
-  // ✨ Auto-arrange THIS day — re-time/order in place, with Undo.
+  // ✨ Auto-arrange THIS day, then re-check it with the SAME rule engine the
+  // Trip Check uses (validateTrip) — scheduleDay PLACES, validateTrip CHECKS, and
+  // both share estimateDuration + the window thresholds. If anything's still off,
+  // let the user choose: review now, or keep planning and fix it later.
   const arrangeDay = () => {
     const day = trip.days[currentDay];
     if (!day) return;
@@ -437,8 +440,29 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     if (schedulable.length < 2) return;   // nothing to rearrange
     const prev = day.activities;
     const dayRole = currentDay === trip.days.length - 1 ? 'departure' : 'normal';
-    setDayActivities(trip.id, currentDay, scheduleDay(day.activities, { dayRole }));
-    showUndoAction('Day arranged', 'sparkles', () => setDayActivities(trip.id, currentDay, prev));
+    const scheduled = scheduleDay(day.activities, { dayRole });
+    setDayActivities(trip.id, currentDay, scheduled);
+
+    const arranged = { ...trip, days: trip.days.map((d, i) => i === currentDay ? { ...d, activities: scheduled } : d) };
+    const issues = validateTrip(arranged).filter(w => w.dayIndex === currentDay && w.severity !== 'info');
+    const undo = () => setDayActivities(trip.id, currentDay, prev);
+
+    if (issues.length > 0) {
+      Alert.alert(
+        '✨ Day arranged',
+        `Trip Check flagged ${issues.length} thing${issues.length !== 1 ? 's' : ''} on this day:\n\n` +
+          issues.slice(0, 4).map(w => `${w.icon}  ${w.title}`).join('\n') +
+          (issues.length > 4 ? '\n…' : '') +
+          '\n\nFix them now, or keep planning and sort it out later?',
+        [
+          { text: 'Undo', style: 'destructive', onPress: undo },
+          { text: 'Later', style: 'cancel' },
+          { text: 'Review now', onPress: () => onCheckTrip && onCheckTrip() },
+        ],
+      );
+    } else {
+      showUndoAction('Day arranged · looks good', 'sparkles', undo);
+    }
   };
 
   // Direct-status setters for swipe actions (toggle off if already set) + undo toast.

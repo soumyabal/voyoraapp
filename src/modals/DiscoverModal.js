@@ -186,16 +186,19 @@ function PlaceCard({ place, onAdd, added, selectMode, selected, onToggle }) {
 }
 
 // ─── Photo card for the map carousel (mindtrip-style) ────────────────
-function PlaceMapCard({ place, checked, selected, onToggle }) {
+// Tapping the card focuses the map on the place; the check circle toggles the
+// basket (separate touch targets so they don't fight).
+function PlaceMapCard({ place, checked, selected, onToggle, onFocus }) {
   return (
-    <TouchableOpacity style={[mc.card, selected && mc.cardSel]} activeOpacity={0.9} onPress={() => onToggle(place)}>
+    <TouchableOpacity style={[mc.card, selected && mc.cardSel]} activeOpacity={0.9} onPress={() => onFocus && onFocus(place)}>
       <View>
         {place.photo
           ? <Image source={{ uri: place.photo }} style={mc.photo} />
           : <View style={[mc.photo, mc.photoPh]}><Icon name={TYPE_ICON[place.activityType]||'activity'} size={26} color={TYPE_TINT[place.activityType]||colors.subtle} /></View>}
-        <View style={[mc.check, checked && mc.checkOn]}>
+        <TouchableOpacity style={[mc.check, checked && mc.checkOn]} onPress={() => onToggle(place)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.8}>
           <Icon name={checked ? 'check' : 'add'} size={16} color={checked ? '#fff' : colors.accent} />
-        </View>
+        </TouchableOpacity>
       </View>
       <View style={mc.body}>
         <Text style={mc.name} numberOfLines={1}>{place.name}</Text>
@@ -256,6 +259,20 @@ window.setData=function(data,fit){
   if(fit&&pts2.length){if(pts2.length===1)map.setView(pts2[0],14);else map.fitBounds(pts2,{padding:[44,44]});}
   setTimeout(function(){programmatic=false;},500);
 };
+// Centre + zoom in on a place (tapping its carousel card), and highlight its
+// pin. setView is a programmatic move so it must NOT trigger "Search this area".
+window.focusPin=function(lat,lng){
+  programmatic=true;
+  var best=null,bd=1e9;
+  ms.forEach(function(m){var ll=m.getLatLng();var d=Math.abs(ll.lat-lat)+Math.abs(ll.lng-lng);if(d<bd){bd=d;best=m;}});
+  var z=Math.max(map.getZoom(),15);  // zoom IN to street level, never out
+  map.setView(best?best.getLatLng():[lat,lng],z,{animate:true});
+  setTimeout(function(){
+    ms.forEach(function(x){if(x._icon)x._icon.firstChild.classList.remove('sel')});
+    if(best&&best._icon)best._icon.firstChild.classList.add('sel');
+    programmatic=false;
+  },350);
+};
 // Report user pan/zoom (with the viewed radius) so RN can offer "Search this
 // area" scoped to what's actually on screen. Skip our own programmatic moves.
 function reportMove(){if(programmatic)return;var c=map.getCenter();window.ReactNativeWebView.postMessage(JSON.stringify({type:'moved',lat:c.lat,lng:c.lng,radius:viewRadius()}));}
@@ -270,7 +287,7 @@ window.ReactNativeWebView.postMessage(JSON.stringify({type:'ready'}));
 // Geographic context pane — merged, layer-coloured pins. The map persists; only
 // markers update (via injectJavaScript → window.setData). Adding still happens
 // in the carousel/list beneath, so the map itself is browse + anchor-search.
-function DiscoverMap({ places, onMoved, onSelect, onSearchHere, onLongPress, showSearchArea, onSearchArea, fitToken }) {
+function DiscoverMap({ places, onMoved, onSelect, onSearchHere, onLongPress, showSearchArea, onSearchArea, fitToken, focusTarget }) {
   const ref = useRef(null);
   const lastFit = useRef(-1);
   const readyRef = useRef(false);   // don't push (or consume fitToken) until the map has loaded
@@ -288,6 +305,12 @@ function DiscoverMap({ places, onMoved, onSelect, onSearchHere, onLongPress, sho
   };
   const onReady = () => { readyRef.current = true; push(); };
   useEffect(() => { push(); }, [ptsJSON, fitToken]);
+  // Tapping a carousel card → centre + zoom the map on that place. `n` is a
+  // nonce so re-tapping the SAME card re-centres.
+  useEffect(() => {
+    if (!readyRef.current || !focusTarget || focusTarget.lat == null) return;
+    ref.current?.injectJavaScript(`window.focusPin&&window.focusPin(${focusTarget.lat},${focusTarget.lng});true;`);
+  }, [focusTarget?.n]);
 
   return (
     <View style={s.mapPane}>
@@ -330,7 +353,9 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [areaSearch, setAreaSearch] = useState(null);   // committed map area; sticky scope for searches
   const [fitToken,   setFitToken]   = useState(0);      // bumped only when the map SHOULD re-fit (city/area/text — NOT layer toggles)
   const [selectedName, setSelectedName] = useState(null); // pin-tapped place (highlight + scroll carousel)
+  const [focusTarget,  setFocusTarget]  = useState(null); // card-tapped place → centre the map ({lat,lng,n})
   const carouselRef = useRef(null);
+  const focusSeq    = useRef(0);
   const pendingCloseRef = useRef(false); // iOS: close Discover after the preview sheet dismisses
   const [selectMode, setSelectMode] = useState(false);  // basket multi-select
   const [basket,     setBasket]     = useState([]);      // chosen places (city-tagged)
@@ -384,7 +409,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setLayers({ see: true, eat: true, stay: true });
     setLayerData({ see: [], eat: [], stay: [] }); setTextResults([]);
     setSelectMode(false); setBasket([]); setPreview(null); setArrangeHints({}); setEditingRow(null); setViewMode('list');
-    setAreaSearch(null); setMapMoved(false); setMapCenter(null); setSelectedName(null);
+    setAreaSearch(null); setMapMoved(false); setMapCenter(null); setSelectedName(null); setFocusTarget(null);
     setFitToken(t => t + 1);
     setCities(parsed.length ? parsed : (destination ? [destination] : []));
     setActiveCity(start);
@@ -468,6 +493,12 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
       setSelectedName(place.name);
       try { carouselRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 }); } catch (_) {}
     }
+  };
+  // Carousel card tapped → highlight it and centre/zoom the map on that place.
+  const handleCarouselFocus = place => {
+    if (place.lat == null || place.lng == null) return;
+    setSelectedName(place.name);
+    setFocusTarget({ lat: place.lat, lng: place.lng, n: ++focusSeq.current });
   };
 
   const handleSearchChange = text => { setSearchText(text); setFitToken(t => t + 1); };   // debounced by the load effect
@@ -689,7 +720,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <View style={{ flex: 1 }}>
               <DiscoverMap places={results} onMoved={handleMapMoved} onSelect={handleMapSelect}
                 onSearchHere={pt => searchAround(pt)} onLongPress={pt => searchAround(pt)}
-                fitToken={fitToken}
+                fitToken={fitToken} focusTarget={focusTarget}
                 showSearchArea={mapMoved} onSearchArea={searchThisArea} />
               {loading && (
                 <View style={s.mapLoadPill} pointerEvents="none">
@@ -703,7 +734,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
                 getItemLayout={(_,i)=>({length:198,offset:198*i+spacing.md,index:i})}
                 onScrollToIndexFailed={()=>{}}
                 renderItem={({item}) => (
-                  <PlaceMapCard place={item} checked={basketHas(item.name)} selected={selectedName===item.name} onToggle={toggleBasket}/>
+                  <PlaceMapCard place={item} checked={basketHas(item.name)} selected={selectedName===item.name} onToggle={toggleBasket} onFocus={handleCarouselFocus}/>
                 )}
               />
             </View>

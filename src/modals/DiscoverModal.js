@@ -146,6 +146,30 @@ async function fetchPlaces(textQuery, bias = null) {
   } catch(e) { console.warn('[DiscoverModal]',e.message); return []; }
 }
 
+// Session-wide Places cache (module scope = survives Discover re-opens). Planning
+// day-by-day in the same city no longer re-bills the same search; calls scale
+// with distinct (query × area), not with how many times Discover is opened.
+// A 30-min TTL keeps results fresh-ish; in-flight dedupe collapses concurrent
+// identical requests (e.g. rapid layer toggles) into one network call.
+const PLACES_TTL_MS = 30 * 60 * 1000;
+const placesCache    = new Map();   // key -> { ts, places }
+const placesInflight = new Map();   // key -> Promise<places>
+
+function placesKey(q, bias) {
+  return q + (bias ? `@${bias.lat.toFixed(2)},${bias.lng.toFixed(2)}` : '');
+}
+async function cachedPlaces(q, bias) {
+  const key = placesKey(q, bias);
+  const hit = placesCache.get(key);
+  if (hit && Date.now() - hit.ts < PLACES_TTL_MS) return hit.places;
+  if (placesInflight.has(key)) return placesInflight.get(key);
+  const p = fetchPlaces(q, bias)
+    .then(places => { placesCache.set(key, { ts: Date.now(), places }); placesInflight.delete(key); return places; })
+    .catch(e => { placesInflight.delete(key); throw e; });
+  placesInflight.set(key, p);
+  return p;
+}
+
 function PlaceCard({ place, onAdd, added, selectMode, selected, onToggle }) {
   const isOn = selectMode ? selected : added;
   return (
@@ -381,7 +405,6 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [newCity,        setNewCity]        = useState('');
   const searchTimeout = useRef(null);
   const filterTimeout = useRef(null);
-  const cacheRef      = useRef(new Map());   // query string -> places[] (per-session)
 
   const destination   = trip?.destination ?? '';
   const families      = trip?.families ?? [];
@@ -414,18 +437,11 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setCities(parsed.length ? parsed : (destination ? [destination] : []));
     setActiveCity(start);
     setCityPickerOpen(false); setNewCity('');
-    cacheRef.current.clear();
     setActiveFilters(FILTER_OPTS.filter(f => allDietary.includes(f.key)).map(f => f.key));
   }, [visible]);
 
-  // One fetch per unique query+area, cached per session.
-  const cachedFetch = async (q, bias) => {
-    const key = q + (bias ? `@${bias.lat.toFixed(2)},${bias.lng.toFixed(2)}` : '');
-    if (cacheRef.current.has(key)) return cacheRef.current.get(key);
-    const places = await fetchPlaces(q, bias);
-    cacheRef.current.set(key, places);
-    return places;
-  };
+  // Delegates to the module-level, session-wide cache (survives Discover opens).
+  const cachedFetch = (q, bias) => cachedPlaces(q, bias);
 
   // Load whatever the current scope needs: free-text → one cross-type search;
   // otherwise → each enabled layer's default query (parallel). `area` biases to

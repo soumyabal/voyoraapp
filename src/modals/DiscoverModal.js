@@ -304,7 +304,7 @@ const MAP_TINT = { food: '#e17055', stay: '#6c5ce7', activity: '#0e9f6e' };
 // panning/area-searching updates pins without reloading the map + OSM tiles.
 // Pins are coloured per layer (See green / Eat orange / Stay purple). Gestures:
 // drag → "moved", pin tap → "select", double-tap → "searchhere", long-press
-// (contextmenu) → "longpress".
+// (contextmenu) → drops a draggable pin + "droppin"; dragging it re-posts "droppin".
 function buildMapHTML() {
   return `<!DOCTYPE html><html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
@@ -312,7 +312,9 @@ function buildMapHTML() {
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>html,body,#map{height:100%;margin:0;background:#eee}
 .pin{display:flex;align-items:center;justify-content:center;min-width:30px;height:24px;padding:0 7px;border-radius:13px;color:#fff;font:700 12px -apple-system,system-ui,sans-serif;box-shadow:0 1px 5px rgba(0,0,0,.35);border:2px solid #fff;white-space:nowrap}
-.pin.sel{transform:scale(1.3);z-index:1000!important}</style></head><body><div id="map"></div>
+.pin.sel{transform:scale(1.3);z-index:1000!important}
+.droppin{position:relative;width:22px;height:22px;background:#e23b35;border:2.5px solid #fff;border-radius:50% 50% 50% 0;box-shadow:0 2px 7px rgba(0,0,0,.5);transform:rotate(-45deg)}
+.droppin::after{content:'';position:absolute;top:6px;left:6px;width:8px;height:8px;background:#fff;border-radius:50%}</style></head><body><div id="map"></div>
 <script>
 var TINT=${JSON.stringify(MAP_TINT)};
 var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([20,0],2);
@@ -386,13 +388,26 @@ window.centerOn=function(lat,lng,z){
   map.setView([lat,lng],z||14,{animate:false});
   setTimeout(function(){programmatic=false;},450);
 };
+// A draggable "drop pin" for a stop that isn't on the map (Airbnb, a rental).
+// Long-press places it; the user can drag to fine-tune. Each placement/drag posts
+// the coords back so RN can mirror them + reverse-geocode an address to confirm.
+var dropM=null;
+var DROP_ICON=L.divIcon({className:'',html:'<div class="droppin"></div>',iconSize:[24,24],iconAnchor:[12,24]});
+function placeDrop(lat,lng){
+  if(dropM){dropM.setLatLng([lat,lng]);}
+  else{
+    dropM=L.marker([lat,lng],{icon:DROP_ICON,draggable:true,zIndexOffset:3000,autoPan:true}).addTo(map);
+    dropM.on('dragend',function(){var ll=dropM.getLatLng();window.ReactNativeWebView.postMessage(JSON.stringify({type:'droppin',lat:ll.lat,lng:ll.lng}));});
+  }
+}
+window.clearDropPin=function(){if(dropM){map.removeLayer(dropM);dropM=null;}};
 // Report user pan/zoom (with the viewed radius) so RN can offer "Search this
 // area" scoped to what's actually on screen. Skip our own programmatic moves.
 function reportMove(){if(programmatic)return;var c=map.getCenter();window.ReactNativeWebView.postMessage(JSON.stringify({type:'moved',lat:c.lat,lng:c.lng,radius:viewRadius()}));}
 map.on('dragend',reportMove);
 map.on('zoomend',reportMove);
 map.on('dblclick',function(e){window.ReactNativeWebView.postMessage(JSON.stringify({type:'searchhere',lat:e.latlng.lat,lng:e.latlng.lng,radius:viewRadius()}));});
-map.on('contextmenu',function(e){window.ReactNativeWebView.postMessage(JSON.stringify({type:'longpress',lat:e.latlng.lat,lng:e.latlng.lng,radius:viewRadius()}));});
+map.on('contextmenu',function(e){placeDrop(e.latlng.lat,e.latlng.lng);window.ReactNativeWebView.postMessage(JSON.stringify({type:'droppin',lat:e.latlng.lat,lng:e.latlng.lng}));});
 window.ReactNativeWebView.postMessage(JSON.stringify({type:'ready'}));
 </script></body></html>`;
 }
@@ -400,7 +415,7 @@ window.ReactNativeWebView.postMessage(JSON.stringify({type:'ready'}));
 // Geographic context pane — merged, layer-coloured pins. The map persists; only
 // markers update (via injectJavaScript → window.setData). Adding still happens
 // in the carousel/list beneath, so the map itself is browse + anchor-search.
-function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearchHere, onLongPress, showSearchArea, onSearchArea, fitToken, focusTarget, centerOn }) {
+function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearchHere, onDropPin, clearPinToken, showSearchArea, onSearchArea, fitToken, focusTarget, centerOn }) {
   const ref = useRef(null);
   const lastFit = useRef(-1);
   const readyRef = useRef(false);   // don't push (or consume fitToken) until the map has loaded
@@ -433,6 +448,11 @@ function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearc
     if (!readyRef.current || !focusTarget || focusTarget.lat == null) return;
     ref.current?.injectJavaScript(`window.focusPin&&window.focusPin(${focusTarget.lat},${focusTarget.lng});true;`);
   }, [focusTarget?.n]);
+  // Parent bumps clearPinToken to remove the drop pin (Cancel / after using it).
+  useEffect(() => {
+    if (!readyRef.current || !clearPinToken) return;
+    ref.current?.injectJavaScript(`window.clearDropPin&&window.clearDropPin();true;`);
+  }, [clearPinToken]);
 
   return (
     <View style={s.mapPane}>
@@ -444,7 +464,7 @@ function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearc
             if (d.type === 'moved') onMoved && onMoved({ lat: d.lat, lng: d.lng, radius: d.radius });
             else if (d.type === 'select' && withCoords[d.index]) onSelect && onSelect(withCoords[d.index]);
             else if (d.type === 'searchhere') onSearchHere && onSearchHere({ lat: d.lat, lng: d.lng, radius: d.radius });
-            else if (d.type === 'longpress') onLongPress && onLongPress({ lat: d.lat, lng: d.lng, radius: d.radius });
+            else if (d.type === 'droppin') onDropPin && onDropPin({ lat: d.lat, lng: d.lng });
             else if (d.type === 'ready') onReady();
           } catch (_) {}
         }} />
@@ -483,6 +503,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [fitToken,   setFitToken]   = useState(0);      // bumped only when the map SHOULD re-fit (city/area/text — NOT layer toggles)
   const [selectedName, setSelectedName] = useState(null); // pin-tapped place (highlight + scroll carousel)
   const [focusTarget,  setFocusTarget]  = useState(null); // card-tapped place → centre the map ({lat,lng,n})
+  const [pendingPin,   setPendingPin]   = useState(null); // dropped map pin awaiting confirm ({lat,lng,address,geocoding})
+  const [clearPinToken,setClearPinToken]= useState(0);    // bumped to tell the map to remove the drop pin
   const carouselRef = useRef(null);
   const focusSeq    = useRef(0);
   const [layers,      setLayers]      = useState({ see: true, eat: true, stay: true }); // multi-select map layers
@@ -667,19 +689,28 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setMapMoved(false);
     setAreaSearch({ lat: pt.lat, lng: pt.lng, radius: clampRadius(pt.radius) });
   };
-  // Long-press the map → drop a pin for an off-Places stop (Airbnb, a friend's
-  // place). Hands the coords to the Manual editor, which schedules it like any stop.
-  const dropPin = pt => {
-    if (!onAddManual || pt.lat == null || pt.lng == null) return;
-    Alert.alert(
-      'Add a stop here?',
-      "Drop a pin for a place that isn't on the map — an Airbnb, a rental, a friend's house. You'll name it next; the location is saved so it schedules with the day.",
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Add a stop', onPress: () => onAddManual({ lat: pt.lat, lng: pt.lng }) },
-      ],
-    );
+  // Long-press the map drops a draggable pin (placed in the WebView). We mirror its
+  // coords here + reverse-geocode an address so the user can see/adjust the spot
+  // before committing — then "Use this spot" hands it to the Manual editor.
+  const handleDropPin = ({ lat, lng }) => {
+    if (lat == null || lng == null) return;
+    setPendingPin({ lat, lng, address: '', geocoding: true });
+    const same = cur => cur && cur.lat === lat && cur.lng === lng;   // ignore a stale geocode after a re-drag
+    reverseGeocode(lat, lng)
+      .then(a  => setPendingPin(cur => same(cur) ? { ...cur, address: a || '', geocoding: false } : cur))
+      .catch(() => setPendingPin(cur => same(cur) ? { ...cur, geocoding: false } : cur));
   };
+  const cancelDropPin  = () => { setPendingPin(null); setClearPinToken(t => t + 1); };
+  const confirmDropPin = () => {
+    const p = pendingPin;
+    if (!p || !onAddManual) return;
+    setPendingPin(null);
+    onAddManual({ lat: p.lat, lng: p.lng, address: p.address || '' });
+  };
+  // Leaving the map (closing the modal or switching to the list) abandons a pending pin.
+  useEffect(() => {
+    if (!visible || viewMode !== 'map') { setPendingPin(null); setClearPinToken(t => t + 1); }
+  }, [visible, viewMode]);
   // Pin tapped → scroll carousel to it and highlight its card.
   const handleMapSelect = place => {
     const idx = results.findIndex(p => p.name === place.name);
@@ -918,25 +949,52 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             // or long-press a spot to search that area; tap a pin to highlight it.
             <View style={{ flex: 1 }}>
               <DiscoverMap places={results} addedNames={addedNames} seenNames={seenNames} onMoved={handleMapMoved} onSelect={handleMapSelect}
-                onSearchHere={pt => searchAround(pt)} onLongPress={pt => dropPin(pt)}
+                onSearchHere={pt => searchAround(pt)} onDropPin={handleDropPin} clearPinToken={clearPinToken}
                 fitToken={fitToken} focusTarget={focusTarget}
                 centerOn={nearLabel && nearby && nearby.lat != null ? { lat: nearby.lat, lng: nearby.lng } : null}
-                showSearchArea={mapMoved} onSearchArea={searchThisArea} />
+                showSearchArea={mapMoved && !pendingPin} onSearchArea={searchThisArea} />
               {loading && (
                 <View style={s.mapLoadPill} pointerEvents="none">
                   <ActivityIndicator size="small" color={colors.primary} />
                   <Text style={s.mapLoadText}>Searching…</Text>
                 </View>
               )}
-              <FlatList ref={carouselRef} data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
-                horizontal showsHorizontalScrollIndicator={false}
-                style={s.carousel} contentContainerStyle={s.carouselContent}
-                getItemLayout={(_,i)=>({length:198,offset:198*i+spacing.md,index:i})}
-                onScrollToIndexFailed={()=>{}}
-                renderItem={({item}) => (
-                  <PlaceMapCard place={item} checked={addedNames.has(item.name)} seen={seenNames.has(item.name)} selected={selectedName===item.name} onToggle={toggleAdd} onFocus={handleCarouselFocus} onOpenWeb={openWeb} wd={dayWd}/>
-                )}
-              />
+              {/* Discoverability: how to add an off-map stop (hidden once a pin is down). */}
+              {!pendingPin && !loading && !mapMoved && !!onAddManual && (
+                <View style={mp.dropHint} pointerEvents="none">
+                  <Text style={mp.dropHintText}>📍 Long-press the map to drop a pin for an Airbnb / off-map stop</Text>
+                </View>
+              )}
+              {pendingPin ? (
+                // Google-Maps-style: the dropped pin's address + drag hint, with Use / Cancel.
+                <View style={mp.pinBar}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={mp.pinBarTitle}>Drop a stop here</Text>
+                    <Text style={mp.pinBarSub} numberOfLines={1}>
+                      {pendingPin.address || `${pendingPin.lat.toFixed(5)}, ${pendingPin.lng.toFixed(5)}`}
+                    </Text>
+                    <Text style={mp.pinBarHint}>
+                      {pendingPin.geocoding ? 'Locating address… · drag the pin to fine-tune' : 'Drag the pin to fine-tune'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity style={mp.pinCancel} onPress={cancelDropPin} activeOpacity={0.85}>
+                    <Text style={mp.pinCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={mp.pinUse} onPress={confirmDropPin} activeOpacity={0.85}>
+                    <Text style={mp.pinUseText}>Use this spot</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <FlatList ref={carouselRef} data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
+                  horizontal showsHorizontalScrollIndicator={false}
+                  style={s.carousel} contentContainerStyle={s.carouselContent}
+                  getItemLayout={(_,i)=>({length:198,offset:198*i+spacing.md,index:i})}
+                  onScrollToIndexFailed={()=>{}}
+                  renderItem={({item}) => (
+                    <PlaceMapCard place={item} checked={addedNames.has(item.name)} seen={seenNames.has(item.name)} selected={selectedName===item.name} onToggle={toggleAdd} onFocus={handleCarouselFocus} onOpenWeb={openWeb} wd={dayWd}/>
+                  )}
+                />
+              )}
             </View>
           ) : loading ? (
             <View style={s.center}><ActivityIndicator size="large" color={colors.primary}/><Text style={s.loadingText}>Searching {cityLabel(activeCity) || destination}…</Text></View>
@@ -1274,6 +1332,18 @@ const mp = StyleSheet.create({
   legendDot:{fontSize:11},
   legendTxt:{fontSize:11,fontWeight:'700',color:colors.body,marginRight:8},
   cardWrap:{position:'absolute',left:spacing.md,right:spacing.md,bottom:spacing.md},
+  // "Long-press to drop a pin" coach hint
+  dropHint:{position:'absolute',top:10,left:spacing.md,right:spacing.md,alignItems:'center'},
+  dropHintText:{backgroundColor:'rgba(15,23,30,0.82)',color:'#fff',fontSize:11.5,fontWeight:'700',textAlign:'center',borderRadius:radius.full,paddingHorizontal:14,paddingVertical:7,overflow:'hidden'},
+  // Dropped-pin confirm bar (Google-Maps-style)
+  pinBar:{position:'absolute',left:spacing.md,right:spacing.md,bottom:spacing.md,flexDirection:'row',alignItems:'center',gap:spacing.sm,backgroundColor:'#fff',borderRadius:radius.lg,paddingHorizontal:spacing.md,paddingVertical:spacing.md,borderWidth:1,borderColor:colors.hairline,...shadow.lg},
+  pinBarTitle:{fontSize:14,fontWeight:'800',color:colors.text},
+  pinBarSub:{fontSize:12.5,fontWeight:'600',color:colors.body,marginTop:1},
+  pinBarHint:{fontSize:11,fontWeight:'600',color:colors.subtle,marginTop:2},
+  pinCancel:{paddingHorizontal:spacing.md,paddingVertical:spacing.sm,borderRadius:radius.md},
+  pinCancelText:{fontSize:13,fontWeight:'700',color:colors.subtle},
+  pinUse:{paddingHorizontal:spacing.lg,paddingVertical:spacing.sm+1,borderRadius:radius.md,backgroundColor:colors.accent},
+  pinUseText:{fontSize:13,fontWeight:'800',color:'#fff'},
 });
 
 // Map photo carousel card

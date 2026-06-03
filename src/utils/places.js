@@ -52,13 +52,18 @@ export async function reverseGeocode(lat, lng) {
   const key = `rev:${lat.toFixed(5)},${lng.toFixed(5)}`;
   if (cache.has(key)) return cache.get(key);
   try {
-    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_PLACES_API_KEY}`);
+    // Bound the request so the "Locating…" state can't hang forever if the key
+    // lacks the Geocoding API or the network stalls.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);
+    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_PLACES_API_KEY}`, { signal: ctrl.signal });
+    clearTimeout(timer);
     if (!res.ok) { cache.set(key, null); return null; }
     const data = await res.json();
     const addr = (data.results && data.results[0]?.formatted_address) || null;
-    cache.set(key, addr);
+    cache.set(key, addr);   // null also cached → we won't retry a key that can't geocode
     return addr;
-  } catch (e) { cache.set(key, null); return null; }
+  } catch (e) { return null; }   // don't cache aborts/network errors — a later try may succeed
 }
 
 /** Best-effort photo URL for a place by name, biased to its coords. null on miss. */

@@ -202,7 +202,7 @@ async function cachedPlaces(q, bias, pages = 1) {
   return p;
 }
 
-function PlaceCard({ place, onAdd, added, wd, seen, onOpenWeb }) {
+function PlaceCard({ place, onToggle, added, wd, seen, onOpenWeb }) {
   const hrs = hoursLabel(place.openHours, wd);
   const closed = hrs === 'Closed';
   const dim = seen && !added;   // looked at on the web → fade so it's easy to skip
@@ -236,7 +236,7 @@ function PlaceCard({ place, onAdd, added, wd, seen, onOpenWeb }) {
       </View>
       <TouchableOpacity
         style={[card.addBtn, added&&card.addBtnDone]}
-        onPress={() => !added && onAdd(place)} activeOpacity={added?1:0.7}
+        onPress={() => onToggle(place)} activeOpacity={0.7}
       >
         <Icon name={added?'check':'add'} size={20} color={added?colors.success:'#fff'} />
       </TouchableOpacity>
@@ -446,7 +446,7 @@ function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearc
 
 export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime, nearby }) {
   const insets = useSafeAreaInsets();
-  const { addActivity, markPlaceSeen, clearSeenPlaces } = useStore();
+  const { addActivity, deleteActivity, markPlaceSeen, clearSeenPlaces } = useStore();
   // Read the LIVE trip from the store so "added" (grey + ✓) and "seen" (grey)
   // always reflect the real plan, reactively — no stale snapshot to wipe on open.
   const liveTrip   = useStore(s => s.trips.find(t => t.id === trip?.id)) || trip;
@@ -714,6 +714,15 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     });
   };
 
+  // The check button toggles a place in/out of the plan. Un-checking removes
+  // every matching activity (and its linked expense, handled by the store).
+  const toggleAdd = place => {
+    if (!addedNames.has(place.name)) { quickAdd(place); return; }
+    (liveTrip?.days || []).forEach(d => (d.activities || []).forEach(a => {
+      if (a.name === place.name) deleteActivity(trip.id, a.id);
+    }));
+  };
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':'height'}>
@@ -837,7 +846,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
                 getItemLayout={(_,i)=>({length:198,offset:198*i+spacing.md,index:i})}
                 onScrollToIndexFailed={()=>{}}
                 renderItem={({item}) => (
-                  <PlaceMapCard place={item} checked={addedNames.has(item.name)} seen={seenNames.has(item.name)} selected={selectedName===item.name} onToggle={quickAdd} onFocus={handleCarouselFocus} onOpenWeb={openWeb} wd={dayWd}/>
+                  <PlaceMapCard place={item} checked={addedNames.has(item.name)} seen={seenNames.has(item.name)} selected={selectedName===item.name} onToggle={toggleAdd} onFocus={handleCarouselFocus} onOpenWeb={openWeb} wd={dayWd}/>
                 )}
               />
             </View>
@@ -849,7 +858,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
               contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
               renderItem={({item}) => (
-                <PlaceCard place={item} onAdd={quickAdd} added={addedNames.has(item.name)} seen={seenNames.has(item.name)} onOpenWeb={openWeb} wd={dayWd}/>
+                <PlaceCard place={item} onToggle={toggleAdd} added={addedNames.has(item.name)} seen={seenNames.has(item.name)} onOpenWeb={openWeb} wd={dayWd}/>
               )}
             />
           )}

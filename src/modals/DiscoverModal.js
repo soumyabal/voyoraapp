@@ -22,15 +22,15 @@ import Icon from '../components/ui/Icon';
 const TYPE_ICON = { food: 'food', stay: 'hotel', activity: 'activity' };
 const TYPE_TINT = { food: '#e17055', stay: colors.smart, activity: colors.success };
 
-const CATEGORIES = [
-  { key: 'attractions', label: '\u{1F3DB}️ Attractions', query: 'top tourist attractions and landmarks' },
-  { key: 'food',        label: '\u{1F37D}️ Restaurants', query: 'best restaurants' },
-  { key: 'cafes',       label: '☕ Cafes',               query: 'cafes and coffee shops' },
-  { key: 'nature',      label: '\u{1F33F} Nature',            query: 'parks nature reserves and outdoor activities' },
-  { key: 'activities',  label: '\u{1F3A1} Activities',        query: 'fun family activities and entertainment' },
-  { key: 'shopping',    label: '\u{1F6CD}️ Shopping',    query: 'shopping centers markets and malls' },
-  { key: 'hotels',      label: '\u{1F3E8} Hotels',            query: 'highly rated hotels and resorts' },
+// Map layers — independent on/off toggles. Each layer runs its own Places
+// query; enabled layers are merged on the map (pins coloured by layer) and in
+// the list. Turn any combination on (e.g. just Eat+Stay). tint matches MAP_TINT.
+const LAYERS = [
+  { key: 'see',  type: 'activity', icon: 'activity', label: 'See',  tint: '#0e9f6e', query: 'top tourist attractions and landmarks' },
+  { key: 'eat',  type: 'food',     icon: 'food',     label: 'Eat',  tint: '#e17055', query: 'best restaurants' },
+  { key: 'stay', type: 'stay',     icon: 'hotel',    label: 'Stay', tint: colors.smart, query: 'highly rated hotels and resorts' },
 ];
+const TYPE_TO_LAYER = { activity: 'see', food: 'eat', stay: 'stay' };
 
 const FILTER_OPTS = [
   { key: 'vegetarian',  label: '\u{1F966} Veg',       bias: 'vegetarian friendly' },
@@ -100,6 +100,15 @@ function inferActivityType(types = []) {
   if (types.some(t => ['restaurant','food','meal_takeaway','bakery','cafe'].includes(t))) return 'food';
   if (types.some(t => ['lodging','hotel','resort_hotel','motel'].includes(t))) return 'stay';
   return 'activity';
+}
+
+// Great-circle distance in metres — used to drop area-search outliers (Google's
+// locationBias is a hint, not a hard radius, so it can return far-off results).
+function metersBetween(a, b) {
+  const R = 6371000, toRad = x => (x * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
 }
 
 const PLACES_URL = 'https://places.googleapis.com/v1/places:searchText';
@@ -207,78 +216,84 @@ const MAP_TINT = { food: '#e17055', stay: '#6c5ce7', activity: '#0e9f6e' };
 // Self-contained Leaflet HTML: rating-labelled pins coloured by type,
 // OpenStreetMap tiles (no API key), fit to all markers. A pin tap posts
 // the place index back to React Native.
-function buildMapHTML(places) {
-  const pts = places.map((p, i) => ({ i, lat: p.lat, lng: p.lng, t: p.activityType, r: p.rating }));
+// Built ONCE (stable HTML). Markers are pushed in later via window.setData so
+// panning/area-searching updates pins without reloading the map + OSM tiles.
+// Pins are coloured per layer (See green / Eat orange / Stay purple). Gestures:
+// drag → "moved", pin tap → "select", double-tap → "searchhere", long-press
+// (contextmenu) → "longpress".
+function buildMapHTML() {
   return `<!DOCTYPE html><html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>html,body,#map{height:100%;margin:0;background:#eee}
 .pin{display:flex;align-items:center;justify-content:center;min-width:30px;height:24px;padding:0 7px;border-radius:13px;color:#fff;font:700 12px -apple-system,system-ui,sans-serif;box-shadow:0 1px 5px rgba(0,0,0,.35);border:2px solid #fff;white-space:nowrap}
-.pin.sel{transform:scale(1.2)}</style></head><body><div id="map"></div>
+.pin.sel{transform:scale(1.25)}</style></head><body><div id="map"></div>
 <script>
-var TINT=${JSON.stringify(MAP_TINT)},DATA=${JSON.stringify(pts)};
-var map=L.map('map',{zoomControl:false,attributionControl:false});
+var TINT=${JSON.stringify(MAP_TINT)};
+var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([20,0],2);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
-var ms=[],pts2=[];
-DATA.forEach(function(d){
-  var c=TINT[d.t]||'#e86c3a',lbl=d.r?d.r.toFixed(1):'•';
-  var ic=L.divIcon({className:'',html:'<div class="pin" style="background:'+c+'">'+lbl+'</div>',iconSize:[38,24],iconAnchor:[19,12]});
-  var m=L.marker([d.lat,d.lng],{icon:ic}).addTo(map);
-  m.on('click',function(){
-    ms.forEach(function(x){if(x._icon)x._icon.firstChild.classList.remove('sel')});
-    if(m._icon)m._icon.firstChild.classList.add('sel');
-    window.ReactNativeWebView.postMessage(JSON.stringify({type:'select',index:d.i}));
+var ms=[];
+function clearMarkers(){ms.forEach(function(m){map.removeLayer(m)});ms=[];}
+window.setData=function(data){
+  clearMarkers();var pts2=[];
+  (data||[]).forEach(function(d){
+    var c=TINT[d.t]||'#e86c3a',lbl=d.r?d.r.toFixed(1):'•';
+    var ic=L.divIcon({className:'',html:'<div class="pin" style="background:'+c+'">'+lbl+'</div>',iconSize:[38,24],iconAnchor:[19,12]});
+    var m=L.marker([d.lat,d.lng],{icon:ic}).addTo(map);
+    (function(idx,mk){mk.on('click',function(){
+      ms.forEach(function(x){if(x._icon)x._icon.firstChild.classList.remove('sel')});
+      if(mk._icon)mk._icon.firstChild.classList.add('sel');
+      window.ReactNativeWebView.postMessage(JSON.stringify({type:'select',index:idx}));
+    });})(d.i,m);
+    ms.push(m);pts2.push([d.lat,d.lng]);
   });
-  ms.push(m);pts2.push([d.lat,d.lng]);
-});
-if(pts2.length===1)map.setView(pts2[0],14);else if(pts2.length)map.fitBounds(pts2,{padding:[44,44]});
-// User dragged the map → tell RN so it can offer "Search this area".
+  if(pts2.length===1)map.setView(pts2[0],14);else if(pts2.length)map.fitBounds(pts2,{padding:[44,44]});
+};
 map.on('dragend',function(){var c=map.getCenter();window.ReactNativeWebView.postMessage(JSON.stringify({type:'moved',lat:c.lat,lng:c.lng}));});
-function recv(e){try{var msg=JSON.parse(e.data);if(msg.type==='focus'&&DATA[msg.index]){var d=DATA[msg.index];map.setView([d.lat,d.lng],15);ms[msg.index]&&ms[msg.index].fire('click');}}catch(_){}}
-document.addEventListener('message',recv);window.addEventListener('message',recv);
+map.on('dblclick',function(e){window.ReactNativeWebView.postMessage(JSON.stringify({type:'searchhere',lat:e.latlng.lat,lng:e.latlng.lng}));});
+map.on('contextmenu',function(e){window.ReactNativeWebView.postMessage(JSON.stringify({type:'longpress',lat:e.latlng.lat,lng:e.latlng.lng}));});
+window.ReactNativeWebView.postMessage(JSON.stringify({type:'ready'}));
 </script></body></html>`;
 }
 
-// Geographic context pane — located results as pins. Adding happens in the
-// list beneath it (Redfin-style map-over-list), so this is display-only.
-function DiscoverMap({ places, onMoved, onSelect, showSearchArea, onSearchArea }) {
+// Geographic context pane — merged, layer-coloured pins. The map persists; only
+// markers update (via injectJavaScript → window.setData). Adding still happens
+// in the carousel/list beneath, so the map itself is browse + anchor-search.
+function DiscoverMap({ places, onMoved, onSelect, onSearchHere, onLongPress, showSearchArea, onSearchArea }) {
+  const ref = useRef(null);
   const withCoords = places.filter(p => p.lat != null && p.lng != null);
-  const html = React.useMemo(() => buildMapHTML(withCoords), [withCoords.map(p => p.name).join('|')]);
+  const pts = withCoords.map((p, i) => ({ i, lat: p.lat, lng: p.lng, t: p.activityType, r: p.rating }));
+  const ptsJSON = JSON.stringify(pts);
+  const html = React.useMemo(() => buildMapHTML(), []);
+  const push = () => { ref.current?.injectJavaScript(`window.setData&&window.setData(${ptsJSON});true;`); };
+  useEffect(() => { push(); }, [ptsJSON]);
 
-  if (withCoords.length === 0) {
-    return (
-      <View style={[s.center, { height: 150 }]}>
-        <Icon name="map" size={28} color={colors.subtle} />
-        <Text style={s.errorText}>No map locations for these results.</Text>
-      </View>
-    );
-  }
   return (
     <View style={s.mapPane}>
-      <WebView originWhitelist={['*']} source={{ html }} style={{ flex: 1, backgroundColor: '#dfe6e9' }}
+      <WebView ref={ref} originWhitelist={['*']} source={{ html }} style={{ flex: 1, backgroundColor: '#dfe6e9' }}
+        onLoadEnd={push}
         onMessage={e => {
           try {
             const d = JSON.parse(e.nativeEvent.data);
             if (d.type === 'moved') onMoved && onMoved({ lat: d.lat, lng: d.lng });
             else if (d.type === 'select' && withCoords[d.index]) onSelect && onSelect(withCoords[d.index]);
+            else if (d.type === 'searchhere') onSearchHere && onSearchHere({ lat: d.lat, lng: d.lng });
+            else if (d.type === 'longpress') onLongPress && onLongPress({ lat: d.lat, lng: d.lng });
+            else if (d.type === 'ready') push();
           } catch (_) {}
         }} />
-      {/* Top overlay: "Search this area" while panned, else the legend (never both) */}
-      {showSearchArea ? (
+      {withCoords.length === 0 && (
+        <View style={mp.emptyOverlay} pointerEvents="none">
+          <Text style={s.errorText}>No map locations here — try other layers or move the map.</Text>
+        </View>
+      )}
+      {showSearchArea && (
         <View style={mp.topOverlay} pointerEvents="box-none">
           <TouchableOpacity style={s.searchAreaBtn} onPress={onSearchArea} activeOpacity={0.85}>
             <Icon name="search" size={14} color="#fff" />
             <Text style={s.searchAreaText}>Search this area</Text>
           </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={mp.topOverlay} pointerEvents="none">
-          <View style={mp.legend}>
-            <Text style={[mp.legendDot, { color: MAP_TINT.activity }]}>●</Text><Text style={mp.legendTxt}>See</Text>
-            <Text style={[mp.legendDot, { color: MAP_TINT.food }]}>●</Text><Text style={mp.legendTxt}>Eat</Text>
-            <Text style={[mp.legendDot, { color: MAP_TINT.stay }]}>●</Text><Text style={mp.legendTxt}>Stay</Text>
-          </View>
         </View>
       )}
     </View>
@@ -301,10 +316,12 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [preview,    setPreview]    = useState(null);    // autoArrange draft + editable placements
   const [arrangeHints, setArrangeHints] = useState({});  // placeName → { pinDay?, dayCount? }
   const [editingRow,   setEditingRow]   = useState(null);// draftId whose edit panel is open
-  const [activeCategory, setActiveCategory] = useState('attractions');
-  const [searchText,     setSearchText]     = useState('');
-  const [results,        setResults]        = useState([]);
-  const [loading,        setLoading]        = useState(false);
+  const [layers,      setLayers]      = useState({ see: true, eat: true, stay: true }); // multi-select map layers
+  const [layerData,   setLayerData]   = useState({ see: [], eat: [], stay: [] });       // per-layer fetched places
+  const [textResults, setTextResults] = useState([]);                                   // free-text search results
+  const [anchorPlace, setAnchorPlace] = useState(null);                                 // pin tapped → "X nearby" actions
+  const [searchText,  setSearchText]  = useState('');
+  const [loading,     setLoading]     = useState(false);
   const [error,          setError]          = useState(null);
   const [addedNames,     setAddedNames]     = useState(new Set());
   const [activeFilters,  setActiveFilters]  = useState([]);
@@ -325,11 +342,27 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const families      = trip?.families ?? [];
   const allDietary    = families.flatMap(f => f.dietary || []);  // seeds the dietary filter chips below
 
+  // Merged, layer-filtered results feeding the list, carousel and map. Free-text
+  // mode searches across all types then filters by enabled layers; default mode
+  // concatenates each enabled layer's results (deduped, best-rated first).
+  const results = React.useMemo(() => {
+    if (searchText.trim()) {
+      return textResults.filter(p => layers[TYPE_TO_LAYER[p.activityType]] !== false);
+    }
+    const seen = new Set();
+    return LAYERS.filter(l => layers[l.key])
+      .flatMap(l => layerData[l.key] || [])
+      .filter(p => { if (seen.has(p.name)) return false; seen.add(p.name); return true; })
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  }, [searchText, textResults, layerData, layers]);
+
   useEffect(() => {
     if (!visible) return;
     const parsed = parseLocations(destination);
     const start  = parsed[0] || destination;
     setSearchText(''); setAddedNames(new Set());
+    setLayers({ see: true, eat: true, stay: true });
+    setLayerData({ see: [], eat: [], stay: [] }); setTextResults([]); setAnchorPlace(null);
     setSelectMode(false); setBasket([]); setPreview(null); setArrangeHints({}); setEditingRow(null); setViewMode('list');
     setAreaSearch(null); setMapMoved(false); setMapCenter(null); setSelectedName(null);
     setCities(parsed.length ? parsed : (destination ? [destination] : []));
@@ -339,72 +372,89 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setActiveFilters(FILTER_OPTS.filter(f => allDietary.includes(f.key)).map(f => f.key));
   }, [visible]);
 
+  // One fetch per unique query+area, cached per session.
+  const cachedFetch = async (q, bias) => {
+    const key = q + (bias ? `@${bias.lat.toFixed(2)},${bias.lng.toFixed(2)}` : '');
+    if (cacheRef.current.has(key)) return cacheRef.current.get(key);
+    const places = await fetchPlaces(q, bias);
+    cacheRef.current.set(key, places);
+    return places;
+  };
+
+  // Load whatever the current scope needs: free-text → one cross-type search;
+  // otherwise → each enabled layer's default query (parallel). `area` biases to
+  // a point (search-this-area / anchor / double-tap) and drops the city scope.
+  const loadScope = async () => {
+    const loc  = activeCity || destination;
+    const area = areaSearch;
+    const text = searchText.trim();
+    const diet = [getDietaryBias(families), getFilterBias(activeFilters)].filter(Boolean).join(' ');
+    const bias = area ? { lat: area.lat, lng: area.lng, radius: area.radius || 12000 } : null;
+    setError(null); setSelectedName(null); setAnchorPlace(null); setLoading(true);
+    try {
+      // Keep area searches tight: drop results outside ~1.6× the bias radius so
+      // an outlier can't blow out the map's fit-to-bounds.
+      const near = ps => area
+        ? ps.filter(p => p.lat != null && p.lng != null && metersBetween(area, p) <= (area.radius || 12000) * 1.6)
+        : ps;
+      if (text) {
+        const q = (area ? text : `${text} near ${loc}`) + (diet ? ` ${diet}` : '');
+        const places = near(await cachedFetch(q, bias));
+        setTextResults(places);
+        if (!places.length) setError(`No results for "${text}".`);
+      } else {
+        const want = LAYERS.filter(l => layers[l.key]);
+        const got  = await Promise.all(want.map(async L => {
+          const q = (area ? L.query : `${L.query} in ${loc}`) + (L.key === 'eat' && diet ? ` ${diet}` : '');
+          const places = near(await cachedFetch(q, bias));
+          return [L.key, places.map(p => ({ ...p, activityType: L.type, _layer: L.key }))];
+        }));
+        const next = { see: [], eat: [], stay: [] };
+        got.forEach(([k, v]) => { next[k] = v; });
+        setLayerData(next);
+        if (!got.reduce((n, [, v]) => n + v.length, 0)) setError('No results found.');
+      }
+    } finally { setLoading(false); }
+  };
+
+  // Single debounced driver: typing waits 450ms; layer/city/area/filter changes
+  // fire ~immediately. Reads current state, so callers just set state.
   useEffect(() => {
     if (!visible || !activeCity) return;
-    setMapMoved(false);   // category/city changed → re-search (keeps the area scope if set)
-    runSearch(searchText, activeCategory, activeFilters, activeCity, areaSearch);
-  }, [visible, activeCategory, activeCity]);
+    const t = setTimeout(() => { loadScope(); }, searchText.trim() ? 450 : 0);
+    return () => clearTimeout(t);
+  }, [visible, activeCity, areaSearch, layers, activeFilters, searchText]);
 
   // Map panned → offer to re-search that area (Redfin "search this area").
   const handleMapMoved = c => { setMapCenter(c); setMapMoved(true); };
-  const searchThisArea = () => {
-    if (!mapCenter) return;
-    setMapMoved(false);
-    setAreaSearch(mapCenter);   // commit as the sticky scope so filter changes stay here
-    runSearch(searchText, activeCategory, activeFilters, activeCity, mapCenter);
+  const searchThisArea = () => { if (mapCenter) { setMapMoved(false); setAreaSearch({ ...mapCenter, radius: 12000 }); } };
+  // Re-search around a point — double-tap, long-press, or an anchor "X nearby".
+  // Optionally force a layer on so e.g. "Stay nearby" guarantees hotels appear.
+  const searchAround = (pt, enableKey, radius = 5000) => {
+    setMapMoved(false); setAnchorPlace(null);
+    if (enableKey) setLayers(prev => ({ ...prev, [enableKey]: true }));
+    setAreaSearch({ lat: pt.lat, lng: pt.lng, radius });
   };
-  // Pin tapped → scroll the photo carousel to that place (reveals its image).
+  // Pin tapped → scroll carousel to it + reveal "X nearby" anchor actions.
   const handleMapSelect = place => {
+    setAnchorPlace(place);
     const idx = results.findIndex(p => p.name === place.name);
-    if (idx < 0) return;
-    setSelectedName(place.name);
-    try { carouselRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 }); } catch (_) {}
-  };
-
-  // One API call per unique query; identical queries (e.g. switching back to a
-  // previously-viewed category/city/filter combo) are served from cache.
-  // `area` ({lat,lng}) = re-search the map's current view ("search this area"):
-  // drop the city scope and bias results to that point instead.
-  const runSearch = async (text, catKey, filters, loc = activeCity, area = null) => {
-    const cat   = CATEGORIES.find(c => c.key===catKey);
-    const scope = loc || destination;
-    const baseQ = area
-      ? (text.trim() || cat?.query || 'places')
-      : (text.trim() ? `${text.trim()} near ${scope}` : `${cat?.query??'places'} in ${scope}`);
-    const bias  = [getDietaryBias(families), getFilterBias(filters)].filter(Boolean).join(' ');
-    const fullQ = bias ? `${baseQ} ${bias}` : baseQ;
-    const geoBias = area ? { lat: area.lat, lng: area.lng, radius: 12000 } : null;
-    const cacheKey = fullQ + (area ? `@${area.lat.toFixed(2)},${area.lng.toFixed(2)}` : '');
-
-    setError(null); setSelectedName(null);
-    if (cacheRef.current.has(cacheKey)) {
-      const cached = cacheRef.current.get(cacheKey);
-      setResults(cached); setLoading(false);
-      if (!cached.length) setError(text.trim() ? `No results for "${text.trim()}".` : 'No results found.');
-      return;
+    if (idx >= 0) {
+      setSelectedName(place.name);
+      try { carouselRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 }); } catch (_) {}
     }
-
-    setLoading(true);
-    const places = await fetchPlaces(fullQ, geoBias);
-    cacheRef.current.set(cacheKey, places);
-    setResults(places); setLoading(false);
-    if (!places.length) setError(text.trim() ? `No results for "${text.trim()}".` : 'No results found.');
   };
 
-  const handleSearchChange = text => {
-    setSearchText(text);
-    clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => runSearch(text, activeCategory, activeFilters, activeCity, areaSearch), 600);
-  };
+  const handleSearchChange = text => setSearchText(text);   // debounced by the load effect
 
-  const toggleFilter = key => {
-    const next = activeFilters.includes(key) ? activeFilters.filter(k=>k!==key) : [...activeFilters,key];
-    setActiveFilters(next);
-    // Debounce so toggling several filters quickly results in a single API call.
-    // Keep the current map area as the scope (don't snap back to the whole city).
-    clearTimeout(filterTimeout.current);
-    filterTimeout.current = setTimeout(() => runSearch(searchText, activeCategory, next, activeCity, areaSearch), 350);
-  };
+  // Layers are independent on/off — but at least one must stay on.
+  const toggleLayer = key => setLayers(prev => {
+    const next = { ...prev, [key]: !prev[key] };
+    return (!next.see && !next.eat && !next.stay) ? prev : next;
+  });
+
+  const toggleFilter = key =>
+    setActiveFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
 
   // Selecting a city re-runs the search via the activeCity effect (resets area scope).
   const chooseCity = c => { setCityPickerOpen(false); setAreaSearch(null); setMapMoved(false); setActiveCity(c); };
@@ -547,7 +597,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <TextInput
               style={s.searchInput} value={searchText} onChangeText={handleSearchChange}
               placeholder={`Search in ${cityLabel(activeCity) || destination}…`} placeholderTextColor={colors.muted}
-              returnKeyType="search" onSubmitEditing={() => runSearch(searchText,activeCategory,activeFilters)}
+              returnKeyType="search" onSubmitEditing={() => loadScope()}
               clearButtonMode="while-editing"
             />
           </View>
@@ -563,29 +613,39 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <Icon name="forward" size={14} color={colors.accent} />
           </TouchableOpacity>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
-            {CATEGORIES.map(cat => (
-              <Chip key={cat.key} label={cat.label} active={activeCategory===cat.key}
-                activeStyle={s.chipActive} activeTextStyle={s.chipTextActive}
-                onPress={() => { setSearchText(''); setActiveCategory(cat.key); }} />
-            ))}
-          </ScrollView>
-
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
-            {FILTER_OPTS.map(f => {
-              const on = activeFilters.includes(f.key);
+          {/* Map layers — independent See / Eat / Stay toggles. Each carries its
+              type colour (= the map-pin legend); turn on any mix. */}
+          <View style={s.focusBar}>
+            {LAYERS.map(L => {
+              const on = layers[L.key];
               return (
-                <Chip key={f.key} label={f.label} active={on}
-                  activeStyle={s.filterChipActive} activeTextStyle={s.filterChipTextActive}
-                  onPress={() => toggleFilter(f.key)} />
+                <TouchableOpacity key={L.key} style={[s.focusBtn, on && s.focusBtnOn]}
+                  onPress={() => toggleLayer(L.key)} activeOpacity={0.85}>
+                  <View style={[s.layerDot, { backgroundColor: on ? L.tint : colors.hairline }]} />
+                  <Icon name={L.icon} size={16} color={on ? L.tint : colors.subtle} />
+                  <Text style={[s.focusLabel, on && { color: L.tint }]}>{L.label}</Text>
+                </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </View>
 
-          {/* Results count + List/Map toggle */}
-          {!loading && !error && results.length > 0 && (
+          {layers.eat && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
+              {FILTER_OPTS.map(f => {
+                const on = activeFilters.includes(f.key);
+                return (
+                  <Chip key={f.key} label={f.label} active={on}
+                    activeStyle={s.filterChipActive} activeTextStyle={s.filterChipTextActive}
+                    onPress={() => toggleFilter(f.key)} />
+                );
+              })}
+            </ScrollView>
+          )}
+
+          {/* Results count + List/Map toggle (stays put while re-searching) */}
+          {!error && results.length > 0 && (
             <View style={s.resultsBar}>
-              <Text style={s.resultCount}>{results.length} places found</Text>
+              <Text style={s.resultCount}>{results.length} place{results.length !== 1 ? 's' : ''}{loading ? ' · searching…' : ''}</Text>
               <View style={s.viewToggle}>
                 {[{ k: 'list', ic: 'list' }, { k: 'map', ic: 'map' }].map(v => (
                   <TouchableOpacity key={v.k} style={[s.viewToggleBtn, viewMode === v.k && s.viewToggleBtnOn]}
@@ -598,14 +658,33 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             </View>
           )}
 
-          {loading ? (
-            <View style={s.center}><ActivityIndicator size="large" color={colors.primary}/><Text style={s.loadingText}>Searching {destination}…</Text></View>
-          ) : error ? (
-            <View style={s.center}><Icon name="search" size={34} color={colors.subtle} /><Text style={s.errorText}>{error}</Text></View>
-          ) : viewMode === 'map' ? (
+          {viewMode === 'map' ? (
+            // Map stays mounted across searches (markers update live). Tap a pin
+            // for "X nearby"; double-tap or long-press to search that spot.
             <View style={{ flex: 1 }}>
               <DiscoverMap places={results} onMoved={handleMapMoved} onSelect={handleMapSelect}
+                onSearchHere={pt => searchAround(pt)} onLongPress={pt => searchAround(pt)}
                 showSearchArea={mapMoved} onSearchArea={searchThisArea} />
+              {loading && (
+                <View style={s.mapLoadPill} pointerEvents="none">
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={s.mapLoadText}>Searching…</Text>
+                </View>
+              )}
+              {anchorPlace && (
+                <View style={s.anchorBar}>
+                  <Text style={s.anchorName} numberOfLines={1}>Near {anchorPlace.name}</Text>
+                  <View style={s.anchorChips}>
+                    {LAYERS.map(L => (
+                      <TouchableOpacity key={L.key} style={[s.anchorChip, { borderColor: L.tint }]}
+                        onPress={() => searchAround({ lat: anchorPlace.lat, lng: anchorPlace.lng }, L.key)} activeOpacity={0.8}>
+                        <View style={[s.layerDot, { backgroundColor: L.tint }]} />
+                        <Text style={[s.anchorChipText, { color: L.tint }]}>{L.label} nearby</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
               <FlatList ref={carouselRef} data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
                 horizontal showsHorizontalScrollIndicator={false}
                 style={s.carousel} contentContainerStyle={s.carouselContent}
@@ -616,6 +695,10 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
                 )}
               />
             </View>
+          ) : loading ? (
+            <View style={s.center}><ActivityIndicator size="large" color={colors.primary}/><Text style={s.loadingText}>Searching {cityLabel(activeCity) || destination}…</Text></View>
+          ) : error ? (
+            <View style={s.center}><Icon name="search" size={34} color={colors.subtle} /><Text style={s.errorText}>{error}</Text></View>
           ) : (
             <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
               contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
@@ -886,6 +969,20 @@ const s = StyleSheet.create({
   // Fixed-height pills with vertically-centered, separately-sized emoji + label.
   // paddingVertical on the scroll content guarantees the viewport is always
   // taller than the pill, so glyphs can never be clipped.
+  // Primary Do/Eat/Stay segmented control
+  focusBar:{flexDirection:'row',marginHorizontal:spacing.xxl,marginBottom:spacing.sm,backgroundColor:colors.surface2,borderRadius:radius.lg,padding:4,gap:4},
+  focusBtn:{flex:1,flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6,paddingVertical:10,borderRadius:radius.md},
+  focusBtnOn:{backgroundColor:'#fff',...shadow.sm},
+  focusLabel:{fontSize:14,fontWeight:'800',color:colors.subtle},
+  layerDot:{width:8,height:8,borderRadius:4},
+  // Map overlays: searching pill + anchor "X nearby" actions
+  mapLoadPill:{position:'absolute',top:10,right:12,flexDirection:'row',alignItems:'center',gap:6,backgroundColor:'rgba(255,255,255,0.95)',borderRadius:radius.full,paddingHorizontal:12,paddingVertical:6,...shadow.sm},
+  mapLoadText:{fontSize:12,fontWeight:'700',color:colors.body},
+  anchorBar:{position:'absolute',left:spacing.md,right:spacing.md,top:10,backgroundColor:'#fff',borderRadius:radius.lg,padding:spacing.sm,borderWidth:1,borderColor:colors.hairline,...shadow.lg},
+  anchorName:{fontSize:12,fontWeight:'800',color:colors.ink,marginBottom:6},
+  anchorChips:{flexDirection:'row',gap:6},
+  anchorChip:{flexDirection:'row',alignItems:'center',gap:5,borderWidth:1.5,borderRadius:radius.full,paddingHorizontal:10,paddingVertical:6,backgroundColor:'#fff'},
+  anchorChipText:{fontSize:12,fontWeight:'800'},
   chipsScroll:{flexGrow:0,marginBottom:spacing.sm},
   chips:{paddingHorizontal:spacing.xxl,paddingVertical:4,gap:spacing.xs,alignItems:'center'},
   chip:{height:36,flexDirection:'row',alignItems:'center',justifyContent:'center',borderWidth:1.5,borderColor:colors.border,borderRadius:radius.full,paddingHorizontal:spacing.md,backgroundColor:'#fff'},
@@ -1031,6 +1128,7 @@ const pv = StyleSheet.create({
 
 // Map view
 const mp = StyleSheet.create({
+  emptyOverlay:{position:'absolute',top:0,left:0,right:0,bottom:0,alignItems:'center',justifyContent:'center',padding:spacing.xxl},
   topOverlay:{position:'absolute',top:10,left:0,right:0,alignItems:'center'},
   legendWrap:{position:'absolute',top:10,left:0,right:0,alignItems:'center'},
   legend:{flexDirection:'row',alignItems:'center',gap:4,backgroundColor:'rgba(255,255,255,0.95)',borderRadius:radius.full,paddingHorizontal:12,paddingVertical:5,...shadow.sm},

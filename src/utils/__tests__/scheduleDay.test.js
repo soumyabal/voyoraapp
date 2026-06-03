@@ -28,6 +28,35 @@ describe('scheduleDay', () => {
     expect(out.find(x => x.name === 'Steakhouse').time).toBe('19:00');
   });
 
+  // 2026-06-12 is a Friday (weekday 5) — used for the hours-of-operation tests.
+  test('a dinner-only restaurant goes to dinner even when added first', () => {
+    const dinnerOnly = a('Hot Rocks', 'food', { openHours: [{ d: 5, o: 17 * 60, c: 22 * 60 }] });
+    const cafe       = a('Cafe',     'food', { openHours: [{ d: 5, o: 7 * 60,  c: 15 * 60 }] });
+    const out = scheduleDay([dinnerOnly, cafe], { date: '2026-06-12' });
+    expect(out.find(x => x.name === 'Hot Rocks').time >= '17:00').toBe(true);  // open only for dinner
+    expect(out.find(x => x.name === 'Cafe').time).toBe('12:30');                // open mornings → lunch
+  });
+
+  test('an explicit meal choice overrides opening hours', () => {
+    const out = scheduleDay(
+      [a('Brunch Spot', 'food', { meal: 'dinner', openHours: [{ d: 5, o: 7 * 60, c: 12 * 60 }] })],
+      { date: '2026-06-12' },
+    );
+    expect(out[0].time).toBe('19:00');   // user pinned dinner — hours ignored
+  });
+
+  test('a breakfast-named food lands in the breakfast window', () => {
+    const out = scheduleDay([a('Breakfast at Hotel', 'food'), a('Steakhouse', 'food')]);
+    expect(out.find(x => x.name === 'Breakfast at Hotel').time <= '10:00').toBe(true);
+    expect(out.find(x => x.name === 'Steakhouse').time >= '12:00').toBe(true);
+  });
+
+  test('unknown opening hours fall back to lunch-first then dinner', () => {
+    const out = scheduleDay([a('Diner', 'food'), a('Grill', 'food')], { date: '2026-06-12' });
+    expect(out.find(x => x.name === 'Diner').time).toBe('12:30');
+    expect(out.find(x => x.name === 'Grill').time).toBe('19:00');
+  });
+
   test('a sunset activity is pushed to the evening', () => {
     const out = scheduleDay([a('Sunset Point', 'activity'), a('Museum', 'activity')]);
     expect(out.find(x => x.name === 'Sunset Point').time >= '18:00').toBe(true);

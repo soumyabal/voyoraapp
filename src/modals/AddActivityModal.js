@@ -341,6 +341,9 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
   // Manual duration override (0 = use auto-estimate)
   const [durationMins, setDurationMins] = useState(0);
 
+  // Meal slot for food (null = auto from opening hours when ✨ Arrange runs)
+  const [meal, setMeal]           = useState(null);
+
   // Notes + Reminder
   const [memo, setMemo]           = useState('');
   const [reminder, setReminder]   = useState('');
@@ -362,6 +365,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setMemo(editActivity.memo || '');
       setReminder(editActivity.reminder || '');
       setDurationMins(editActivity.durationMins > 0 ? editActivity.durationMins : 0);
+      setMeal(editActivity.meal || null);
       setShowMore(!!(editActivity.detail || editActivity.memo || editActivity.reminder));
     } else {
       setTile(TILES[6]);
@@ -372,6 +376,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setCostMode('per_person');
       setCostInput('');
       setDurationMins(0);
+      setMeal(null);
       setMemo('');
       setReminder('');
       setShowMore(false);
@@ -426,6 +431,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       name:         name.trim(),
       arriveTime:   tile.type === 'transport' && tile.subtype !== 'pitstop' && arriveTime ? arriveTime : null,
       durationMins: durationMins > 0 ? durationMins : null,
+      meal:         tile.type === 'food' ? (meal || null) : null,
       detail:       detail.trim(),
       costMode,
       costAmount:   parsedCost,
@@ -617,6 +623,31 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                 />
               </View>
             </View>
+
+            {/* ── Meal (food only) — auto from opening hours, or pin it ── */}
+            {tile.type === 'food' && (
+              <>
+                <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>MEAL</Text>
+                <View style={s.mealRow}>
+                  {[{ k: null, l: 'Auto' }, { k: 'breakfast', l: '🍳 Breakfast' }, { k: 'lunch', l: '🥪 Lunch' }, { k: 'dinner', l: '🍽️ Dinner' }].map(m => {
+                    const active = meal === m.k;
+                    return (
+                      <TouchableOpacity
+                        key={m.l}
+                        style={[s.mealBtn, active && s.mealBtnActive]}
+                        onPress={() => setMeal(m.k)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[s.mealBtnText, active && s.mealBtnTextActive]}>{m.l}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={s.mealHint}>
+                  {meal ? `Pinned to ${meal} — ✨ Arrange keeps it there.` : 'Auto picks breakfast/lunch/dinner from the place’s opening hours.'}
+                </Text>
+              </>
+            )}
 
             {/* ── Cost ── */}
             <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>COST</Text>
@@ -905,6 +936,14 @@ const s = StyleSheet.create({
     minHeight: 64,
     ...shadow.sm,
   },
+
+  // Meal picker (food only)
+  mealRow:           { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  mealBtn:           { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.border, backgroundColor: '#fff' },
+  mealBtnActive:     { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  mealBtnText:       { fontSize: 12, fontWeight: '600', color: colors.muted },
+  mealBtnTextActive: { color: colors.primary, fontWeight: '800' },
+  mealHint:          { fontSize: 11, color: colors.muted, marginTop: spacing.xs },
 
   // Cost mode toggle
   costModeRow:        { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },

@@ -111,10 +111,28 @@ function metersBetween(a, b) {
 }
 
 const PLACES_URL = 'https://places.googleapis.com/v1/places:searchText';
-const FIELD_MASK = ['nextPageToken','places.displayName','places.formattedAddress','places.rating','places.userRatingCount','places.priceLevel','places.types','places.accessibilityOptions','places.websiteUri','places.location','places.photos'].join(',');
+const FIELD_MASK = ['nextPageToken','places.displayName','places.formattedAddress','places.rating','places.userRatingCount','places.priceLevel','places.types','places.accessibilityOptions','places.websiteUri','places.location','places.photos','places.regularOpeningHours'].join(',');
 
 // Google Place Photos: a photo resource name → image URL (billed per fetch).
 const photoUrl = name => `https://places.googleapis.com/v1/${name}/media?maxWidthPx=640&maxHeightPx=420&key=${GOOGLE_PLACES_API_KEY}`;
+
+// Compact Google regularOpeningHours.periods → [{ d, o, c }] where d = weekday
+// (0=Sun), o/c = open/close minutes-of-day. Lets scheduleDay pick which meal a
+// restaurant fits. Open-ended (24h) or past-midnight closes are capped at day end.
+function compactHours(oh) {
+  const periods = oh?.periods;
+  if (!Array.isArray(periods)) return null;
+  const out = [];
+  for (const p of periods) {
+    if (!p.open) continue;
+    const d = p.open.day ?? 0;
+    const o = (p.open.hour ?? 0) * 60 + (p.open.minute ?? 0);
+    let c = p.close ? (p.close.hour ?? 0) * 60 + (p.close.minute ?? 0) : 1440;
+    if (!p.close || p.close.day !== d || c <= o) c = 1440;   // 24h / crosses midnight → cap to 24:00
+    out.push({ d, o, c });
+  }
+  return out.length ? out : null;
+}
 
 function mapPlace(p) {
   const place = {
@@ -125,6 +143,7 @@ function mapPlace(p) {
     wheelchairOk:p.accessibilityOptions?.wheelchairAccessibleEntrance??null,
     url:p.websiteUri??'', lat:p.location?.latitude??null, lng:p.location?.longitude??null,
     photo:p.photos?.[0]?.name ? photoUrl(p.photos[0].name) : null,
+    openHours:compactHours(p.regularOpeningHours),
   };
   place.vegFriendly = isVegFriendly(place);
   return place;
@@ -585,6 +604,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
       ...(isStay ? { nights } : {}),
       address:pendingPlace.address, url:pendingPlace.url,
       rating:pendingPlace.rating, lat:pendingPlace.lat, lng:pendingPlace.lng,
+      openHours:pendingPlace.openHours ?? null,   // hours of operation → smart meal slotting on Arrange
       city:cityLabel(activeCity),   // tag the source city → Trip Check flags multi-city days
       note:null, status:null,
     });
@@ -605,6 +625,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
       costPerPerson: place.costPerPerson || 0, costMode: 'per_person', costAmount: place.costPerPerson || 0,
       address: place.address || '', url: place.url || '',
       rating: place.rating ?? null, lat: place.lat ?? null, lng: place.lng ?? null,
+      openHours: place.openHours ?? null,   // hours of operation → smart meal slotting on Arrange
       city: cityLabel(activeCity), note: null, status: null,
     });
     setAddedNames(prev => new Set([...prev, place.name]));

@@ -6,7 +6,7 @@ import DiscoverModal from '../modals/DiscoverModal';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
-import { fmt, fmtM, getActivityIcon } from '../utils/helpers';
+import { fmt, fmtM, getActivityIcon, uid } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight } from '../utils/tripValidator';
 import { scheduleDay } from '../utils/autoArrange';
@@ -93,6 +93,15 @@ const SEV_CHIP = {
   error:   { backgroundColor: '#fef2f2', color: '#dc2626' },
   warning: { backgroundColor: '#fffbeb', color: '#b45309' },
   info:    { backgroundColor: '#f0ede8', color: '#6b6259' },
+};
+
+// A day slot ↔ the meal you'd eat at the hotel in it (in-room dining / hotel
+// restaurant) — handy when the group is tired or unwell and doesn't want to go out.
+const SLOT_MEAL  = { morning: 'breakfast', afternoon: 'lunch', evening: 'dinner' };
+const MEAL_LABEL = {
+  breakfast: { emoji: '🍳', label: 'Breakfast', time: '08:00' },
+  lunch:     { emoji: '🥪', label: 'Lunch',     time: '12:30' },
+  dinner:    { emoji: '🍽️', label: 'Dinner',    time: '19:00' },
 };
 
 function getSlotKey(timeStr) {
@@ -355,7 +364,7 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip }) {
 }
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
-  const { currentDay, setCurrentDay, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities } = useStore();
+  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities } = useStore();
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
   const [defaultSlotTime,       setDefaultSlotTime]       = useState('09:00');
@@ -440,7 +449,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     if (schedulable.length < 2) return;   // nothing to rearrange
     const prev = day.activities;
     const dayRole = currentDay === trip.days.length - 1 ? 'departure' : 'normal';
-    const scheduled = scheduleDay(day.activities, { dayRole });
+    const scheduled = scheduleDay(day.activities, { dayRole, date: day.date });
     setDayActivities(trip.id, currentDay, scheduled);
 
     const arranged = { ...trip, days: trip.days.map((d, i) => i === currentDay ? { ...d, activities: scheduled } : d) };
@@ -463,6 +472,51 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     } else {
       showUndoAction('Day arranged · looks good', 'sparkles', undo);
     }
+  };
+
+  // ── Eat at the hotel (in-room dining) ─────────────────────────────
+  // Tired or unwell days → one tap to eat in. Breakfast uses LAST night's hotel
+  // (you wake there); lunch/dinner use TONIGHT's hotel (where you're staying).
+  // Free by default — the user can add a room-service cost on the card.
+  const wokeAtHotel  = currentDay > 0 ? lodgingForNight(trip, currentDay - 1) : null;
+  const tonightHotel = lodgingForNight(trip, currentDay);
+  const hotelForMeal = {
+    breakfast: wokeAtHotel?.stay || null,                       // where you woke up
+    lunch:     tonightHotel?.stay || wokeAtHotel?.stay || null, // staying tonight, or pre-checkout
+    dinner:    tonightHotel?.stay || null,                      // only where you sleep tonight
+  };
+  const dayMealPresent = (meal) => (day?.activities || []).some(a =>
+    a.type === 'food' && a.status !== 'skipped' &&
+    (a.meal === meal || (meal === 'breakfast' && /breakfast|brunch/i.test(a.name || ''))));
+  const addHotelMeal = (meal) => {
+    const stay = hotelForMeal[meal];
+    if (!stay) return;
+    const { label, time } = MEAL_LABEL[meal];
+    const id = uid();
+    addActivity(trip.id, currentDay, {
+      id, type: 'food', time,
+      name: `${label} at ${stay.name}`, detail: 'In-room dining',
+      meal, atHotel: true,
+      costPerPerson: 0, costMode: 'per_person', costAmount: 0,
+      address: stay.address || '', url: stay.url || '',
+      lat: stay.lat ?? null, lng: stay.lng ?? null,
+      note: null, status: null,
+    });
+    showUndoAction(`${label} added at the hotel`, 'food', () => deleteActivity(trip.id, id));
+  };
+  // The in-room-dining chip for a given slot (or null when there's no hotel /
+  // that meal is already planned).
+  const renderHotelMealChip = (slotKey) => {
+    const meal = SLOT_MEAL[slotKey];
+    const stay = meal ? hotelForMeal[meal] : null;
+    if (!stay || dayMealPresent(meal)) return null;
+    const { emoji, label } = MEAL_LABEL[meal];
+    return (
+      <TouchableOpacity style={styles.bfastChip} onPress={() => addHotelMeal(meal)} activeOpacity={0.8}>
+        <Text style={styles.bfastChipText} numberOfLines={1}>{emoji}  {label} at {stay.name}</Text>
+        <Text style={styles.bfastChipAdd}>+ Add</Text>
+      </TouchableOpacity>
+    );
   };
 
   // Direct-status setters for swipe actions (toggle off if already set) + undo toast.
@@ -641,21 +695,23 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
               </View>
               {/* Empty slot template */}
               {DAY_SLOTS.map(slot => (
-                <TouchableOpacity
-                  key={slot.key}
-                  style={styles.emptySlot}
-                  onPress={() => openAddInSlot(slot.defaultTime)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.emptySlotIcon, { backgroundColor: slot.tint + '1A' }]}>
-                    <Icon name={slot.icon} size={18} color={slot.tint} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.emptySlotLabel}>{slot.label}</Text>
-                    <Text style={styles.emptySlotHint}>{slot.hint} · tap to add</Text>
-                  </View>
-                  <Icon name="add" size={20} color={colors.subtle} />
-                </TouchableOpacity>
+                <React.Fragment key={slot.key}>
+                  {renderHotelMealChip(slot.key)}
+                  <TouchableOpacity
+                    style={styles.emptySlot}
+                    onPress={() => openAddInSlot(slot.defaultTime)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.emptySlotIcon, { backgroundColor: slot.tint + '1A' }]}>
+                      <Icon name={slot.icon} size={18} color={slot.tint} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.emptySlotLabel}>{slot.label}</Text>
+                      <Text style={styles.emptySlotHint}>{slot.hint} · tap to add</Text>
+                    </View>
+                    <Icon name="add" size={20} color={colors.subtle} />
+                  </TouchableOpacity>
+                </React.Fragment>
               ))}
             </View>
           ) : (
@@ -737,6 +793,9 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                       )}
                     </View>
                   </TouchableOpacity>
+
+                  {/* In-room dining — breakfast/lunch/dinner at the hotel for this slot */}
+                  {!isCollapsed && renderHotelMealChip(slot.key)}
 
                   {!isCollapsed && slotActs.length === 0 ? (
                     <TouchableOpacity
@@ -1533,6 +1592,9 @@ const styles = StyleSheet.create({
   addActBtnText: { ...typography.caption, color: '#fff', fontWeight: '800' },
   arrangeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.smartSoft, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   arrangeBtnText: { ...typography.caption, color: colors.smartDeep, fontWeight: '800' },
+  bfastChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fffaf2', borderWidth: 1, borderColor: '#f0d9b5', borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.sm, marginTop: 2 },
+  bfastChipText: { flex: 1, fontSize: 12.5, color: '#9a6b1e', fontWeight: '600' },
+  bfastChipAdd: { fontSize: 11, color: colors.primary, fontWeight: '800' },
   dayWarnings: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
   dayWarnChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 6 },
   dayWarnIcon: { fontSize: 12 },

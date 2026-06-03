@@ -57,6 +57,42 @@ const SUNRISE_RE   = /sunrise/i;
 const SUNSET_RE    = /sunset|viewpoint|lookout|observation deck/i;
 const NIGHTLIFE_RE = /nightlife|night club|nightclub|\bbar\b|\bpub\b|concert|live music|\bshow\b|theatre|theater|opera|casino|cocktail/i;
 
+// Meal probe windows (minutes-of-day). A restaurant is assigned a meal only if
+// its hours of operation actually cover that window — a dinner-only steakhouse
+// never gets slotted at lunch. The window midpoint is the probe time.
+const MEAL_CHECK = {
+  breakfast: [7 * 60,        10 * 60 + 30],
+  lunch:     [11 * 60 + 30,  14 * 60 + 30],
+  dinner:    [17 * 60 + 30,  21 * 60],
+};
+const MEAL_ORDER = { breakfast: 0, lunch: 1, dinner: 2 };
+
+// Local weekday (0=Sun…6=Sat) for a 'YYYY-MM-DD' string; null if unparseable.
+// Parsed field-by-field so it stays in local time (new Date('YYYY-MM-DD') is UTC).
+function weekdayOf(date) {
+  if (!date || typeof date !== 'string') return null;
+  const [y, m, d] = date.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d).getDay();
+}
+
+// Which meals a place (compact openHours: [{d,o,c}] in minutes) is open for on
+// weekday `wd`. Returns null when hours are unknown (so the caller falls back to
+// the order-based default), or [] when the place is closed all meal windows.
+function mealsOpenFor(act, wd) {
+  const oh = act.openHours;
+  if (!Array.isArray(oh) || !oh.length || wd == null) return null;
+  const todays = oh.filter(h => h.d === wd);
+  if (!todays.length) return [];                       // explicitly closed that day
+  const open = [];
+  for (const meal of Object.keys(MEAL_CHECK)) {
+    const [lo, hi] = MEAL_CHECK[meal];
+    const mid = (lo + hi) / 2;
+    if (todays.some(h => mid >= h.o && mid <= h.c)) open.push(meal);
+  }
+  return open;
+}
+
 // Earliest start >= `from` where [start, start+need] clears all occupied
 // intervals and ends by `end`; null if it can't fit before day end. Module-level
 // so both autoArrange and scheduleDay share it.
@@ -329,10 +365,12 @@ export function autoArrange(basket, trip, opts = {}) {
  * window model + proximity ordering. PURE: returns a NEW array of copies with
  * `time` assigned, sorted; never mutates the input. Notes/skipped are kept.
  *
- *   opts = { dayRole?: 'arrival'|'departure'|'normal', anchor?: {lat,lng} }
+ *   opts = { dayRole?: 'arrival'|'departure'|'normal', anchor?: {lat,lng},
+ *            date?: 'YYYY-MM-DD' }   // date enables hours-of-operation meal fit
  *
  * Windows: hotel check-in → ~16:00 (check-out → ~10:00 on a departure day),
- * meals → breakfast/lunch/dinner, nightlife/shows → evening, sunrise/sunset →
+ * meals → breakfast/lunch/dinner picked from each place's HOURS OF OPERATION
+ * (or the user's pinned `meal`), nightlife/shows → evening, sunrise/sunset →
  * their hours; everything else flows from the morning, ordered nearest-neighbour
  * around the day's hotel. Transport with a user-set time anchors the day.
  */
@@ -362,12 +400,35 @@ export function scheduleDay(activities, opts = {}) {
   // 2. Stays → check-in window (or check-out on the departure day).
   sched.filter(a => a.type === 'stay')
        .forEach(a => place(a, dayRole === 'departure' ? WINDOWS.checkout : WINDOWS.checkin));
-  // 3. Meals → breakfast / lunch / dinner.
-  let mealIdx = 0;
-  sched.filter(a => a.type === 'food').forEach(a => {
-    const target = BREAKFAST_RE.test(text(a)) ? WINDOWS.breakfast : (mealIdx++ === 0 ? WINDOWS.lunch : WINDOWS.dinner);
-    place(a, target);
+  // 3. Meals → breakfast / lunch / dinner. Each restaurant lands in a meal it is
+  //    actually OPEN for (hours of operation), unless the user pinned a meal
+  //    (`a.meal`) — their choice always wins. Among the meals a place is open
+  //    for, the least-filled wins so two restaurants don't both land on dinner;
+  //    when hours are unknown we keep the classic lunch-first-then-dinner order.
+  const wd = weekdayOf(opts.date);
+  const mealCount = { breakfast: 0, lunch: 0, dinner: 0 };
+  const foods = sched.filter(a => a.type === 'food');
+  const mealOf = new Map();
+  // Pass 1: explicit user choice, or a clear breakfast/brunch by name.
+  foods.forEach(a => {
+    const explicit = a.meal && MEAL_CHECK[a.meal] ? a.meal
+                   : BREAKFAST_RE.test(text(a)) ? 'breakfast' : null;
+    if (explicit) { mealOf.set(a, explicit); mealCount[explicit]++; }
   });
+  // Pass 2: everything else, decided from opening hours then balanced.
+  foods.filter(a => !mealOf.has(a)).forEach(a => {
+    const open = mealsOpenFor(a, wd);            // null = unknown, [] = closed all windows
+    let meal;
+    if (open && open.length) {
+      const primary = open.filter(m => m !== 'breakfast');   // lunch/dinner are the main meals
+      const pool = primary.length ? primary : open;
+      meal = pool.slice().sort((x, y) => (mealCount[x] - mealCount[y]) || (MEAL_ORDER[x] - MEAL_ORDER[y]))[0];
+    } else {
+      meal = mealCount.lunch <= mealCount.dinner ? 'lunch' : 'dinner';
+    }
+    mealOf.set(a, meal); mealCount[meal]++;
+  });
+  foods.forEach(a => place(a, WINDOWS[mealOf.get(a)]));
   // 4. Window-anchored activities (sunrise / sunset / nightlife).
   const acts = sched.filter(a => a.type === 'activity');
   const windowFor = a => SUNRISE_RE.test(text(a)) ? WINDOWS.sunrise

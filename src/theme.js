@@ -116,9 +116,3 @@ export const activityIcons = {
   activity: '🎯',
   note: '📝',
 };
-
-// Palette for auto-assigning family colors
-export const familyPalette = [
-  '#6c5ce7', '#e84393', '#0984e3',
-  '#00b894', '#e17055', '#e67e22',
-];

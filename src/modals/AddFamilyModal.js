@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import useStore from '../store';
-import { colors, spacing, radius, familyPalette } from '../theme';
-import { uid } from '../utils/helpers';
+import { colors, spacing, radius } from '../theme';
+import { uid, familyPalette } from '../utils/helpers';
 import { ModalHeader, FormField, InfoBanner } from '../components/ui';
 
 const ColorSwatch = ({ color, selected, onPress }) => (

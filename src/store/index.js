@@ -196,6 +196,14 @@ const useStore = create(
         trips: s.trips.map(t => t.id !== tripId ? t : { ...t, ...snapshot }),
       })),
 
+      // Set ONLY an activity's photo (backfill) — no expense/cost side-effects.
+      setActivityPhoto: (tripId, actId, photo) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          days: t.days.map(d => ({ ...d, activities: d.activities.map(a => a.id === actId ? { ...a, photo } : a) })),
+        }),
+      })),
+
       reorderSlotActivities: (tripId, dayIndex, orderedIds) => set(s => ({
         trips: s.trips.map(t => {
           if (t.id !== tripId) return t;

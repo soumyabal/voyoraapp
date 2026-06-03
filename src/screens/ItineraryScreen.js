@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal, Share } from 'react-native';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal, Share, Image } from 'react-native';
 import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import DiscoverModal from '../modals/DiscoverModal';
@@ -12,6 +12,7 @@ import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodg
 import { scheduleDay } from '../utils/autoArrange';
 import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, isOpenAt, hoursLabel } from '../utils/hours';
+import { fetchPlacePhoto } from '../utils/places';
 import { exportDayAsPDF } from '../utils/exportPlan';
 
 // ─── Dietary warning helper ───────────────────────────────────────
@@ -409,7 +410,7 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
 }
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
-  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState } = useStore();
+  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto } = useStore();
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
   const [defaultSlotTime,       setDefaultSlotTime]       = useState('09:00');
@@ -443,6 +444,22 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   };
 
   const day = trip.days[currentDay] || trip.days[0];
+
+  // Backfill place photos for this day's stops that don't have one yet (added
+  // before we stored photos / via the AI planner), so the cards show a thumbnail.
+  // One cached Places lookup per place; guarded so we never refetch.
+  const photoTriedRef = useRef(new Set());
+  useEffect(() => {
+    (day?.activities || []).forEach(act => {
+      if (act.photo || act.lat == null || act.lng == null) return;
+      if (act.type !== 'activity' && act.type !== 'food' && act.type !== 'stay') return;
+      if (photoTriedRef.current.has(act.id)) return;
+      photoTriedRef.current.add(act.id);
+      fetchPlacePhoto(act.name, act.lat, act.lng)
+        .then(photo => { if (photo) setActivityPhoto(trip.id, act.id, photo); })
+        .catch(() => {});
+    });
+  }, [trip.id, currentDay, day?.activities?.length]);
 
   // Trip Check warnings for THIS day — surfaced inline so "arrange → see what's
   // still off" is one glance. Memoised so validateTrip doesn't run every render.
@@ -1160,7 +1177,9 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
           ) : (
             <>
               <Text style={styles.actTime}>{act.time}</Text>
-              <Icon name={ACT_ICON[act.type] || 'activity'} size={18} color={activityColors[act.type] || colors.subtle} style={{ marginTop: 3 }} />
+              {act.photo
+                ? <Image source={{ uri: act.photo }} style={styles.actThumb} />
+                : <Icon name={ACT_ICON[act.type] || 'activity'} size={18} color={activityColors[act.type] || colors.subtle} style={{ marginTop: 3 }} />}
               {act.type === 'transport' && !!act.arriveTime && (
                 <Text style={styles.actArriveTime}>→{act.arriveTime}</Text>
               )}
@@ -2046,6 +2065,7 @@ const styles = StyleSheet.create({
 
   // Time column
   actTimeCol:    { alignItems: 'center', justifyContent: 'center', minWidth: 44 },
+  actThumb:      { width: 38, height: 38, borderRadius: 9, marginTop: 5, backgroundColor: colors.surface2 },
   actTime:       { ...typography.caption, color: colors.primary, fontWeight: '700' },
   actIcon:       { fontSize: 18, marginTop: 3 },
   actArriveTime: { fontSize: 9, color: colors.muted, fontWeight: '600', marginTop: 3 },

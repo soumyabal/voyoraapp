@@ -302,7 +302,8 @@ function buildMapHTML() {
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>html,body,#map{height:100%;margin:0;background:#eee}
 .pin{display:flex;align-items:center;justify-content:center;min-width:30px;height:24px;padding:0 7px;border-radius:13px;color:#fff;font:700 12px -apple-system,system-ui,sans-serif;box-shadow:0 1px 5px rgba(0,0,0,.35);border:2px solid #fff;white-space:nowrap}
-.pin.sel{transform:scale(1.25)}</style></head><body><div id="map"></div>
+.pin.sel{transform:scale(1.25)}
+.pin.focus{background:#111827;min-width:26px;border-color:#fff;transform:scale(1.1)}</style></head><body><div id="map"></div>
 <script>
 var TINT=${JSON.stringify(MAP_TINT)};
 var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([20,0],2);
@@ -317,7 +318,9 @@ function viewRadius(){var c=map.getCenter();return Math.round(c.distanceTo(map.g
 // dense core — while never showing more than a ~15-mile radius. A tight cluster
 // still gets a sensible max zoom so pins stay readable.
 var FIT_R=24140; // 15 miles in metres — hard cap on how far the fit can reach
+var focusMarker=null;  // the "explore nearby" anchor (★) — kept across marker updates
 function fitDense(pts){
+  if(focusMarker){map.removeLayer(focusMarker);focusMarker=null;}  // leaving focus mode
   if(!pts.length)return;
   if(pts.length===1){map.setView(pts[0],14);return;}
   var la=pts.map(function(p){return p[0]}).sort(function(a,b){return a-b});
@@ -369,6 +372,16 @@ window.focusPin=function(lat,lng){
     programmatic=false;
   },350);
 };
+// "Explore nearby" → drop a ★ anchor on the chosen place and centre+zoom on it,
+// so it sits in the middle of the map with what's around it. Programmatic move.
+window.centerOn=function(lat,lng,z){
+  programmatic=true;
+  if(focusMarker)map.removeLayer(focusMarker);
+  var ic=L.divIcon({className:'',html:'<div class="pin focus">★</div>',iconSize:[28,24],iconAnchor:[14,12]});
+  focusMarker=L.marker([lat,lng],{icon:ic,zIndexOffset:1000}).addTo(map);
+  map.setView([lat,lng],z||14,{animate:false});
+  setTimeout(function(){programmatic=false;},450);
+};
 // Report user pan/zoom (with the viewed radius) so RN can offer "Search this
 // area" scoped to what's actually on screen. Skip our own programmatic moves.
 function reportMove(){if(programmatic)return;var c=map.getCenter();window.ReactNativeWebView.postMessage(JSON.stringify({type:'moved',lat:c.lat,lng:c.lng,radius:viewRadius()}));}
@@ -383,7 +396,7 @@ window.ReactNativeWebView.postMessage(JSON.stringify({type:'ready'}));
 // Geographic context pane — merged, layer-coloured pins. The map persists; only
 // markers update (via injectJavaScript → window.setData). Adding still happens
 // in the carousel/list beneath, so the map itself is browse + anchor-search.
-function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearchHere, onLongPress, showSearchArea, onSearchArea, fitToken, focusTarget }) {
+function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearchHere, onLongPress, showSearchArea, onSearchArea, fitToken, focusTarget, centerOn }) {
   const ref = useRef(null);
   const lastFit = useRef(-1);
   const readyRef = useRef(false);   // don't push (or consume fitToken) until the map has loaded
@@ -397,12 +410,16 @@ function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearc
   // toggle changes the pins but not the token, so the map holds its position.
   const push = () => {
     if (!readyRef.current) return;
-    // Only consume the fit token once we actually have points to fit — otherwise
-    // an early empty push (e.g. opening straight into the map before results load)
-    // would burn the token and the results would arrive with no re-fit.
-    const wantFit = fitToken !== lastFit.current && pts.length > 0;
+    // Consume the fit token once we can act — points to fit, OR an explicit
+    // centre (explore-nearby) which doesn't need points. An early empty push
+    // (opening straight into the map before results load) otherwise burns the
+    // token and the results arrive with no re-fit.
+    const hasCenter = !!centerOn && centerOn.lat != null;
+    const wantFit = fitToken !== lastFit.current && (pts.length > 0 || hasCenter);
     if (wantFit) lastFit.current = fitToken;
-    ref.current?.injectJavaScript(`window.setData&&window.setData(${ptsJSON},${wantFit ? 1 : 0});true;`);
+    const doCenter = wantFit && hasCenter;                 // centre on the place, don't fit to the cluster
+    const centerJS = doCenter ? `window.centerOn&&window.centerOn(${centerOn.lat},${centerOn.lng},14);` : '';
+    ref.current?.injectJavaScript(`window.setData&&window.setData(${ptsJSON},${(wantFit && !doCenter) ? 1 : 0});${centerJS}true;`);
   };
   const onReady = () => { readyRef.current = true; push(); };
   useEffect(() => { push(); }, [ptsJSON, fitToken]);
@@ -833,6 +850,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
               <DiscoverMap places={results} addedNames={addedNames} seenNames={seenNames} onMoved={handleMapMoved} onSelect={handleMapSelect}
                 onSearchHere={pt => searchAround(pt)} onLongPress={pt => searchAround(pt)}
                 fitToken={fitToken} focusTarget={focusTarget}
+                centerOn={nearLabel && nearby && nearby.lat != null ? { lat: nearby.lat, lng: nearby.lng } : null}
                 showSearchArea={mapMoved} onSearchArea={searchThisArea} />
               {loading && (
                 <View style={s.mapLoadPill} pointerEvents="none">

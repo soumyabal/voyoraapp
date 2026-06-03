@@ -28,7 +28,7 @@
 import { timeToMin, minToTime } from './slots';
 import { estimateDuration, validateTrip } from './tripValidator';
 import { travelLeg } from './geo';
-import { weekdayOf } from './hours';
+import { weekdayOf, dayIntervals } from './hours';
 
 // Substantial activities allowed per day, by pace. Meals/notes/stays don't count.
 const PACE_CAP = { relaxed: 3, moderate: 4, packed: 6 };
@@ -429,15 +429,35 @@ export function scheduleDay(activities, opts = {}) {
                        : NIGHTLIFE_RE.test(text(a)) ? WINDOWS.nightlife : null;
   acts.filter(a => windowFor(a) != null).forEach(a => place(a, windowFor(a)));
   // 5. Remaining daytime activities flow from the morning, nearest-neighbour.
-  //    The gap after each stop is the estimated TRAVEL time to the next one (free
-  //    haversine engine), so an arranged day already clears the distance-aware
-  //    Trip Check rule instead of tripping it. No coords → a plain buffer.
+  //    Two constraints layered on the slot search:
+  //    a) OPENING HOURS — never place a venue before it opens (or after it closes);
+  //       a place open 10–19 must not land at 09:00. Unknown hours flow freely.
+  //    b) TRAVEL — the gap after each stop is the estimated travel time to the next
+  //       (free haversine), so the arranged day already clears the distance rule.
+  const wd2 = weekdayOf(opts.date);
+  // Earliest open slot for `a` at/after `from` that fits `need` within its hours.
+  const placeInHours = (a, from, need) => {
+    const intervals = dayIntervals(a.openHours, wd2);   // null=unknown, []=closed today
+    if (intervals && intervals.length) {
+      for (const { o, c } of intervals) {
+        const start = Math.max(from, o), end = Math.min(c, DAY_END_MIN);
+        if (start + need <= end) {
+          const s = findSlotMin(occ, start, need, end);
+          if (s != null) return s;
+        }
+      }
+      // Can't fit fully within hours → at least don't start before it opens.
+      const earliest = Math.max(from, intervals[0].o);
+      return findSlotMin(occ, earliest, need, DAY_END_MIN) ?? earliest;
+    }
+    return findSlotMin(occ, from, need, DAY_END_MIN)
+        ?? findSlotMin(occ, DAY_START_MIN, need, DAY_END_MIN) ?? from;
+  };
   const daytime = nearestNeighborOrder(acts.filter(a => windowFor(a) == null), anchor);
   let cursor = DAY_START_MIN;
   daytime.forEach((a, idx) => {
     const need = Math.max(BUFFER_MIN, estimateDuration(a));
-    const start = findSlotMin(occ, cursor, need, DAY_END_MIN)
-               ?? findSlotMin(occ, DAY_START_MIN, need, DAY_END_MIN) ?? cursor;
+    const start = placeInHours(a, cursor, need);
     a.time = minToTime(start);
     addInterval(occ, start, need);
     const nxt = daytime[idx + 1];

@@ -57,6 +57,24 @@ describe('scheduleDay', () => {
     expect(out.find(x => x.name === 'Grill').time).toBe('19:00');
   });
 
+  test('a daytime activity is not scheduled before it opens', () => {
+    // Open 10 AM–7 PM on Fri 2026-06-12 (weekday 5) → must not land at 09:00.
+    const out = scheduleDay(
+      [a('Lake Tour', 'activity', { openHours: [{ d: 5, o: 10 * 60, c: 19 * 60 }] })],
+      { date: '2026-06-12' },
+    );
+    expect(out[0].time >= '10:00').toBe(true);
+  });
+
+  test('opening hours order the day — the later-opening venue goes second', () => {
+    const out = scheduleDay([
+      a('Late Venue',  'activity', { openHours: [{ d: 5, o: 11 * 60, c: 18 * 60 }] }),
+      a('Early Venue', 'activity', { openHours: [{ d: 5, o: 8 * 60,  c: 17 * 60 }] }),
+    ], { date: '2026-06-12' });
+    expect(out.find(x => x.name === 'Early Venue').time >= '08:00').toBe(true);
+    expect(out.find(x => x.name === 'Late Venue').time >= '11:00').toBe(true);
+  });
+
   test('a sunset activity is pushed to the evening', () => {
     const out = scheduleDay([a('Sunset Point', 'activity'), a('Museum', 'activity')]);
     expect(out.find(x => x.name === 'Sunset Point').time >= '18:00').toBe(true);

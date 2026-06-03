@@ -310,27 +310,47 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
           </View>
         </View>
 
-        {/* Trip health — a CALM status pip, not a defect tally. Only genuine,
-            provable conflicts (errors) surface here; warnings/tips live in the
-            per-day pill + the checker. Green ✓ when clear; amber + count for the
-            rare real conflict — never alarm-red, never the inflated total. */}
+        {/* Trip health — THREE honest states (a green ✓ is EARNED, not the default):
+              · amber + count → a genuine, provable conflict to fix
+              · neutral "…"   → planned-so-far is clean but the trip ISN'T finished
+                                (a blank/half-built trip — calm, never an alarm)
+              · green ✓        → every (interior) day planned AND no conflicts
+            Reserving green stops a half-empty trip from claiming "all set", without
+            re-introducing red/amber alarm on a fresh trip (neutral can't scare). */}
         {!!onCheckTrip && (() => {
           const ignored = trip.ignoredWarnings || [];
           const conflicts = validateTrip(trip)
             .filter(w => w.severity === 'error' && !ignored.includes(`${w.type}:${w.dayIndex ?? 'trip'}`))
             .length;
-          const clear = conflicts === 0;
+          // Green ✓ is earned only when EVERY day has real content AND there's no
+          // conflict — so the checkmark never contradicts a half-empty trip. A
+          // day with just a note (rest day) doesn't count as planned.
+          const isPlanned   = d => d.activities.some(a => a.status !== 'skipped' && a.type !== 'note');
+          const totalDays   = trip.days.length;
+          const plannedDays = trip.days.filter(isPlanned).length;
+
+          let bg, icon, label;
+          if (conflicts > 0) {
+            bg = colors.warn;    icon = 'warning-outline';
+            label = `Trip check: ${conflicts} thing${conflicts > 1 ? 's' : ''} to fix`;
+          } else if (plannedDays < totalDays) {
+            bg = colors.subtle;  icon = 'more';
+            label = plannedDays === 0
+              ? 'Trip check: nothing planned yet'
+              : `Trip check: ${plannedDays} of ${totalDays} days planned, no conflicts so far`;
+          } else {
+            bg = colors.success; icon = 'checkmark-circle';
+            label = `Trip check: all ${totalDays} days planned, no conflicts`;
+          }
           return (
             <TouchableOpacity
-              style={[ch.checkChip, { backgroundColor: clear ? colors.success : colors.warn }]}
+              style={[ch.checkChip, { backgroundColor: bg }]}
               onPress={onCheckTrip}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel={clear
-                ? 'Trip check: looks good'
-                : `Trip check: ${conflicts} thing${conflicts > 1 ? 's' : ''} to fix`}
+              accessibilityLabel={label}
             >
-              <Icon name={clear ? 'checkmark-circle' : 'warning-outline'} size={13} color="#fff" />
+              <Icon name={icon} size={13} color="#fff" />
               {conflicts > 0 && <Text style={ch.checkChipText}>{conflicts}</Text>}
             </TouchableOpacity>
           );

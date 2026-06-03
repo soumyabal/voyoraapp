@@ -70,6 +70,13 @@ count); checker copy "conflict/warning" → "to fix / to check / tips". Verified
 
 - [ ] **Per-day health dot (option #6).** Put a small green/amber dot on each Day tab
       so "which day has something" is glanceable, and the trip badge can retire. — `ItineraryScreen.js`
+- [ ] **Completeness as its own affordance (separate from health).** The badge now has
+      THREE states (amber conflict / neutral "…" in-progress / earned green ✓ when every
+      day is planned) so a half-empty trip no longer claims "all set". Richer follow-ups
+      the panel proposed: a quiet "N of M days planned" progress meter / ring next to the
+      badge, and turning each empty day's "nothing planned" state into an INVITING
+      "Day 2 is open · Add something" CTA (Wanderlog/Furkot pattern — completeness lives
+      on the day, not the alarm badge). — `ItineraryScreen.js`
 - [ ] **Calm-on-arrival (option #7).** Don't even compute-and-show the pill on a fresh
       AI/sample trip until the user engages (edits/taps). Safe now that #1 distinguishes
       conflict from tip. — `ItineraryScreen.js`

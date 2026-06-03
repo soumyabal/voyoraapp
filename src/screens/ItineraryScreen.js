@@ -236,7 +236,7 @@ function TripExpenseChart({ trip, currentDay, onSelectDay, compact }) {
 // Left:   TRIP $X,XXX
 // Right:  Day N  $XXX  $XX/p
 // ⓘ tap: slide-up detail sheet (family totals, chart, push button)
-function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip }) {
+function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onResetDay, onResetAll }) {
   const [showDetail, setShowDetail] = useState(false);
   const itinTotal = calcTripItineraryTotal(trip);
   const day     = trip.days[currentDay];
@@ -381,6 +381,26 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip }) {
                 <Text style={ch.pushBtnText}>➡️ Move to Splitwise</Text>
               </TouchableOpacity>
             )}
+
+            {/* Reset — start the plan over (one day, or the whole trip) */}
+            {(!!onResetDay || !!onResetAll) && (
+              <>
+                <View style={ch.sheetDivider} />
+                <Text style={ch.resetLabel}>RESET PLAN</Text>
+                <View style={ch.resetRow}>
+                  {!!onResetDay && (
+                    <TouchableOpacity style={ch.resetBtn} onPress={() => { setShowDetail(false); onResetDay(); }} activeOpacity={0.8}>
+                      <Text style={ch.resetBtnText}>↺ Clear {trip.days[currentDay]?.label || 'this day'}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {!!onResetAll && (
+                    <TouchableOpacity style={[ch.resetBtn, ch.resetBtnAll]} onPress={() => { setShowDetail(false); onResetAll(); }} activeOpacity={0.8}>
+                      <Text style={[ch.resetBtnText, ch.resetBtnTextAll]}>↺ Clear all days</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
           </View>
         </TouchableOpacity>
       </Modal>
@@ -389,7 +409,7 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip }) {
 }
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
-  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities } = useStore();
+  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState } = useStore();
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
   const [defaultSlotTime,       setDefaultSlotTime]       = useState('09:00');
@@ -586,6 +606,52 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     showUndoAction('Activity deleted', 'trash-outline', () => addActivity(trip.id, currentDay, snapshot));
   };
 
+  // ── Reset the plan ────────────────────────────────────────────────
+  // Wipe a day (or the whole trip) back to empty so you can re-plan from
+  // scratch — also handy for exercising features. Snapshots the trip's plan +
+  // expenses first so the whole reset is one Undo away.
+  const planSnapshot = () => ({
+    days: trip.days, expenses: trip.expenses,
+    itineraryPushed: trip.itineraryPushed, budgetByFamily: trip.budgetByFamily,
+  });
+  const countActs = (day) => (day?.activities || []).filter(a => a.status !== 'skipped').length;
+
+  const resetDay = () => {
+    const day = trip.days[currentDay];
+    const n = countActs(day);
+    if (!n) { Alert.alert('Nothing to clear', `${day?.label || 'This day'} has no activities.`); return; }
+    const snap = planSnapshot();
+    Alert.alert(
+      `Clear ${day.label}?`,
+      `Removes all ${n} ${n === 1 ? 'activity' : 'activities'} on ${day.label} and their auto-added expenses. You can undo.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear day', style: 'destructive', onPress: () => {
+          resetDayActivities(trip.id, currentDay);
+          showUndoAction(`Cleared ${day.label}`, 'trash-outline', () => restoreTripState(trip.id, snap));
+        } },
+      ],
+    );
+  };
+
+  const resetAll = () => {
+    const total = trip.days.reduce((sum, d) => sum + countActs(d), 0);
+    if (!total) { Alert.alert('Nothing to clear', 'This trip has no activities yet.'); return; }
+    const snap = planSnapshot();
+    Alert.alert(
+      'Clear all days?',
+      `Removes all ${total} activities across ${trip.days.length} days and resets the plan to empty. Manual expenses are kept. You can undo.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear all days', style: 'destructive', onPress: () => {
+          resetAllActivities(trip.id);
+          setCurrentDay(0);
+          showUndoAction('Cleared all days', 'trash-outline', () => restoreTripState(trip.id, snap));
+        } },
+      ],
+    );
+  };
+
   return (
     <View style={{ flex: 1 }}>
       {/* Sticky header — always visible, never scrolls away */}
@@ -595,6 +661,8 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         onSelectDay={setCurrentDay}
         onPush={handlePush}
         onCheckTrip={onCheckTrip}
+        onResetDay={resetDay}
+        onResetAll={resetAll}
       />
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -1459,6 +1527,12 @@ const ch = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
+  resetLabel: { fontSize: 10, fontWeight: '800', color: colors.muted, letterSpacing: 1, marginTop: spacing.md, marginBottom: spacing.sm },
+  resetRow: { flexDirection: 'row', gap: spacing.sm },
+  resetBtn: { flex: 1, borderRadius: radius.lg, paddingVertical: spacing.md, alignItems: 'center', borderWidth: 1.5, borderColor: colors.border, backgroundColor: '#fff' },
+  resetBtnText: { fontSize: 13, fontWeight: '700', color: colors.text },
+  resetBtnAll: { borderColor: '#fecaca', backgroundColor: '#fef2f2' },
+  resetBtnTextAll: { color: colors.danger },
   syncedBadge: {
     backgroundColor: 'rgba(0,184,148,0.18)',
     borderRadius: radius.lg,

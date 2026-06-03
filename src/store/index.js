@@ -154,6 +154,32 @@ const useStore = create(
         }),
       })),
 
+      // Clear ONE day's activities and re-sync its itinerary expenses (manual kept).
+      resetDayActivities: (tripId, dayIndex) => set(s => ({
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+          const days = t.days.map((d, i) => i === dayIndex ? { ...d, activities: [] } : d);
+          const expenses = t.itineraryPushed ? rebuildItineraryExpenses({ ...t, days }) : t.expenses;
+          return { ...t, days, expenses };
+        }),
+      })),
+
+      // Wipe ALL activities — a fresh slate to plan from. Manual expenses are kept;
+      // itinerary expenses, budget, and the pushed flag reset.
+      resetAllActivities: (tripId) => set(s => ({
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+          const days = t.days.map(d => ({ ...d, activities: [] }));
+          const expenses = (t.expenses || []).filter(e => e.source !== 'itinerary');
+          return { ...t, days, expenses, itineraryPushed: false, budgetByFamily: [] };
+        }),
+      })),
+
+      // Restore a prior {days, expenses, ...} snapshot — used to undo a reset.
+      restoreTripState: (tripId, snapshot) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : { ...t, ...snapshot }),
+      })),
+
       reorderSlotActivities: (tripId, dayIndex, orderedIds) => set(s => ({
         trips: s.trips.map(t => {
           if (t.id !== tripId) return t;

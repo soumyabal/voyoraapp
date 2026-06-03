@@ -26,6 +26,8 @@
  *  11. Dietary conflict — food activity name contains meat/alcohol keywords vs group dietary profile
  */
 
+import { travelLeg, formatKm } from './geo';
+
 // ─── Dietary conflict patterns ────────────────────────────────────
 const MEAT_RE = /\b(beef|pork|lamb|chicken|mutton|fish|prawn|shrimp|seafood|lobster|crab|oyster|sashimi|sushi|steak|burger|bbq|barbecue|bacon|ham|salami|pepperoni|chorizo|meat|non.?veg)\b/i;
 const ALCO_RE = /\b(beer|wine|cocktail|whisky|whiskey|vodka|rum|gin|spirits|alcohol|brewery|pub|bar|tavern|champagne|prosecco|sake|sangria|mojito|margarita|tequila)\b/i;
@@ -255,6 +257,43 @@ function validateDay(day, dayIndex, families = []) {
         actIds: [curr.act.id, next.act.id],
       });
     }
+  }
+
+  // ── Rule 1b: Not enough travel time between far-apart stops ───────
+  // Distance-aware. Even when two stops don't strictly overlap, if they're far
+  // apart and the next starts before you could realistically get there, flag it.
+  // Pure overlaps are left to Rule 1; this catches "back-to-back but across town".
+  // Uses the free haversine estimate (Phase 2: real routing).
+  for (let i = 0; i < timeline.length - 1; i++) {
+    const curr = timeline[i];
+    const next = timeline[i + 1];
+    if (curr.duration <= 0) continue;
+    if (curr.act.type === 'transport' || next.act.type === 'transport') continue; // the drive IS the travel
+    const leg = travelLeg(curr.act, next.act);
+    if (!leg || leg.min < 10) continue;            // unknown coords, or a trivial hop
+    const gap = next.startMin - curr.endMin;       // free minutes between end and next start
+    if (gap < 0 || gap >= leg.min) continue;       // overlap → Rule 1; enough time → fine
+    const short = leg.min - gap;
+    if (short < 5) continue;                        // within rounding noise
+    warnings.push({
+      type:     'travel_time',
+      severity: short >= 20 ? 'error' : 'warning',
+      icon:     leg.mode === 'walk' ? '🚶' : '🚗',
+      title:    'Tight travel time',
+      message:  `"${next.act.name}" starts ${formatDuration(gap)} after "${curr.act.name}" ends, but they're ~${formatKm(leg.km)} apart (~${leg.min} min ${leg.mode}).`,
+      hint:     `Start "${next.act.name}" around ${formatEndTime(curr.endMin + leg.min)} or later, or add the drive between them.`,
+      suggestedTime:      formatEndTime(curr.endMin + leg.min),
+      moveActId:          next.act.id,
+      moveActName:        next.act.name,
+      impactedActivities: [{
+        id:            next.act.id,
+        name:          next.act.name,
+        time:          next.act.time,
+        suggestedTime: formatEndTime(curr.endMin + leg.min),
+      }],
+      dayIndex,
+      actIds: [curr.act.id, next.act.id],
+    });
   }
 
   // ── Rule 2: Full-day venue with too many other activities ─────────

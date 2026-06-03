@@ -27,6 +27,7 @@
  */
 import { timeToMin, minToTime } from './slots';
 import { estimateDuration, validateTrip } from './tripValidator';
+import { travelLeg } from './geo';
 
 // Substantial activities allowed per day, by pace. Meals/notes/stays don't count.
 const PACE_CAP = { relaxed: 3, moderate: 4, packed: 6 };
@@ -436,15 +437,20 @@ export function scheduleDay(activities, opts = {}) {
                        : NIGHTLIFE_RE.test(text(a)) ? WINDOWS.nightlife : null;
   acts.filter(a => windowFor(a) != null).forEach(a => place(a, windowFor(a)));
   // 5. Remaining daytime activities flow from the morning, nearest-neighbour.
+  //    The gap after each stop is the estimated TRAVEL time to the next one (free
+  //    haversine engine), so an arranged day already clears the distance-aware
+  //    Trip Check rule instead of tripping it. No coords → a plain buffer.
   const daytime = nearestNeighborOrder(acts.filter(a => windowFor(a) == null), anchor);
   let cursor = DAY_START_MIN;
-  daytime.forEach(a => {
+  daytime.forEach((a, idx) => {
     const need = Math.max(BUFFER_MIN, estimateDuration(a));
     const start = findSlotMin(occ, cursor, need, DAY_END_MIN)
                ?? findSlotMin(occ, DAY_START_MIN, need, DAY_END_MIN) ?? cursor;
     a.time = minToTime(start);
     addInterval(occ, start, need);
-    cursor = start + need + BUFFER_MIN;
+    const nxt = daytime[idx + 1];
+    const leg = nxt ? travelLeg(a, nxt) : null;
+    cursor = start + need + (leg ? Math.max(BUFFER_MIN, leg.min) : BUFFER_MIN);
   });
 
   return all.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));

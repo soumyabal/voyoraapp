@@ -10,6 +10,7 @@ import { fmt, fmtM, getActivityIcon, uid } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight } from '../utils/tripValidator';
 import { scheduleDay } from '../utils/autoArrange';
+import { travelLeg, formatKm } from '../utils/geo';
 import { exportDayAsPDF } from '../utils/exportPlan';
 
 // ─── Dietary warning helper ───────────────────────────────────────
@@ -112,6 +113,29 @@ function getSlotKey(timeStr) {
   if (mins < 1020) return 'afternoon';
   if (mins < 1260) return 'evening';
   return 'night';
+}
+
+const toMin = t => { const [h, m] = (t || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+
+// ── Travel leg between two consecutive stops ──────────────────────
+// The intuitive distance cue: a little "🚗 12 min · 5.0 km" connector between
+// cards (Wanderlog/Google-Trips style). Turns RED when the next stop starts
+// before you could realistically get there — the same call the Trip Check rule
+// makes, so the inline cue and the warning always agree.
+function TravelConnector({ from, to }) {
+  const leg = travelLeg(from, to);
+  if (!leg || leg.min < 3) return null;            // unknown coords or a trivial hop
+  const gap   = toMin(to.time) - (toMin(from.time) + estimateDuration(from));
+  const tight = leg.min >= 10 && gap < leg.min;    // not enough time to travel (close OR overlapping)
+  const gapNote = !tight ? '' : gap < 0 ? ' — overlaps' : ` — only ${gap} min gap`;
+  return (
+    <View style={styles.legRow}>
+      <View style={[styles.legDot, tight && styles.legDotTight]} />
+      <Text style={[styles.legText, tight && styles.legTextTight]} numberOfLines={1}>
+        {leg.mode === 'walk' ? '🚶' : '🚗'} {leg.min} min · {formatKm(leg.km)}{gapNote}
+      </Text>
+    </View>
+  );
 }
 
 // ── Robinhood-style expense chart ─────────────────────────────────
@@ -811,6 +835,8 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                       keyExtractor={(act) => act.id}
                       scrollEnabled={false}
                       renderItem={({ item: act, index }) => (
+                        <>
+                        {index > 0 && <TravelConnector from={slotActs[index - 1]} to={act} />}
                         <ActivityCard
                           activity={act}
                           trip={trip}
@@ -836,6 +862,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                           onMoveRequest={() => setMovingAct(act)}
                           onSlotMove={() => openSlotMove(act)}
                         />
+                        </>
                       )}
                     />
                   ) : null}
@@ -1595,6 +1622,12 @@ const styles = StyleSheet.create({
   bfastChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fffaf2', borderWidth: 1, borderColor: '#f0d9b5', borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.sm, marginTop: 2 },
   bfastChipText: { flex: 1, fontSize: 12.5, color: '#9a6b1e', fontWeight: '600' },
   bfastChipAdd: { fontSize: 11, color: colors.primary, fontWeight: '800' },
+  // Travel leg connector between two stops
+  legRow:      { flexDirection: 'row', alignItems: 'center', gap: 7, paddingLeft: 22, marginTop: -2, marginBottom: 4 },
+  legDot:      { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.border },
+  legDotTight: { backgroundColor: '#dc2626' },
+  legText:     { fontSize: 11, color: colors.subtle, fontWeight: '600' },
+  legTextTight:{ color: '#dc2626', fontWeight: '800' },
   dayWarnings: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
   dayWarnChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 6 },
   dayWarnIcon: { fontSize: 12 },

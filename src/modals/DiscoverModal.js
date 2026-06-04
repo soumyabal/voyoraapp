@@ -42,15 +42,6 @@ const FILTER_OPTS = [
   { key: 'gluten-free', label: '\u{1F33E} GF',         bias: 'gluten free' },
 ];
 
-function getDietaryBias(families = []) {
-  const all = families.flatMap(f => f.dietary || []);
-  const b = [];
-  if (all.includes('vegetarian') || all.includes('vegan')) b.push('vegetarian friendly');
-  if (all.includes('vegan'))      b.push('vegan');
-  if (all.includes('no-alcohol')) b.push('non-alcoholic options');
-  if (all.includes('gluten-free'))b.push('gluten free options');
-  return b.join(' ');
-}
 function getFilterBias(af) {
   return af.map(k => FILTER_OPTS.find(f => f.key === k)?.bias).filter(Boolean).join(' ');
 }
@@ -518,6 +509,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const [newCity,        setNewCity]        = useState('');
   const searchTimeout = useRef(null);
   const filterTimeout = useRef(null);
+  const reqSeq        = useRef(0);   // monotonic: only the LATEST loadScope may write results (no stale-wins)
 
   const destination   = trip?.destination ?? '';
   const families      = trip?.families ?? [];
@@ -590,10 +582,16 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   // otherwise → each enabled layer's default query (parallel). `area` biases to
   // a point (search-this-area / anchor / double-tap) and drops the city scope.
   const loadScope = async () => {
+    const myReq = ++reqSeq.current;   // claim this run; a newer call bumps the seq and wins
+    const isStale = () => myReq !== reqSeq.current;
     const loc  = activeCity || destination;
     const area = areaSearch;
     const text = searchText.trim();
-    const diet = [getDietaryBias(families), getFilterBias(activeFilters)].filter(Boolean).join(' ');
+    // Dietary bias comes ONLY from the (clearable) chips — which are auto-seeded from the
+    // group's dietary at open (see the [visible] effect). Don't also fold in the raw family
+    // bias: that copy can't be turned off, so "Search without filters" / un-checking a chip
+    // would silently keep filtering Eat (a vegetarian group could never find a steakhouse).
+    const diet = getFilterBias(activeFilters);
     const bias = area ? { lat: area.lat, lng: area.lng, radius: area.radius || 12000 } : null;
     setError(null); setSelectedName(null); setLoading(true);
     try {
@@ -612,6 +610,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
         // The location bias still ranks nearby matches first. Fixes "Great Wolf Lodge"
         // (just outside the viewport) showing "no results".
         const places = await cachedFetch(q, bias, 2);   // up to 40 for a typed search
+        if (isStale()) return;   // a newer search started while we awaited — don't clobber it
         setTextResults(places);
         if (!places.length) setError(`No results for "${text}".`);
       } else {
@@ -624,12 +623,13 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
           const places = near(await cachedFetch(q, bias, pages));
           return [L.key, places.map(p => ({ ...p, activityType: L.type, _layer: L.key }))];
         }));
+        if (isStale()) return;   // superseded mid-flight — leave the newer results in place
         const next = { see: [], eat: [], stay: [] };
         got.forEach(([k, v]) => { next[k] = v; });
         setLayerData(next);
         if (!got.reduce((n, [, v]) => n + v.length, 0)) setError('No results found.');
       }
-    } finally { setLoading(false); }
+    } finally { if (!isStale()) setLoading(false); }
   };
 
   // Single debounced driver: typing waits 450ms; layer/city/area/filter changes
@@ -747,7 +747,10 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   };
 
   // Selecting a city re-runs the search via the activeCity effect (resets area scope).
-  const chooseCity = c => { setCityPickerOpen(false); setAreaSearch(null); setMapMoved(false); setNearLabel(null); setFitToken(t => t + 1); setActiveCity(c); };
+  // Clear the prior city's results/pins too, so we don't flash the old city while the
+  // new fetch is in flight (and an in-flight old response can't re-assert them).
+  const clearResults = () => { setTextResults([]); setLayerData({ see: [], eat: [], stay: [] }); setError(null); };
+  const chooseCity = c => { setCityPickerOpen(false); setAreaSearch(null); setMapMoved(false); setNearLabel(null); clearResults(); setFitToken(t => t + 1); setActiveCity(c); };
 
   // Commit a freely-typed city (need not be in the trip's destination).
   const commitNewCity = () => {
@@ -756,7 +759,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     if (!c) { setCityPickerOpen(false); return; }
     setCities(prev => prev.some(x => cityLabel(x) === cityLabel(c)) ? prev : [...prev, c]);
     setCityPickerOpen(false);
-    setAreaSearch(null); setMapMoved(false); setNearLabel(null); setFitToken(t => t + 1);
+    setAreaSearch(null); setMapMoved(false); setNearLabel(null); clearResults(); setFitToken(t => t + 1);
     setActiveCity(c);
   };
 

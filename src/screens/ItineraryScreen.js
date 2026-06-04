@@ -12,7 +12,7 @@ import { fmt, fmtM, getActivityIcon, uid, tripPhase, defaultDayFor, daysBetweenI
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost, calcFamilyBalances } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
-import { scheduleDay, planDay } from '../utils/autoArrange';
+import { scheduleDay, planDay, returnJourneyDraft } from '../utils/autoArrange';
 import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, isOpenAt, hoursLabel } from '../utils/hours';
 import { fetchPlacePhoto } from '../utils/places';
@@ -502,7 +502,7 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
 }
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
-  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto, markPlanDayNoteSeen, setNightPlan, toggleActivityLock } = useStore();
+  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto, markPlanDayNoteSeen, setNightPlan, toggleActivityLock, ignoreWarning } = useStore();
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
   const [manualSeed,            setManualSeed]            = useState(null);   // {name?,address?,lat?,lng?,tile?} prefill when manual is opened from the Discover bridge / a dropped pin
@@ -991,6 +991,38 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                   })}
                 </ScrollView>
               )}
+            </View>
+          );
+        })()}
+
+        {/* ── "Heading home?" — last-day return-journey one-tap draft (propose, never
+            commit; only known facts pre-filled, cost left blank, dismissal remembered) ── */}
+        {(() => {
+          const isLastDay = trip.days.length > 1 && currentDay === trip.days.length - 1;
+          if (!isLastDay) return null;
+          if ((trip.ignoredWarnings || []).includes('return_journey')) return null;
+          const draft = returnJourneyDraft(trip);
+          if (!draft) return null;
+          const emoji = { flight: '✈️', car: '🚗', train: '🚆', ship: '⛴️', bus: '🚌' }[draft.subtype] || '🧳';
+          const addReturn = () => {
+            const id = uid();
+            addActivity(trip.id, currentDay, { ...draft, id });
+            showUndoAction(`${emoji} ${draft.name} added · set the time + cost`, 'airplane-outline', () => deleteActivity(trip.id, id));
+          };
+          return (
+            <View style={styles.returnCard}>
+              <Text style={styles.returnTitle}>{emoji}  Heading home?</Text>
+              <Text style={styles.returnBody}>
+                It's your last day — add your way home. We pre-filled “{draft.name}”; just set the time and cost.
+              </Text>
+              <View style={styles.returnBtnRow}>
+                <TouchableOpacity style={styles.returnAddBtn} onPress={addReturn} activeOpacity={0.85}>
+                  <Text style={styles.returnAddText}>+ Add return</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.returnDismissBtn} onPress={() => ignoreWarning(trip.id, 'return_journey')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                  <Text style={styles.returnDismissText}>Not now</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           );
         })()}
@@ -2159,6 +2191,14 @@ const styles = StyleSheet.create({
   syncedBadgeText: { ...typography.caption, color: colors.green, fontWeight: '700' },
 
   // ── Must-dos strip ───────────────────────────────────────────────
+  returnCard: { marginHorizontal: spacing.xxl, marginTop: spacing.sm, marginBottom: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: 12, backgroundColor: '#eef2ff', borderRadius: radius.lg, borderWidth: 1, borderColor: '#c7d2fe' },
+  returnTitle: { fontSize: 14, fontWeight: '800', color: '#3730a3' },
+  returnBody: { fontSize: 12.5, color: '#4338ca', marginTop: 4, lineHeight: 17 },
+  returnBtnRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: 10 },
+  returnAddBtn: { backgroundColor: '#4f46e5', paddingHorizontal: spacing.lg, paddingVertical: 8, borderRadius: radius.full },
+  returnAddText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  returnDismissBtn: { paddingHorizontal: spacing.sm, paddingVertical: 8 },
+  returnDismissText: { color: '#6366f1', fontSize: 13, fontWeight: '700' },
   mustDosStrip: {
     marginHorizontal: spacing.xxl,
     marginTop: spacing.xs,

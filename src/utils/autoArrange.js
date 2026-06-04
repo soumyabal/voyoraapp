@@ -203,6 +203,46 @@ function placeToDraft(place, draftId, extra = {}) {
   };
 }
 
+// ── Last-day "heading home" return draft ──────────────────────────
+// The last day strongly implies a return home — but HOW you get home is a guess
+// (fly / drive / train / open-jaw / multi-leg), so we PROPOSE a pre-filled DRAFT the
+// user accepts in one tap; we never silently commit it, and never guess a COST (that
+// would corrupt the per-family split). PURE: returns a draft Activity or null.
+//
+// Returns null (no proposal) when we can't be confidently helpful:
+//   · one-day trip (no separate return)         · no home origin set (→ soft tip instead)
+//   · a way home is already planned (find-or-update: any transport on the last day)
+const ARRIVAL_MODE_WORD = { flight: 'Flight', car: 'Drive', train: 'Train', ship: 'Ferry', bus: 'Bus' };
+export function returnJourneyDraft(trip) {
+  const days = trip?.days || [];
+  if (days.length < 2) return null;                       // one-day trip
+  const origin = trip?.origin;
+  if (!origin || !origin.label) return null;              // no home → the "no way home" tip handles it
+  const lastDay = days[days.length - 1];
+  const acts = (lastDay.activities || []).filter(a => a.status !== 'skipped');
+  if (acts.some(a => a.type === 'transport')) return null; // a return is already there — propose nothing
+
+  // Mirror HOW they arrived (Day-1's first transport), else a generic drive. KNOWN fact.
+  const arrival = (days[0].activities || []).find(a => a.type === 'transport' && a.subtype);
+  const subtype = arrival?.subtype || 'car';
+  const word = ARRIVAL_MODE_WORD[subtype] || 'Trip';
+  return {
+    type: 'transport',
+    subtype,
+    name: `${word} home to ${origin.label}`,
+    time: '16:00',            // SOFT default (sorts to the day's tail); editable, never locked
+    detail: '',
+    lat: origin.lat ?? null,  // destination = home
+    lng: origin.lng ?? null,
+    costPerPerson: 0,         // NEVER guess a fare — leave it blank to protect the split
+    costMode: 'per_person',
+    costAmount: 0,
+    note: null,
+    status: null,
+    source: 'auto-return',    // marker so we never propose a second one
+  };
+}
+
 // ── Main ──────────────────────────────────────────────────────────
 export function autoArrange(basket, trip, opts = {}) {
   const days = trip.days || [];

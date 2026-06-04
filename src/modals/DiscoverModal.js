@@ -758,7 +758,10 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
   const handleAdd = place => {
     setPickerDay(dayIndex ?? 0);
-    setPickerSlot(getSlotKey(defaultTime || '09:00'));
+    // A hotel = check-in: default to the afternoon/check-in slot (~16:00, matching
+    // the engine's WINDOWS.checkin), never morning. Other types honor the tapped slot.
+    const initTime = place.activityType === 'stay' ? '16:00' : (defaultTime || '09:00');
+    setPickerSlot(getSlotKey(initTime));
     // Default nights to cover the rest of the trip (not 1) so a single hotel anchors
     // every night/day; the user can still adjust. The old '1' default was the cause
     // of "Night 1 of 1" on a multi-night trip.
@@ -1036,7 +1039,12 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
           <TouchableOpacity style={sp.overlay} activeOpacity={1} onPress={() => setPendingPlace(null)}>
             <View style={sp.sheet} onStartShouldSetResponder={() => true}>
               <View style={sp.handle}/>
-              <Text style={sp.sheetTitle} numberOfLines={1}>Add "{pendingPlace?.name}"</Text>
+              <View style={sp.sheetTitleRow}>
+                <Text style={[sp.sheetTitle, { flex: 1 }]} numberOfLines={1}>Add "{pendingPlace?.name}"</Text>
+                <TouchableOpacity onPress={() => setPendingPlace(null)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                  <Text style={sp.sheetCancel}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
               {!!pendingPlace?.address && <Text style={sp.sheetSubtitle} numberOfLines={1}>{'\u{1F4CD}'} {pendingPlace.address}</Text>}
 
               <Text style={sp.sectionLabel}>Day</Text>
@@ -1242,7 +1250,9 @@ const sp = StyleSheet.create({
   overlay:{flex:1,backgroundColor:'rgba(0,0,0,0.45)',justifyContent:'flex-end'},
   sheet:{backgroundColor:colors.surface,borderTopLeftRadius:radius.xl,borderTopRightRadius:radius.xl,padding:spacing.xxl,paddingBottom:40},
   handle:{width:36,height:4,backgroundColor:colors.border,borderRadius:2,alignSelf:'center',marginBottom:spacing.lg},
+  sheetTitleRow:{flexDirection:'row',alignItems:'center',gap:spacing.md,marginBottom:2},
   sheetTitle:{...typography.h4,color:colors.text,marginBottom:2},
+  sheetCancel:{fontSize:15,fontWeight:'700',color:colors.muted},
   sheetSubtitle:{...typography.caption,color:colors.muted,marginBottom:spacing.lg},
   sectionLabel:{fontSize:10,fontWeight:'800',color:colors.muted,textTransform:'uppercase',letterSpacing:0.8,marginBottom:spacing.sm,marginTop:spacing.md},
   dayRow:{gap:spacing.sm,paddingBottom:spacing.xs},

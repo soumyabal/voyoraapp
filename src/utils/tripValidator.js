@@ -278,13 +278,23 @@ function originAnchor(trip) {
     : null;
 }
 
+/** After an overnight journey you wake at its ARRIVAL point — the overnight
+ *  transport's destination pin (its lat/lng), when known. */
+function overnightAnchor(lod) {
+  const t = lod?.overnightTransit;
+  return t && t.lat != null && t.lng != null
+    ? { lat: t.lat, lng: t.lng, label: t.name || 'Arrival', source: 'arrival' }
+    : null;
+}
+
 /** Where you WAKE on day i: Day 1 → trip.origin; otherwise where last night put you
- *  — a hotel, a friends/camping address, or (heading home) back at the origin. */
+ *  — a hotel, a friends/camping address, an overnight journey's arrival point, or
+ *  (heading home) back at the origin. */
 export function dayStartAnchor(trip, i) {
   if (i === 0) return originAnchor(trip);
   const lod = lodgingForNight(trip, i - 1);
   if (lod?.nightPlan?.type === 'heading_home') return originAnchor(trip);
-  return stayAnchor(lod) || nightPlanAnchor(lod);
+  return stayAnchor(lod) || nightPlanAnchor(lod) || overnightAnchor(lod);
 }
 
 /** Where you SLEEP on day i: tonight's hotel, a located night-plan, or the origin

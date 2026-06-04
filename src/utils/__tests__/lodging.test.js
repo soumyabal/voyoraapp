@@ -122,6 +122,23 @@ describe('Trip-Check lodging rules', () => {
     expect(has(validateTrip(trip), 'unbooked_night', 1)).toBe(false);
   });
 
+  test('after an overnight journey, you wake at its arrival point', () => {
+    const redeye = { id: 't', type: 'transport', name: 'Red-eye to Denver', time: '23:00', arriveTime: '06:00', lat: 39.74, lng: -104.99 };
+    const trip = { families: [], origin: null, days: [
+      day('D1', '2026-07-10', [redeye]),        // crosses midnight → overnight journey
+      day('D2', '2026-07-11', [act('Museum')]),
+    ] };
+    expect(lodgingForNight(trip, 0)).toMatchObject({ overnightTransit: { name: 'Red-eye to Denver' } });
+    expect(dayStartAnchor(trip, 1)).toMatchObject({ lat: 39.74, lng: -104.99, source: 'arrival' });
+
+    // …but an overnight transport with no destination pin degrades to null (today's behavior).
+    const noCoords = { families: [], origin: null, days: [
+      day('D1', '2026-07-10', [trans('Sleeper train', '22:00', '06:00')]),
+      day('D2', '2026-07-11', [act('Museum')]),
+    ] };
+    expect(dayStartAnchor(noCoords, 1)).toBeNull();
+  });
+
   test('a friends/camping night WITH an address anchors the next morning', () => {
     const trip = { families: [], origin: null, days: [
       { ...day('D1', '2026-07-10', [act('Falls')]), nightPlan: { type: 'with_friends', label: 'Madison, WI', lat: 43.07, lng: -89.40 } },

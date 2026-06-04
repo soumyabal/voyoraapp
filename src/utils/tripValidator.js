@@ -40,6 +40,7 @@
 
 import { travelLeg, formatKm } from './geo';
 import { weekdayOf, isOpenAt, hoursLabel } from './hours';
+import { checkOutOf } from './helpers';
 
 // ─── Dietary conflict patterns ────────────────────────────────────
 const MEAT_RE = /\b(beef|pork|lamb|chicken|mutton|fish|prawn|shrimp|seafood|lobster|crab|oyster|sashimi|sushi|steak|burger|bbq|barbecue|bacon|ham|salami|pepperoni|chorizo|meat|non.?veg)\b/i;
@@ -783,6 +784,30 @@ export function validateTrip(trip) {
       }
     }
   }
+
+  // ── Trip rule: check out by the hotel's time on the departure morning ─────
+  // The morning you leave a hotel (checkInDay + nights lands on today), a calm
+  // reminder to be packed and out by check-out. Soft 'info' only, once per stay, and
+  // only on a day you're actually planning (has activities) — never an alarm.
+  trip.days.forEach((day, i) => {
+    if (day.activities.filter(a => a.status !== 'skipped').length === 0) return;
+    for (let j = i - 1; j >= 0; j--) {   // most recent stay before today decides
+      const stay = (trip.days[j].activities || []).find(a => a.type === 'stay' && a.status !== 'skipped');
+      if (!stay) continue;
+      if (j + Math.max(1, stay.nights || 1) === i) {   // its coverage ends THIS morning
+        warnings.push({
+          type:     'check_out_by',
+          severity: 'info',
+          icon:     '🧳',
+          title:    'Check-out this morning',
+          message:  `You check out of ${stay.name} this morning — be packed and out by ${checkOutOf(stay)}.`,
+          hint:     'Arrange a late check-out with the hotel if your morning runs long.',
+          dayIndex: i,
+        });
+      }
+      break;
+    }
+  });
 
   // ── Trip rule: last day has no check-out / way home ──────────────
   const lastIdx = trip.days.length - 1;

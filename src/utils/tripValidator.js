@@ -442,6 +442,24 @@ function validateDay(day, dayIndex, families = []) {
     });
   }
 
+  // ── Rule 3b: Tiring day (hours on your feet) ─────────────────────
+  // The count-based 'packed' rule misses a FEW-but-LONG day — two hikes + a theme
+  // park is only 3 stops but ~13h. Sum the touring-activity hours instead. Soft
+  // 'info' tip; skipped when 'packed' already fires (count >= 8).
+  const tourActs     = acts.filter(a => a.type === 'activity' && a.status !== 'skipped');
+  const activityMins = tourActs.reduce((s, a) => s + estimateDuration(a), 0);
+  if (activityMins > 600 && tourActs.length >= 2 && substantialActs.length < 8) {
+    warnings.push({
+      type:     'tiring_day',
+      severity: 'info',
+      icon:     '🥵',
+      title:    'Long day on your feet',
+      message:  `About ${formatDuration(activityMins)} of activities here — a lot for one day, even in just ${tourActs.length} stops.`,
+      hint:     'Trim one or move it to a lighter day so nobody burns out.',
+      dayIndex,
+    });
+  }
+
   // ── Rule 4: No meal on a long day ────────────────────────────────
   const totalDaySpan = timeline[timeline.length - 1].endMin - timeline[0].startMin;
   const hasMeal = acts.some(a => a.type === 'food');

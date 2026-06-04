@@ -717,9 +717,13 @@ export function planDay(activities, opts = {}) {
 
   // Convergence fingerprint: a good day re-planned yields the same (id,time) set →
   // changed=false → the UI shows a calm "already optimized", never the same prompt.
+  // Compare times by MINUTE, not raw string — scheduleDay re-emits every time padded
+  // (minToTime), so a manually-entered "9:00" would otherwise read as moved to "09:00"
+  // and surface a cosmetic "9:00 → 09:00" no-op in the preview.
+  const norm = (t) => (t == null || t === '' ? null : timeToMin(t));
   const fp = (arr) => (arr || [])
     .filter((a) => a.type !== 'note' && a.status !== 'skipped')
-    .map((a) => `${a.id}@${a.time || ''}`)
+    .map((a) => `${a.id}@${norm(a.time) ?? ''}`)
     .join('|');
   const changed = fp(activities) !== fp(scheduled);
 
@@ -729,7 +733,7 @@ export function planDay(activities, opts = {}) {
   const changes = scheduled
     .filter((a) => a.type !== 'note' && a.status !== 'skipped')
     .map((a) => ({ actId: a.id, name: a.name, from: origTime.has(a.id) ? origTime.get(a.id) : null, to: a.time || null }))
-    .filter((c) => c.from !== c.to);
+    .filter((c) => norm(c.from) !== norm(c.to));
 
   // Over-capacity: substantial activities beyond the pace cap (meals/stays/transport/
   // notes don't count). Keep the earlier-scheduled ones; report the rest. Not dropped.

@@ -96,4 +96,13 @@ describe('planDay — unpadded times sort chronologically (not as strings)', () 
     const second = planDay(first.scheduled, { date: FRI, pace: 'moderate' });
     expect(second.changed).toBe(false);
   });
+
+  test('a stop entered unpadded but landing on the same minute shows NO cosmetic change', () => {
+    // A lone 9am stop: scheduleDay places it at 09:00 (== "9:00" by minute). The padding
+    // alone must NOT surface a "9:00 → 09:00" no-op in the preview diff.
+    const acts = [act('A', '9:00')];
+    const r = planDay(acts, { date: FRI, pace: 'moderate' });
+    expect(r.changed).toBe(false);
+    expect(r.changes).toEqual([]);
+  });
 });

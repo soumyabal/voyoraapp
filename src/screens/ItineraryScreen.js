@@ -11,6 +11,7 @@ import Snackbar from '../components/ui/Snackbar';
 import { fmt, fmtM, getActivityIcon, uid } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
+import { googleMapsDayUrl } from '../utils/mapsRoute';
 import { scheduleDay } from '../utils/autoArrange';
 import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, isOpenAt, hoursLabel } from '../utils/hours';
@@ -625,6 +626,17 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     }
   };
 
+  // ── Open this day's route in Google Maps ──────────────────────────
+  // Feeds the day's points (wake → stops → tonight's hotel) to Google Maps as a
+  // multi-stop route. Free, no key — opens the native app. Null when <2 points.
+  const dayRouteUrl = day ? googleMapsDayUrl(trip, currentDay) : null;
+  const openDayRoute = () => {
+    if (!dayRouteUrl) return;
+    Linking.openURL(dayRouteUrl).catch(() =>
+      showUndoAction("Couldn't open Google Maps", 'warning-outline', () => {}),
+    );
+  };
+
   // ── Eat at the hotel (in-room dining) ─────────────────────────────
   // Tired or unwell days → one tap to eat in. Breakfast uses LAST night's hotel
   // (you wake there); lunch/dinner use TONIGHT's hotel (where you're staying).
@@ -839,6 +851,12 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           <View style={styles.dayHeader}>
             <Text style={styles.dayTitle}>{day.label} — {fmt(day.date)}</Text>
             <View style={styles.dayHeaderActions}>
+              {!!dayRouteUrl && (
+                <TouchableOpacity style={styles.routeBtn} onPress={openDayRoute} activeOpacity={0.85}>
+                  <Icon name="map" size={13} color={colors.accent} />
+                  <Text style={styles.routeBtnText}>Route</Text>
+                </TouchableOpacity>
+              )}
               {day.activities.filter(a => a.status !== 'skipped' && a.type !== 'note').length >= 2 && (
                 <TouchableOpacity style={styles.arrangeBtn} onPress={arrangeDay} activeOpacity={0.85}>
                   <Icon name="sparkles" size={13} color={colors.smart} />
@@ -1898,6 +1916,8 @@ const styles = StyleSheet.create({
   addActBtnText: { ...typography.caption, color: '#fff', fontWeight: '800' },
   arrangeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.smartSoft, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   arrangeBtnText: { ...typography.caption, color: colors.smartDeep, fontWeight: '800' },
+  routeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentSoft, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  routeBtnText: { ...typography.caption, color: colors.accent, fontWeight: '800' },
   bfastChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fffaf2', borderWidth: 1, borderColor: '#f0d9b5', borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.sm, marginTop: 2 },
   bfastChipText: { flex: 1, fontSize: 12.5, color: '#9a6b1e', fontWeight: '600' },
   bfastChipAdd: { fontSize: 11, color: colors.primary, fontWeight: '800' },

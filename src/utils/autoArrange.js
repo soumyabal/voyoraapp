@@ -517,6 +517,79 @@ export function scheduleDay(activities, opts = {}) {
 }
 
 /**
+ * comfortPass — a gentle, transparent feasibility sweep over a day's already-placed
+ * stops. scheduleDay segments placement by TYPE (meals → meal windows, sights flowed
+ * separately), so the travel gap BETWEEN a meal and the next sight is never modeled —
+ * you get "leave breakfast at 09:45 for a stop 52 min away that starts at 10:00." This
+ * walks every timed stop in time order and pushes each SOFT stop just late enough to
+ * clear the previous stop + its travel leg (free haversine estimate) and its own
+ * opening hours. PURE: returns copies + an explicit diff for a preview.
+ *
+ *   - Locked stops (`timeLocked` — a booking, or a time you set) never move; if one is
+ *     too early for its travel leg it's reported (`unresolved` 'tight'), never shoved.
+ *   - Soft moves round UP to 5 min and are meant to display as approximate (~): we
+ *     never imply false precision about a straight-line estimate.
+ *   - Idempotent: re-running a comfortable day yields zero changes.
+ *
+ *   returns { adjusted, changes:[{actId,name,from,to}], unresolved:[{actId,name,reason}] }
+ */
+export function comfortPass(activities, opts = {}) {
+  const wd = weekdayOf(opts.date);
+  const all = (activities || []).map(a => ({ ...a }));
+  const timed = all
+    .filter(a => a.time && a.type !== 'note' && a.status !== 'skipped')
+    .sort((x, y) => timeToMin(x.time) - timeToMin(y.time));
+
+  const ROUND = 5;
+  const roundUp = m => Math.ceil(m / ROUND) * ROUND;
+  const changes = [];
+  const unresolved = [];
+
+  let prev = null;
+  for (const a of timed) {
+    const cur = timeToMin(a.time);
+    let required = cur;
+
+    // 1) clear the previous stop + the travel leg to here (any type → any type)
+    if (prev) {
+      const prevEnd = timeToMin(prev.time) + Math.max(BUFFER_MIN, estimateDuration(prev));
+      const leg = travelLeg(prev, a);
+      const need = prevEnd + (leg ? Math.max(0, leg.min) : BUFFER_MIN);
+      if (need > required) required = need;
+    }
+
+    // 2) respect opening hours — never start before open; flag if it'd run past close
+    const intervals = dayIntervals(a.openHours, wd);   // null=unknown, []=closed today
+    if (intervals && intervals.length) {
+      const open = intervals[0].o;
+      const close = intervals[intervals.length - 1].c;
+      if (required < open) required = open;
+      if (required + estimateDuration(a) > close) {
+        unresolved.push({ actId: a.id, name: a.name, reason: 'closes' });
+      }
+    }
+
+    if (required > cur) {
+      required = roundUp(required);
+      if (a.timeLocked) {
+        unresolved.push({ actId: a.id, name: a.name, reason: 'tight' });
+        // locked → keep its time; later stops cascade from the locked (actual) time
+      } else {
+        const to = minToTime(required);
+        if (to !== a.time) {
+          changes.push({ actId: a.id, name: a.name, from: a.time, to });
+          a.time = to;
+        }
+      }
+    }
+    prev = a;
+  }
+
+  const adjusted = all.sort((x, y) => (x.time || '99:99').localeCompare(y.time || '99:99'));
+  return { adjusted, changes, unresolved };
+}
+
+/**
  * planDay — one-tap, deterministic, DAY-SCOPED "Plan my day".
  *
  * Wraps scheduleDay (the placer) with feasibility triage + CONVERGENCE info, so the
@@ -535,7 +608,10 @@ export function scheduleDay(activities, opts = {}) {
  *   }
  */
 export function planDay(activities, opts = {}) {
-  const scheduled = scheduleDay(activities, opts);
+  // PLACE (order + windows), then a comfort sweep so cross-type travel legs are feasible
+  // (the breakfast → far sight gap scheduleDay's per-type passes miss).
+  const comfort = comfortPass(scheduleDay(activities, opts), opts);
+  const scheduled = comfort.adjusted;
 
   // Convergence fingerprint: a good day re-planned yields the same (id,time) set →
   // changed=false → the UI shows a calm "already optimized", never the same prompt.
@@ -544,6 +620,14 @@ export function planDay(activities, opts = {}) {
     .map((a) => `${a.id}@${a.time || ''}`)
     .join('|');
   const changed = fp(activities) !== fp(scheduled);
+
+  // Explicit diff for the preview ("Circus World 10:00 → ~10:45"): every stop whose
+  // time moved from its original. The UI shows this and the user taps Apply / Discard.
+  const origTime = new Map((activities || []).map((a) => [a.id, a.time || null]));
+  const changes = scheduled
+    .filter((a) => a.type !== 'note' && a.status !== 'skipped')
+    .map((a) => ({ actId: a.id, name: a.name, from: origTime.has(a.id) ? origTime.get(a.id) : null, to: a.time || null }))
+    .filter((c) => c.from !== c.to);
 
   // Over-capacity: substantial activities beyond the pace cap (meals/stays/transport/
   // notes don't count). Keep the earlier-scheduled ones; report the rest. Not dropped.
@@ -562,19 +646,24 @@ export function planDay(activities, opts = {}) {
     origin: opts.origin || null,
     days: [{ label: '', date: opts.date, activities: scheduled }],
   };
-  const unresolved = validateTrip(dayTrip)
+  const closed = validateTrip(dayTrip)
     .filter((w) => w.severity === 'error' && (w.type === 'closed_venue' || w.type === 'closed_permanently'))
     .map((w) => ({ actId: w.actIds?.[0], name: nameOf(w.actIds?.[0]), reason: 'closed', verifyUrl: w.verifyUrl }));
+  // Plus comfort-pass residuals: a LOCKED stop too tight for its travel leg, or one
+  // the cascade pushed past its own closing time — neither can be auto-fixed.
+  const unresolved = [...closed, ...comfort.unresolved];
 
   return {
     scheduled,
     changed,
+    changes,
     overflow,
     unresolved,
     summary: {
       scheduledCount: substantial.length,
       overflowCount: overflow.length,
       unresolvedCount: unresolved.length,
+      changeCount: changes.length,
     },
   };
 }

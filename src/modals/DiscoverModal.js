@@ -731,6 +731,17 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const toggleFilter = key =>
     setActiveFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
 
+  // Override: dietary chips are auto-seeded from the group profile and the map area can be
+  // narrow — both can hide a specific place you searched. One tap drops them and re-runs the
+  // search broadly (the loadScope effect re-fires on these state changes).
+  const filtersConstrainSearch = activeFilters.length > 0 || areaSearch != null || !(layers.see && layers.eat && layers.stay);
+  const searchUnfiltered = () => {
+    setActiveFilters([]);
+    setLayers({ see: true, eat: true, stay: true });
+    setAreaSearch(null);
+    setMapMoved(false);
+  };
+
   // Selecting a city re-runs the search via the activeCity effect (resets area scope).
   const chooseCity = c => { setCityPickerOpen(false); setAreaSearch(null); setMapMoved(false); setNearLabel(null); setFitToken(t => t + 1); setActiveCity(c); };
 
@@ -1004,6 +1015,13 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <View style={s.center}>
               <Icon name="search" size={34} color={colors.subtle} />
               <Text style={s.errorText}>{error}</Text>
+              {/* Override: filters/area may be hiding the place — search without them. */}
+              {filtersConstrainSearch && (
+                <TouchableOpacity style={s.manualBridge} onPress={searchUnfiltered} activeOpacity={0.85}>
+                  <Icon name="options-outline" size={15} color={colors.accent} />
+                  <Text style={s.manualBridgeText}>Search without filters</Text>
+                </TouchableOpacity>
+              )}
               {/* Bridge: not in Google Places? enter it by hand (drive/flight/custom) */}
               {!!onAddManual && (
                 <TouchableOpacity style={s.manualBridge} onPress={() => onAddManual(searchText.trim())} activeOpacity={0.85}>

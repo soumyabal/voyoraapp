@@ -21,8 +21,11 @@ within dates · **after** = today > endDate. Most value here needs **no backend*
 - Planner engine: `scheduleDay`/auto-arrange · **2-opt** route refinement · phase-correct day landing
 - **"Plan my day" comfort pass** — makes a day TIME-feasible (clears the meal→far-sight travel leg) + a **preview-diff** you Apply/Discard; honest "won't fit in one day" when stops are too far apart
 
+- **`timeLocked` (lock what's booked)** — a time you set or pin survives "Plan my day" untouched (lock-on-exact-time + a 🔒 pin); the engine treats it as a fixed anchor
+- **Real hotel check-in / check-out** — the planner won't schedule the room before check-in (default 3pm/11am, "tap if yours differs"); a calm "check out by X this morning" tip
+
 **Queued ▶ (no backend)**
-- **`timeLocked` lock-on-edit** — a time you set (or a booking) survives "Plan my day" untouched; comfort pass already respects the flag, nothing sets it yet (needs a store version bump)
+- Late check-in → a "share your ETA" checklist reminder (panel: NOT a scary warning) · hotel-breakfast quiet tip
 - Close-time-first ordering (visit what closes first) · per-day load-balance · rule-registry refactor
 - **Who-books-what**: `assignedFamilyId` + `bookingStatus` on stay/transit items (the multi-family-specific gap)
 - **Pre-trip checklist** (packing/docs) seeded from the group profile (infant → stroller/formula; ♿ → confirm accessible room)

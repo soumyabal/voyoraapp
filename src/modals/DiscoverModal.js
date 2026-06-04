@@ -603,7 +603,10 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
         ? ps.filter(p => p.lat != null && p.lng != null && metersBetween(area, p) <= (area.radius || 12000) * 1.6)
         : ps;
       if (text) {
-        const q = (area ? text : `${text} near ${loc}`) + (diet ? ` ${diet}` : '');
+        // A TYPED search is literal — search exactly what the user asked for. Do NOT append
+        // the group's dietary bias here (that turned "Great Wolf Lodge" into "Great Wolf Lodge
+        // vegetarian" and returned nothing). Dietary bias only applies to Eat-layer browsing.
+        const q = area ? text : `${text} near ${loc}`;
         const places = near(await cachedFetch(q, bias, 2));   // up to 40 for a typed search
         setTextResults(places);
         if (!places.length) setError(`No results for "${text}".`);

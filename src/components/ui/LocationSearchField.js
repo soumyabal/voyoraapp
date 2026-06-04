@@ -20,11 +20,21 @@ import { colors, spacing, radius, typography, shadow } from '../../theme';
 
 const PHOTON_URL = 'https://photon.komoot.io/api/';
 
-function formatPlace(props) {
-  const parts = [props.name];
-  if (props.state && props.state !== props.name) parts.push(props.state);
-  if (props.country && props.country !== props.name) parts.push(props.country);
-  return parts.join(', ');
+// Photon feature props → a readable label. A named place ("Chicago", "O'Hare Airport")
+// uses its `name`; a pure STREET ADDRESS comes back with NO `name` (just housenumber +
+// street), so we build "1243 Deerfield Pkwy" — otherwise street addresses were invisible
+// and only nearby named POIs (a Metra station) showed up.
+export function formatPlace(props) {
+  const head = props.name
+    || [props.housenumber, props.street].filter(Boolean).join(' ')
+    || props.street
+    || props.city
+    || '';
+  const parts = [head];
+  if (props.city && props.city !== head) parts.push(props.city);
+  if (props.state && props.state !== head && props.state !== props.city) parts.push(props.state);
+  if (props.country && props.country !== head) parts.push(props.country);
+  return parts.filter(Boolean).join(', ');
 }
 
 function placeIcon(type) {
@@ -61,13 +71,15 @@ export default function LocationSearchField({
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 5000);
       const resp = await fetch(
-        `${PHOTON_URL}?q=${encodeURIComponent(text)}&limit=6&lang=en`,
+        `${PHOTON_URL}?q=${encodeURIComponent(text)}&limit=8&lang=en`,
         { signal: controller.signal }
       );
       clearTimeout(timer);
       const data = await resp.json();
       const places = (data.features || [])
-        .filter(f => f.properties?.name)
+        // keep named places AND pure street addresses (street present, no name) — the
+        // latter were being dropped, so a typed street address never appeared.
+        .filter(f => f.properties && (f.properties.name || f.properties.street))
         .map((f, i) => ({
           key: String(f.properties.osm_id || i),
           label: formatPlace(f.properties),

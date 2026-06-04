@@ -45,6 +45,27 @@ describe('planDay — closed handling', () => {
   });
 });
 
+describe('planDay — a day that runs past 22:00 is honestly flagged', () => {
+  test('long stops crammed past day-end (within the cap) report day_full, not "planned"', () => {
+    // 3 five-hour sights (under moderate cap 4 → not overflow), same spot so no travel
+    // push — scheduleDay flows them 09:00, 14:15, 19:30 → the last ends ~00:35, past 22:00.
+    const acts = [
+      act('A', '09:00', { durationMins: 300 }),
+      act('B', '14:00', { durationMins: 300 }),
+      act('C', '19:00', { durationMins: 300 }),
+    ];
+    const r = planDay(acts, { date: FRI, pace: 'moderate' });
+    expect(r.unresolved.some((u) => u.reason === 'day_full')).toBe(true);
+    expect(r.scheduled.filter((a) => a.type === 'activity')).toHaveLength(3); // nothing dropped
+  });
+
+  test('a normal day that finishes by 22:00 has no day_full', () => {
+    const acts = [act('A', '09:00'), act('B', '12:00'), act('C', '15:00')];
+    const r = planDay(acts, { date: FRI, pace: 'moderate' });
+    expect(r.unresolved.some((u) => u.reason === 'day_full')).toBe(false);
+  });
+});
+
 describe('planDay — a locked stop is intent, not overflow', () => {
   test('a LOCKED substantial stop past the cap is never reported as capacity overflow', () => {
     // relaxed cap = 3. Four sights, the LATEST one pinned by the user → it lands in the

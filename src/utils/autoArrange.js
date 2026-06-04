@@ -757,7 +757,15 @@ export function planDay(activities, opts = {}) {
     .map((w) => ({ actId: w.actIds?.[0], name: nameOf(w.actIds?.[0]), reason: 'closed', verifyUrl: w.verifyUrl }));
   // Plus comfort-pass residuals: a LOCKED stop too tight for its travel leg, or one
   // the cascade pushed past its own closing time — neither can be auto-fixed.
-  const unresolved = [...closed, ...comfort.unresolved];
+  // Plus late run-overs: scheduleDay's no-slot fallback can CRAM a stop past the day's
+  // end (e.g. the 6th long sight on a packed day ends after 22:00) WITHOUT comfortPass
+  // ever pushing it — so the day_full guard there never fires. Catch it here too, so a
+  // crammed-late stop is honestly reported as day_full instead of looking "planned ✓".
+  const lateRunovers = substantial
+    .filter((a) => timeToMin(a.time) + Math.max(BUFFER_MIN, estimateDuration(a)) > DAY_END_MIN)
+    .filter((a) => !comfort.unresolved.some((u) => u.actId === a.id))
+    .map((a) => ({ actId: a.id, name: a.name, reason: 'day_full' }));
+  const unresolved = [...closed, ...comfort.unresolved, ...lateRunovers];
 
   return {
     scheduled,

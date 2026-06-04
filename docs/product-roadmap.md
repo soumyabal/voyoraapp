@@ -175,3 +175,29 @@ Ordered by ROI; each gated by the existing golden snapshots where it touches the
 → **5:** import (flight/hotel) + per-family split-nights + polish (offline, packing) → `~10`
 
 **One-line verdict:** *Voyara has already built the hard, trustworthy moat nobody else builds — its score is gated almost entirely on **shipping it**, **feeding it real data**, **turning on the AI it has safely designed**, and **making the "multi-family" name true with a shareable, per-family settlement** that is simultaneously the product, the viral loop, and the revenue path.*
+
+---
+
+## 11. Trip lifecycle (before / during / after) + notifications
+
+Triggered by a real user report ("a not-started trip showed me Day 2"). Root cause: the app had **no concept of trip status** — `currentDay` was a single global, persisted, non-date-aware index. **Fixed** (`5494ea3`): a date-derived phase (`tripPhase`) now lands every trip on the right day (`defaultDayFor`). That fix is the foundation for the bigger opportunity below — the panel's strongest "go-to travel app" insight.
+
+**The phase model** (today vs `startDate`/`endDate`): **UPCOMING** → Day 1 (planning, countdown). **ACTIVE** → today's day (live). **PAST** → Day 1 / recap (settle up).
+
+**Coverage + opportunity (panel ratings):**
+| Phase | Coverage | Opportunity | #1 job |
+|---|:--:|:--:|---|
+| **Before** | 8/10 | 5/10 | Assign **who-books-what** + booking status across families |
+| **During** | **1/10** | **10/10** | A **"Today" screen** — one-tap **log who paid** → keeps the per-family split *live* |
+| **After** | 3/10 | 9/10 | The **itemized settlement** as a shareable summary (the moat moment) |
+
+**The strategic unlock:** owning **DURING + AFTER** is unassailable. Splitwise has the settlement but *no context* ("why $312?"); Wanderlog has the plan but goes *silent* the moment you leave and has no real per-family money. Voyara is the only app where **the lunch you log at 1pm flows into the settlement you send at home** — same data, three phases. The during-trip "Today + log expense" screen is *the screen that earns the daily open*.
+
+**Notifications — ~80% needs NO backend** (`expo-notifications` local scheduling from trip dates):
+- **Ship FIRST:** trip-end **"settle up"** (morning after `endDate`, deep-links to the settlement) — one notification/trip, only needs `endDate`, tests the whole money-owed retention thesis.
+- Then: T−1 "starts tomorrow", rolling-window morning "today's plan", in-trip "log who paid".
+- **Permission ask:** NOT first launch — right *after the first trip is created*, primed with the moat (*"so nobody chases the Garcias for money"*).
+- **Gotchas:** iOS 64-pending limit → rolling-window scheduling; civil-time triggers (TZ-safe); cancel on trip delete; store `notificationIds[]` (version bump); build on an **EAS dev build** (Expo Go push is unreliable; local works for testing).
+- Server push (another family edited the trip, price drops) = Phase-2 backend.
+
+**Build order:** (1) ✓ date-derived phase + landing day [done] → (2) status pill (`📅 In 8 days` / `🟢 Day 2 of 3 · today` / `✓ Trip complete`) + phase-aware day chips → (3) the **"Today" screen** with one-tap per-family expense logging (the daily-open driver) → (4) the **settle-up notification** (local) + the post-trip recap → (5) pre-trip booking nudges. No backend for any of it.

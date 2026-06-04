@@ -100,6 +100,28 @@ describe('Trip-Check lodging rules', () => {
     expect(has(validateTrip(trip), 'unbooked_night', 0)).toBe(false);
   });
 
+  test('a manual nightPlan ("with friends") covers the night → no unbooked_night', () => {
+    const trip = { families: [], homeBase: false, days: [
+      { ...day('D1', '2026-07-10', [act('Falls')]), nightPlan: 'with_friends' }, // covered by hand
+      day('D2', '2026-07-11', [act('Cave')]),                                    // still open → warns
+      day('D3', '2026-07-12', [act('Mist')]),                                    // last day
+    ] };
+    expect(lodgingForNight(trip, 0)).toEqual({ nightPlan: 'with_friends' });
+    const w = validateTrip(trip);
+    expect(has(w, 'unbooked_night', 0)).toBe(false);
+    expect(has(w, 'unbooked_night', 1)).toBe(true);
+  });
+
+  test('a nightPlan covers a night even after a stay has checked out', () => {
+    const trip = { families: [], days: [
+      day('D1', '2026-07-10', [stay('A', 1), act('x')]),                  // covers night 0
+      { ...day('D2', '2026-07-11', [act('y')]), nightPlan: 'camping' },   // A checked out → camping
+      day('D3', '2026-07-12', [act('z')]),
+    ] };
+    expect(lodgingForNight(trip, 1)).toEqual({ nightPlan: 'camping' });
+    expect(has(validateTrip(trip), 'unbooked_night', 1)).toBe(false);
+  });
+
   test('no unbooked_night when the booking covers the interior nights', () => {
     const trip = { families: [], days: [
       day('D1', '2026-06-06', [stay('A', 3), act('Arrive')]), // covers D1,D2,D3

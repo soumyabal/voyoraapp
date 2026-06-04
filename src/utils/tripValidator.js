@@ -208,7 +208,8 @@ export function formatDuration(mins) {
  * Returns one of:
  *   { stay, checkInDayIndex, nights, nightNumber, isCheckInDay, isLastNight }
  *   { overnightTransit: activity }   // red-eye / sleeper train → no hotel tonight
- *   null                             // unbooked (or home-base / heading-home) night
+ *   { nightPlan: reason }            // user said it's handled (with friends, camping…)
+ *   null                             // genuinely unbooked night
  */
 export function lodgingForNight(trip, dayIndex) {
   const days = trip?.days || [];
@@ -236,8 +237,11 @@ export function lodgingForNight(trip, dayIndex) {
         isLastNight: dayIndex === i + nights - 1,
       };
     }
-    return null;
+    break;   // checked out before tonight → fall through to a manual night-plan / unbooked
   }
+  // No hotel covers tonight, but the user may have told us how it's handled
+  // (overnight travel, staying with friends/family, camping, heading home).
+  if (day.nightPlan) return { nightPlan: day.nightPlan };
   return null;
 }
 

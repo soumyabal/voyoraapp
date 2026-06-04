@@ -163,6 +163,17 @@ const useStore = create(
         }),
       })),
 
+      // ── NIGHT PLAN (hotel-less but covered) ─────────────────
+      // The user told us how an un-booked night is handled: 'overnight_travel'
+      // | 'with_friends' | 'camping' | 'heading_home' (or null to clear). Stored
+      // per-DAY; lodgingForNight reads it so the unbooked_night flag stops nagging.
+      setNightPlan: (tripId, dayIndex, reason) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          days: t.days.map((d, i) => i !== dayIndex ? d : { ...d, nightPlan: reason || null }),
+        }),
+      })),
+
       // ── SLOT DRAG REORDER ───────────────────────────────────
       // Called when DraggableFlatList drag ends within a slot.
       // orderedIds = activity IDs in new visual order (within the slot).
@@ -986,9 +997,11 @@ const useStore = create(
       // shape changes (the store.test.js shape guard will fail to remind you).
       // Previously there was NO version → the only way to change shape was to
       // rename the key, which WIPES every user's trips. Versioning fixes that.
-      version: 1,
-      // v0 (unversioned, older builds) → v1: backfill optional trip fields added
-      // over time so an old saved blob rehydrates without missing-field surprises.
+      version: 2,
+      // v0 (unversioned, older builds) → v1: backfill optional trip fields.
+      // v1 → v2: added per-day `day.nightPlan` (hotel-less-but-covered nights).
+      // It's optional and reads as undefined when absent, so no per-day backfill
+      // is needed — the version bump just records the shape change (Invariant #7).
       migrate: (state) => {
         if (!state) return state;
         state.trips = (state.trips || []).map((t) => ({

@@ -120,6 +120,22 @@ const MEAL_LABEL = {
   dinner:    { emoji: '🍽️', label: 'Dinner',    time: '19:00' },
 };
 
+// "How's tonight handled?" — a hotel-less night the user tells us is covered.
+// The resolver sheet rows (with plain-language subtitles)…
+const NIGHT_PLAN_OPTIONS = [
+  { key: 'overnight_travel', emoji: '🌙', label: 'Travelling overnight', sub: 'red-eye, sleeper train, night drive' },
+  { key: 'with_friends',     emoji: '🛋️', label: 'Staying with friends or family', sub: null },
+  { key: 'camping',          emoji: '⛺', label: 'Camping or RV', sub: null },
+  { key: 'heading_home',     emoji: '🏡', label: 'Heading home tonight', sub: null },
+];
+// …and the calm settled chip each one becomes on the day card (icon = the in-app Icon name).
+const NIGHT_PLAN_META = {
+  overnight_travel: { emoji: '🌙', icon: 'transport', label: 'Overnight travel · no hotel needed', a11y: 'travelling overnight' },
+  with_friends:     { emoji: '🛋️', icon: 'people',    label: 'Staying with friends',              a11y: 'staying with friends or family' },
+  camping:          { emoji: '⛺', icon: 'tent',      label: 'Camping tonight',                   a11y: 'camping' },
+  heading_home:     { emoji: '🏡', icon: 'location',  label: 'Home tonight',                      a11y: 'heading home' },
+};
+
 function getSlotKey(timeStr) {
   if (!timeStr) return 'morning';
   const [h, m] = timeStr.split(':').map(Number);
@@ -475,13 +491,14 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
 }
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
-  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto, markPlanDayNoteSeen } = useStore();
+  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto, markPlanDayNoteSeen, setNightPlan } = useStore();
   const planDayNoteSeen = useStore(s => s.planDayNoteSeen);
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
   const [manualSeed,            setManualSeed]            = useState(null);   // {name?,address?,lat?,lng?,tile?} prefill when manual is opened from the Discover bridge / a dropped pin
   const [defaultSlotTime,       setDefaultSlotTime]       = useState('09:00');
   const [showDiscover,          setShowDiscover]          = useState(false);
+  const [nightPlanDay,          setNightPlanDay]          = useState(null);  // dayIndex whose "how's tonight handled?" sheet is open
   const [discoverNear,          setDiscoverNear]          = useState(null);  // {lat,lng,label} when opened from an activity
   const [discoverSlot,          setDiscoverSlot]          = useState(null);  // slot key when Discover opened from a per-slot "+ Add"
   const [showOrigin,            setShowOrigin]            = useState(false); // SetOriginModal (Day-1 starting point)
@@ -550,6 +567,17 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   // Per-slot "+ Add" is now SEARCH-FIRST: it opens Discover scoped to that slot
   // (manual is one tap away via the header button / the Discover "add manually" bridge).
   const openAddInSlot  = (time) => { setDiscoverNear(null); setDiscoverSlot(getSlotKey(time)); setDefaultSlotTime(time); setShowDiscover(true); };
+
+  // ── "How's tonight handled?" — resolve a hotel-less night politely ──────────
+  const openNightPlan = (dayIdx) => setNightPlanDay(dayIdx);
+  const pickNightPlan = (key) => {
+    const idx = nightPlanDay;
+    if (idx == null) return;
+    setNightPlan(trip.id, idx, key);
+    setNightPlanDay(null);
+    if (key) showUndoAction("Got it — tonight's handled", NIGHT_PLAN_META[key].icon, () => setNightPlan(trip.id, idx, null));
+  };
+  const addHotelFromNightPlan = () => { setNightPlanDay(null); setDiscoverNear(null); setDiscoverSlot(null); setShowDiscover(true); };
   const closeModal     = ()     => { setShowAddActivity(false); setEditActivity(null); };
   // Open Discover's map centred on an activity → "what's around this place?".
   // Pass the place's own details so Discover can show IT (the search often won't
@@ -1154,6 +1182,20 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                 </View>
               );
             }
+            // The user told us this hotel-less night is covered → calm settled chip
+            // (tap to change or clear). This is the answer to the "where are you
+            // staying?" question below — never an amber nag.
+            if (lod?.nightPlan && NIGHT_PLAN_META[lod.nightPlan]) {
+              const m = NIGHT_PLAN_META[lod.nightPlan];
+              return (
+                <TouchableOpacity style={styles.lodgeChip} onPress={() => openNightPlan(currentDay)} activeOpacity={0.7}
+                  accessibilityRole="button" accessibilityLabel={`Tonight: ${m.a11y}. Settled. Opens choices to change tonight's plan.`}>
+                  <Icon name={m.icon} size={14} color={colors.smart} />
+                  <Text style={styles.lodgeChipText}>{m.label}</Text>
+                  <Icon name="chevron-forward" size={12} color={colors.subtle} />
+                </TouchableOpacity>
+              );
+            }
             const isLast = currentDay === (trip.days?.length || 0) - 1;
             const hasAnyStay = (trip.days || []).some(d =>
               d.activities.some(a => a.type === 'stay' && a.status !== 'skipped'));
@@ -1163,6 +1205,18 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                   <Icon name="location" size={14} color={colors.subtle} />
                   <Text style={styles.lodgeChipText}>No hotel tonight — heading home</Text>
                 </View>
+              );
+            }
+            // Uncovered interior night → a calm QUESTION (not amber, not a warning):
+            // tap to say how it's handled (overnight travel, with family, camping…).
+            if (!isLast && (trip.days?.length || 0) >= 2) {
+              return (
+                <TouchableOpacity style={styles.lodgeChipAsk} onPress={() => openNightPlan(currentDay)} activeOpacity={0.7}
+                  accessibilityRole="button" accessibilityLabel="Tonight's stay — not set yet. Opens choices for how tonight is handled.">
+                  <Text style={styles.lodgeAskEmoji}>🌙</Text>
+                  <Text style={styles.lodgeChipAskText}>Where are you staying tonight?</Text>
+                  <Icon name="chevron-forward" size={13} color={colors.smart} />
+                </TouchableOpacity>
               );
             }
             return null;
@@ -1191,6 +1245,46 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           bottom={92}
         />
       )}
+
+      {/* "How's tonight handled?" — a polite, one-tap resolver for a hotel-less
+          night. Picking a reason writes day.nightPlan, flips the chip to a calm
+          settled state, and stops the unbooked_night flag. Never re-prompts. */}
+      <Modal visible={nightPlanDay !== null} transparent animationType="slide" onRequestClose={() => setNightPlanDay(null)}>
+        <TouchableOpacity style={styles.npOverlay} activeOpacity={1} onPress={() => setNightPlanDay(null)}>
+          <View style={styles.npSheet} onStartShouldSetResponder={() => true}>
+            <View style={styles.npHandle} />
+            <Text style={styles.npTitle}>How's tonight handled?</Text>
+            <Text style={styles.npSubtitle}>Just so we know you've got it sorted — we won't ask again.</Text>
+            {NIGHT_PLAN_OPTIONS.map(opt => {
+              const active = nightPlanDay !== null && trip.days?.[nightPlanDay]?.nightPlan === opt.key;
+              return (
+                <TouchableOpacity key={opt.key} style={[styles.npRow, active && styles.npRowActive]}
+                  onPress={() => pickNightPlan(opt.key)} activeOpacity={0.7}
+                  accessibilityRole="button" accessibilityLabel={opt.label}>
+                  <Text style={styles.npEmoji}>{opt.emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.npLabel}>{opt.label}</Text>
+                    {!!opt.sub && <Text style={styles.npSub}>{opt.sub}</Text>}
+                  </View>
+                  {active && <Icon name="checkmark" size={16} color={colors.smart} />}
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity style={styles.npRow} onPress={addHotelFromNightPlan} activeOpacity={0.7}
+              accessibilityRole="button" accessibilityLabel="Add a hotel instead">
+              <Text style={styles.npEmoji}>🏨</Text>
+              <Text style={[styles.npLabel, { flex: 1 }]}>Add a hotel instead</Text>
+              <Icon name="chevron-forward" size={14} color={colors.subtle} />
+            </TouchableOpacity>
+            {nightPlanDay !== null && !!trip.days?.[nightPlanDay]?.nightPlan && (
+              <TouchableOpacity style={styles.npClear} onPress={() => pickNightPlan(null)} activeOpacity={0.7}
+                accessibilityRole="button" accessibilityLabel="Clear this — flag the night again">
+                <Text style={styles.npClearText}>↺ Actually, flag this night again</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <SetOriginModal
         visible={showOrigin}
@@ -2033,6 +2127,23 @@ const styles = StyleSheet.create({
   lodgeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.smartSoft },
   lodgeChipText: { ...typography.caption, color: colors.smartDeep, fontWeight: '700' },
   lodgeChipMuted: { ...typography.caption, color: colors.subtle },
+  // Uncovered-night invitation — calm/neutral, NOT amber (it's a question, not a warning)
+  lodgeChipAsk: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.smartSoft, borderWidth: 1, borderColor: colors.smart, borderStyle: 'dashed' },
+  lodgeAskEmoji: { fontSize: 13 },
+  lodgeChipAskText: { ...typography.caption, color: colors.smartDeep, fontWeight: '700' },
+  // "How's tonight handled?" resolver sheet
+  npOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  npSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.xxl, paddingBottom: 36 },
+  npHandle: { width: 36, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.lg },
+  npTitle: { ...typography.h4, color: colors.text },
+  npSubtitle: { ...typography.caption, color: colors.muted, marginTop: 2, marginBottom: spacing.md },
+  npRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 12, paddingHorizontal: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff', marginTop: spacing.sm, minHeight: 44 },
+  npRowActive: { borderColor: colors.smart, backgroundColor: colors.smartSoft },
+  npEmoji: { fontSize: 20 },
+  npLabel: { ...typography.body, color: colors.text, fontWeight: '700' },
+  npSub: { ...typography.caption, color: colors.muted, marginTop: 1 },
+  npClear: { alignSelf: 'center', marginTop: spacing.md, paddingVertical: 6 },
+  npClearText: { ...typography.caption, color: colors.muted, fontWeight: '700' },
 
   // Day-1 starting-point chip (bookend to lodgeChip) + its empty-state "add" affordance
   originChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.smartSoft },

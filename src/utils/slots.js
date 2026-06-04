@@ -7,8 +7,13 @@
  */
 import { estimateDuration } from './tripValidator';
 
+// `range` = the PLACEMENT window for suggested times (when a stop is added to a
+// slot). Morning starts at 09:00 (540), NOT 00:00 — a leading-gap fill used to
+// offer the slot start (lo), so a 2nd morning stop before an existing one landed
+// at midnight ("00:00 · Closed"). (Slot CLASSIFICATION of an existing time is
+// separate — see getSlotKey: anything before noon is still "morning".)
 export const SLOTS = [
-  { key: 'morning',   emoji: '\u{1F305}', label: 'Morning',   defaultTime: '09:00', range: [0,    720]  },
+  { key: 'morning',   emoji: '\u{1F305}', label: 'Morning',   defaultTime: '09:00', range: [540,  720]  },
   { key: 'afternoon', emoji: '☀️', label: 'Afternoon', defaultTime: '13:00', range: [720,  1020] },
   { key: 'evening',   emoji: '\u{1F306}', label: 'Evening',    defaultTime: '18:00', range: [1020, 1260] },
   { key: 'night',     emoji: '\u{1F319}', label: 'Night',      defaultTime: '21:00', range: [1260, 1440] },
@@ -110,6 +115,10 @@ export function getSuggestedTime(trip, dayIndex, slotKey, needMins = 0) {
   const intervals = slotIntervals(trip, dayIndex, slotKey);
   if (!slot) return '09:00';
   if (!intervals.length) return slot.defaultTime;
+  const [lo, hi] = slot.range;
+  const need = Math.max(BUFFER_MIN, needMins || DEFAULT_NEED_MIN);
   const lastEnd = Math.max(...intervals.map(iv => iv[1]));
-  return minToTime(Math.min(lastEnd + BUFFER_MIN, 1439));
+  // Slot is full → suggest just after the last stop, but CLAMP inside the slot so a
+  // full Morning doesn't suggest an afternoon time. Any tightness is the Trip Check's job.
+  return minToTime(Math.max(lo, Math.min(lastEnd + BUFFER_MIN, hi - need)));
 }

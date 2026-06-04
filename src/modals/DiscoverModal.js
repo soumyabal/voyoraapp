@@ -112,7 +112,7 @@ function metersBetween(a, b) {
 }
 
 const PLACES_URL = 'https://places.googleapis.com/v1/places:searchText';
-const FIELD_MASK = ['nextPageToken','places.displayName','places.formattedAddress','places.rating','places.userRatingCount','places.priceLevel','places.types','places.accessibilityOptions','places.websiteUri','places.location','places.photos','places.regularOpeningHours'].join(',');
+const FIELD_MASK = ['nextPageToken','places.displayName','places.formattedAddress','places.rating','places.userRatingCount','places.priceLevel','places.types','places.accessibilityOptions','places.websiteUri','places.location','places.photos','places.regularOpeningHours','places.businessStatus'].join(',');
 
 // Google Place Photos: a photo resource name → image URL (billed per fetch).
 const photoUrl = name => `https://places.googleapis.com/v1/${name}/media?maxWidthPx=640&maxHeightPx=420&key=${GOOGLE_PLACES_API_KEY}`;
@@ -155,6 +155,7 @@ function mapPlace(p) {
     url:p.websiteUri??'', lat:p.location?.latitude??null, lng:p.location?.longitude??null,
     photo:p.photos?.[0]?.name ? photoUrl(p.photos[0].name) : null,
     openHours:compactHours(p.regularOpeningHours),
+    businessStatus:p.businessStatus??null,   // OPERATIONAL | CLOSED_TEMPORARILY | CLOSED_PERMANENTLY
   };
   place.vegFriendly = isVegFriendly(place);
   return place;
@@ -790,6 +791,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
       address:pendingPlace.address, url:pendingPlace.url,
       rating:pendingPlace.rating, lat:pendingPlace.lat, lng:pendingPlace.lng,
       openHours:pendingPlace.openHours ?? null,   // hours of operation → smart meal slotting on Arrange
+      businessStatus:pendingPlace.businessStatus ?? null,   // permanent/temporary-closed flag for Trip Check
       photo:pendingPlace.photo ?? null,           // thumbnail (for explore-nearby + future card art)
       city:cityLabel(activeCity),   // tag the source city → Trip Check flags multi-city days
       note:null, status:null,
@@ -830,6 +832,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
       address: place.address || '', url: place.url || '',
       rating: place.rating ?? null, lat: place.lat ?? null, lng: place.lng ?? null,
       openHours: place.openHours ?? null,   // hours of operation → smart meal slotting on Arrange
+      businessStatus: place.businessStatus ?? null,   // permanent/temporary-closed flag for Trip Check
       photo: place.photo ?? null,           // thumbnail (for explore-nearby + future card art)
       city: cityLabel(activeCity), note: null, status: null,
     });

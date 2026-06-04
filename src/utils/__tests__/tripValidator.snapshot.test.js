@@ -45,10 +45,24 @@ const FIXTURES = {
     ]),
   ]),
 
-  // Scheduled outside opening hours (open 9–17 Fri, visited 20:00) → closed_venue=error.
-  closedVenue: tripOf([
+  // Closed that whole weekday (open Mondays only, trip day is Friday), non-seasonal
+  // → hard error "Closed that day" (season-robust, provable).
+  closedDarkDay: tripOf([
     day('Day 1', FRI, [
-      A('Gallery', 'activity', '20:00', { durationMins: 60, openHours: [{ d: 5, o: 540, c: 1020 }] }),
+      A('Gallery', 'activity', '11:00', { durationMins: 60, openHours: [{ d: 1, o: 540, c: 1020 }] }),
+    ]),
+  ]),
+  // Open that day but scheduled outside the window → amber "Outside opening hours".
+  closedTimeEdge: tripOf([
+    day('Day 1', FRI, [
+      A('Cafe', 'activity', '20:00', { durationMins: 60, openHours: [{ d: 5, o: 540, c: 1020 }] }),
+    ]),
+  ]),
+  // Seasonal-prone venue scheduled when the snapshot says closed → soft "verify",
+  // never red (the weekly snapshot can't see the trip's season).
+  closedSeasonal: tripOf([
+    day('Day 1', FRI, [
+      A('Riverside Water Park', 'activity', '11:00', { durationMins: 120, openHours: [{ d: 1, o: 540, c: 1020 }] }),
     ]),
   ]),
 
@@ -93,10 +107,16 @@ describe('validateTrip — invariants that must survive any refactor', () => {
     expect(tt[0].severity).toBe('info');
   });
 
-  test('a closed venue stays a provable error (the badge depends on it)', () => {
-    const cv = validateTrip(FIXTURES.closedVenue).filter((x) => x.type === 'closed_venue');
-    expect(cv).toHaveLength(1);
-    expect(cv[0].severity).toBe('error');
+  test('closed-venue confidence is tiered (dark-day=error, time-edge=warning, seasonal=tip)', () => {
+    const cv = (fx) => validateTrip(fx).find((x) => x.type === 'closed_venue');
+    // dark weekday, non-seasonal → provable red error
+    expect(cv(FIXTURES.closedDarkDay).severity).toBe('error');
+    // open that day but scheduled outside the window → amber warning
+    expect(cv(FIXTURES.closedTimeEdge).severity).toBe('warning');
+    // seasonal-prone → never red; soft verify tip (false "closed" is the worst error)
+    expect(cv(FIXTURES.closedSeasonal).severity).toBe('info');
+    // every closed-venue flag carries a tap-through to the live hours
+    expect(cv(FIXTURES.closedDarkDay).verifyUrl).toBeTruthy();
   });
 
   test('a long journey conflict stays an error', () => {

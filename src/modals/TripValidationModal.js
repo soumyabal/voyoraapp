@@ -13,7 +13,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
   Modal, View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, ActivityIndicator,
+  StyleSheet, ActivityIndicator, Linking,
 } from 'react-native';
 import { colors, spacing, radius, typography } from '../theme';
 import Icon from '../components/ui/Icon';
@@ -316,6 +316,19 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
                             <Text style={[s.cardHint, { color: col.text }]}>{w.hint}</Text>
                           </View>
                         )}
+                        {/* Live, authoritative hours — the source of truth our cached
+                            weekly snapshot can't be for a future (esp. seasonal) date. */}
+                        {!!w.verifyUrl && (
+                          <TouchableOpacity
+                            style={s.verifyBtn}
+                            onPress={() => Linking.openURL(w.verifyUrl).catch(() => {})}
+                            activeOpacity={0.75}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Icon name="open" size={13} color={col.icon} />
+                            <Text style={[s.verifyText, { color: col.icon }]}>Check current hours</Text>
+                          </TouchableOpacity>
+                        )}
 
                         {/* Per-activity impact list */}
                         {w.impactedActivities?.length > 0 && (
@@ -517,6 +530,8 @@ const s = StyleSheet.create({
   cardMsg:    { fontSize: 12, lineHeight: 18 },
   cardHintRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, marginTop: 6, opacity: 0.85 },
   cardHint:   { fontSize: 11, lineHeight: 17, flex: 1 },
+  verifyBtn:  { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, alignSelf: 'flex-start' },
+  verifyText: { fontSize: 12, fontWeight: '800' },
   navFooter:     { marginTop: 10, paddingTop: 8, borderTopWidth: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   navFooterText: { fontSize: 12, fontWeight: '700' },
   ignoreText:    { fontSize: 11, color: colors.muted, fontWeight: '500' },

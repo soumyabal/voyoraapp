@@ -45,6 +45,23 @@ import { weekdayOf, isOpenAt, hoursLabel } from './hours';
 const MEAT_RE = /\b(beef|pork|lamb|chicken|mutton|fish|prawn|shrimp|seafood|lobster|crab|oyster|sashimi|sushi|steak|burger|bbq|barbecue|bacon|ham|salami|pepperoni|chorizo|meat|non.?veg)\b/i;
 const ALCO_RE = /\b(beer|wine|cocktail|whisky|whiskey|vodka|rum|gin|spirits|alcohol|brewery|pub|bar|tavern|champagne|prosecco|sake|sangria|mojito|margarita|tequila)\b/i;
 
+// ─── Seasonal-prone venues ────────────────────────────────────────
+// Places whose hours commonly change by season — so the weekly snapshot we cached
+// (Google's regularOpeningHours = a snapshot of the CURRENT season) can't be
+// trusted for a future trip date. For these we never hard-flag "closed"; we soften
+// to a "verify hours for your dates" tip. Bias is deliberate: a false "closed"
+// (deleting a place that's actually open) is worse than a soft verify nudge.
+const SEASONAL_RE = /\b(water ?park|aquapark|beach|ski resort|skiing|snowboard|snow park|ice rink|outdoor pool|botanical|arboretum|vineyard|winery|orchard|national park|state park|hiking|nature trail|kayak|canoe|rafting|surfing|snorkel|scuba|diving|boat tour|sunset cruise|dinner cruise|ferry|festival|farmers? market|night market|open.?air|amusement park|theme park|safari|waterfall)\b/i;
+
+/** Best link to the venue's live, authoritative hours (for the "verify" tap-through). */
+function verifyHoursUrl(act) {
+  return (
+    act.url ||
+    act.mapUrl ||
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(act.name || '')}`
+  );
+}
+
 // ─── Duration estimation ──────────────────────────────────────────
 
 /**
@@ -572,25 +589,66 @@ function validateDay(day, dayIndex, families = []) {
     });
   }
 
-  // ── Rule 13: Scheduled while the venue is closed ──
-  // Uses the hours of operation captured from Discover. Only attractions and
-  // restaurants are checked; unknown hours stay silent (isOpenAt → null).
+  // ── Rule 13a: Permanently / temporarily closed (Google businessStatus) ──
+  // A date-INDEPENDENT, high-signal fact — unlike weekly hours it isn't a seasonal
+  // snapshot. Only set on places added from Discover after this shipped.
+  timeline.forEach(({ act }) => {
+    if (act.businessStatus === 'CLOSED_PERMANENTLY') {
+      warnings.push({
+        type: 'closed_permanently', severity: 'error', icon: '🚫',
+        title: 'Permanently closed',
+        message: `"${act.name}" is marked permanently closed.`,
+        hint: 'Remove it and pick an alternative.',
+        verifyUrl: verifyHoursUrl(act), dayIndex, actIds: [act.id],
+      });
+    } else if (act.businessStatus === 'CLOSED_TEMPORARILY') {
+      warnings.push({
+        type: 'closed_temporarily', severity: 'warning', icon: '⛔',
+        title: 'May be temporarily closed',
+        message: `"${act.name}" is marked temporarily closed — confirm it's reopened.`,
+        hint: 'Check the venue’s current status.',
+        verifyUrl: verifyHoursUrl(act), dayIndex, actIds: [act.id],
+      });
+    }
+  });
+
+  // ── Rule 13b: Scheduled outside opening hours ──
+  // The weekly hours are a snapshot of the season we fetched in, so confidence varies:
+  //   · seasonal-prone venue  → never red; soft "verify hours for your dates" tip
+  //     (the snapshot can't see the trip's season — a false "closed" is the worst error)
+  //   · closed that whole weekday, non-seasonal → red error (season-robust, provable)
+  //   · open that day but scheduled outside the window → amber warning
+  // Unknown hours stay silent (isOpenAt → null).
   const venueWd = weekdayOf(day.date);
   timeline.forEach(({ act, startMin }) => {
     if (act.type !== 'activity' && act.type !== 'food') return;
-    if (isOpenAt(act.openHours, venueWd, startMin) !== false) return;   // open / unknown
+    if (act.businessStatus === 'CLOSED_PERMANENTLY' || act.businessStatus === 'CLOSED_TEMPORARILY') return; // 13a covers it
+    if (isOpenAt(act.openHours, venueWd, startMin) !== false) return; // open / unknown
     const lbl = hoursLabel(act.openHours, venueWd);
-    warnings.push({
-      type:     'closed_venue',
-      severity: 'error',   // provable from real opening hours — you genuinely can't get in
-      icon:     '🔒',
-      title:    'Likely closed then',
-      message:  `"${act.name}" looks closed at ${act.time}.` +
-                (lbl && lbl !== 'Closed' ? ` It's open ${lbl} that day.` : ' It looks closed that day.'),
-      hint:     'Move it into the venue’s opening hours, or double-check the schedule.',
-      dayIndex,
-      actIds:   [act.id],
-    });
+    const darkDay = !(lbl && lbl !== 'Closed');   // closed that whole weekday (no intervals)
+    const seasonal = SEASONAL_RE.test(`${act.name || ''} ${act.detail || ''}`);
+
+    let warning;
+    if (seasonal) {
+      warning = {
+        severity: 'info', icon: '🗓️', title: 'Verify hours for your dates',
+        message: `"${act.name}" may keep seasonal hours — the times we have are a snapshot and might not match your travel dates.`,
+        hint: 'Tap to check the venue’s current hours.',
+      };
+    } else if (darkDay) {
+      warning = {
+        severity: 'error', icon: '🔒', title: 'Closed that day',
+        message: `"${act.name}" looks closed that day.`,
+        hint: 'Move it to a day it’s open, or check the venue’s hours.',
+      };
+    } else {
+      warning = {
+        severity: 'warning', icon: '🕐', title: 'Outside opening hours',
+        message: `"${act.name}" is at ${act.time}, but it’s open ${lbl} that day.`,
+        hint: 'Shift it into the open window, or double-check.',
+      };
+    }
+    warnings.push({ type: 'closed_venue', ...warning, verifyUrl: verifyHoursUrl(act), dayIndex, actIds: [act.id] });
   });
 
   return warnings;

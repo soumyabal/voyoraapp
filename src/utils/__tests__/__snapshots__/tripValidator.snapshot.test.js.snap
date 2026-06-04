@@ -2,19 +2,56 @@
 
 exports[`validateTrip — golden snapshots (characterization) allClear: full warnings array is stable 1`] = `[]`;
 
-exports[`validateTrip — golden snapshots (characterization) closedVenue: full warnings array is stable 1`] = `
+exports[`validateTrip — golden snapshots (characterization) closedDarkDay: full warnings array is stable 1`] = `
 [
   {
     "actIds": [
       "Gallery",
     ],
     "dayIndex": 0,
-    "hint": "Move it into the venue’s opening hours, or double-check the schedule.",
+    "hint": "Move it to a day it’s open, or check the venue’s hours.",
     "icon": "🔒",
-    "message": ""Gallery" looks closed at 20:00. It's open 9 AM–5 PM that day.",
+    "message": ""Gallery" looks closed that day.",
     "severity": "error",
-    "title": "Likely closed then",
+    "title": "Closed that day",
     "type": "closed_venue",
+    "verifyUrl": "https://www.google.com/maps/search/?api=1&query=Gallery",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) closedSeasonal: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "Riverside Water Park",
+    ],
+    "dayIndex": 0,
+    "hint": "Tap to check the venue’s current hours.",
+    "icon": "🗓️",
+    "message": ""Riverside Water Park" may keep seasonal hours — the times we have are a snapshot and might not match your travel dates.",
+    "severity": "info",
+    "title": "Verify hours for your dates",
+    "type": "closed_venue",
+    "verifyUrl": "https://www.google.com/maps/search/?api=1&query=Riverside%20Water%20Park",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) closedTimeEdge: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "Cafe",
+    ],
+    "dayIndex": 0,
+    "hint": "Shift it into the open window, or double-check.",
+    "icon": "🕐",
+    "message": ""Cafe" is at 20:00, but it’s open 9 AM–5 PM that day.",
+    "severity": "warning",
+    "title": "Outside opening hours",
+    "type": "closed_venue",
+    "verifyUrl": "https://www.google.com/maps/search/?api=1&query=Cafe",
   },
 ]
 `;
@@ -146,10 +183,20 @@ exports[`validateTrip — invariants that must survive any refactor summary coun
     "infos": 0,
     "warnings": 0,
   },
-  "closedVenue": {
+  "closedDarkDay": {
     "errors": 1,
     "infos": 0,
     "warnings": 0,
+  },
+  "closedSeasonal": {
+    "errors": 0,
+    "infos": 1,
+    "warnings": 0,
+  },
+  "closedTimeEdge": {
+    "errors": 0,
+    "infos": 0,
+    "warnings": 1,
   },
   "longJourney": {
     "errors": 1,

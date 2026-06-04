@@ -102,6 +102,30 @@ prefills an editable name. The broader "form is overwhelming" is NOT yet address
       Both reviewers stressed: KEEP the per-family COST field visible — it's the moat —
       collapse only ADDRESS / DURATION / MEAL / Notes. — `AddActivityModal.js`
 
+## Open/closed reliability + seasonal hours — shipped MVP, Phase-2 follow-ups
+
+The weekly opening-hours we cache are a snapshot of the season we fetched in, so a
+hard "🔴 Closed" on a future/seasonal date is often a *false* alarm (a false "closed"
+is the worst error — it deletes a place that's actually open). Shipped (panel-backed):
+`closed_venue` now confidence-tiered — dark-weekday non-seasonal = red error, open-but-
+outside-window = amber, **seasonal-prone venue (SEASONAL_RE) = soft "🗓️ Verify hours for
+your dates" tip**; every flag carries a **"Check current hours" tap-through** to the live
+listing; added `businessStatus` (CLOSED_PERMANENTLY = red, CLOSED_TEMPORARILY = warning).
+
+- [ ] **Re-check hours when the trip is near** (≤7–14 days): fetch `currentOpeningHours`
+      (Google's next-7-days incl. special days) + store `placeId` + a "hours checked on"
+      date, then tighten flags back up because the data is in-season. — Phase 2 (needs a
+      refresh trigger; placeId not stored yet).
+- [ ] **Gemini seasonal verdict** ("is X open in <month>?") → a coarse "open May–Sep"
+      that resolves the seasonal "verify" tips. Backend-only; feed the SOFT tip, never a
+      red error (hallucination risk). — Phase 2.
+- [ ] **Proactive seasonal verify even when shown open.** Today we only soften the
+      *closed* case; a seasonal venue that the snapshot shows OPEN on an out-of-season date
+      is a silent false "open". Consider a gentle per-seasonal-venue "verify for your dates"
+      regardless of open/closed. — needs care not to nag.
+- [ ] **`hoursFetchedMonth` for cross-season precision.** Persist the fetch month so the
+      tip can fire specifically when trip-month ≠ fetch-month (additive field; default→soft). — `DiscoverModal.js`
+
 ## Trip starting point (Day-1 origin) — shipped P0, generalize in P1
 
 `trip.origin = {label, lat, lng}` captured at create (wizard Step 1), in Edit Trip,

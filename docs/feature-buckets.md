@@ -23,6 +23,7 @@ within dates · **after** = today > endDate. Most value here needs **no backend*
 
 - **`timeLocked` (lock what's booked)** — a time you set or pin survives "Plan my day" untouched (lock-on-exact-time + a 🔒 pin); the engine treats it as a fixed anchor
 - **Real hotel check-in / check-out** — the planner won't schedule the room before check-in (default 3pm/11am, "tap if yours differs"); a calm "check out by X this morning" tip
+- **Last-day "Heading home?" return draft** — a one-tap pre-filled return journey (known facts only, no cost guess, no duplicate); logistics route to manual entry, not place-search
 
 **Queued ▶ (no backend)**
 - Late check-in → a "share your ETA" checklist reminder (panel: NOT a scary warning) · hotel-breakfast quiet tip

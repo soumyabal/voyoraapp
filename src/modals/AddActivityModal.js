@@ -729,6 +729,18 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               </View>
             )}
 
+            {/* ── Time ── EDIT mode has no WHEN slot picker, so the time control
+                   stays above the fold here (Add mode sets it via the slot, and
+                   keeps the fine-tune under "+ Details"). */}
+            {isEdit && !(tile.type === 'transport' && tile.subtype !== 'pitstop') && (
+              <View style={s.inlineRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.sectionLabel}>TIME</Text>
+                  <TimePickerInput value={time} onChange={setTime} />
+                </View>
+              </View>
+            )}
+
             {/* ── Meal (food only) — auto from opening hours, or pin it ── */}
             {tile.type === 'food' && (
               <>
@@ -873,8 +885,9 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                   </>
                 )}
 
-                {/* Time fine-tune (non-transport; transport sets Departs/Arrives above) */}
-                {!allDays && !(tile.type === 'transport' && tile.subtype !== 'pitstop') && (
+                {/* Time fine-tune (Add mode, non-transport; Edit shows TIME above the
+                    fold since it has no slot picker; transport sets Departs/Arrives) */}
+                {!isEdit && !allDays && !(tile.type === 'transport' && tile.subtype !== 'pitstop') && (
                   <View style={[s.inlineRow, { marginTop: spacing.lg }]}>
                     <View style={{ flex: 1 }}>
                       <Text style={s.sectionLabel}>TIME <Text style={s.optional}>(fine-tune)</Text></Text>

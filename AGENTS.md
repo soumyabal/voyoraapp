@@ -229,6 +229,9 @@ future freemium phase). Remaining (non-code): privacy policy URL + manifest, Goo
 See `docs/backlog.md` for tracked follow-ups (rule-registry refactor, theming layer, uncovered-night
 CTA, in-app route polyline, store-slice split).
 
+See **`docs/product-roadmap.md`** for the product review (~6/10 scorecard), the GTM strategy &
+ICP, the phased ship timeline ("what to ship, when"), monetization, and the path-to-10.
+
 ---
 
 ## Key Data Schemas

@@ -80,6 +80,26 @@ describe('Trip-Check lodging rules', () => {
     expect(has(w, 'unbooked_night', 2)).toBe(false);
   });
 
+  test('multi-day trip with NO stay flags every night but the last (the zero-lodging bug)', () => {
+    const trip = { families: [], homeBase: false, days: [
+      day('D1', '2026-07-10', [act('Niagara Falls')]),     // night 0 → warn
+      day('D2', '2026-07-11', [act('Cave of the Winds')]), // night 1 → warn
+      day('D3', '2026-07-12', [act('Maid of the Mist')]),  // last day → never warn
+    ] };
+    const w = validateTrip(trip);
+    expect(has(w, 'unbooked_night', 0)).toBe(true);
+    expect(has(w, 'unbooked_night', 1)).toBe(true);
+    expect(has(w, 'unbooked_night', 2)).toBe(false);
+  });
+
+  test('an overnight journey covers that night → no unbooked_night', () => {
+    const trip = { families: [], days: [
+      day('D1', '2026-07-10', [trans('Red-eye flight', '23:00', '06:00')]), // crosses midnight
+      day('D2', '2026-07-11', [act('Arrive')]),
+    ] };
+    expect(has(validateTrip(trip), 'unbooked_night', 0)).toBe(false);
+  });
+
   test('no unbooked_night when the booking covers the interior nights', () => {
     const trip = { families: [], days: [
       day('D1', '2026-06-06', [stay('A', 3), act('Arrive')]), // covers D1,D2,D3

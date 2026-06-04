@@ -707,15 +707,17 @@ export function validateTrip(trip) {
     }
   });
 
-  // ── Trip rule: unbooked nights (lodging coverage gaps) ───────────
-  // Only when the trip actually uses hotels and isn't a home-base trip. We flag
-  // INTERIOR nights only (not the first or last day): the last night you head
-  // home, and the first night's check-in may simply not be added yet — flagging
-  // those would nag. A gap between two bookings is the real, actionable case.
+  // ── Trip rule: nights without a place to sleep ───────────────────
+  // Every night needs lodging EXCEPT the last day (you head home) or an overnight
+  // journey (lodgingForNight returns {overnightTransit}, so it's not null → not
+  // flagged). This fires even when the trip has NO stay at all — a multi-day trip
+  // with zero lodging is the MOST important case to flag, not the one to stay silent
+  // on. Home-base trips opt out via trip.homeBase; empty days are already covered by
+  // empty_day, so we skip them here to avoid double-warning.
   const hasAnyStay = trip.days.some(d =>
     d.activities.some(a => a.type === 'stay' && a.status !== 'skipped'));
-  if (hasAnyStay && !trip.homeBase) {
-    for (let i = 1; i < trip.days.length - 1; i++) {
+  if (!trip.homeBase && trip.days.length >= 2) {
+    for (let i = 0; i < trip.days.length - 1; i++) {   // every night but the last day
       const day = trip.days[i];
       if (day.activities.filter(a => a.status !== 'skipped').length === 0) continue; // empty_day covers it
       if (lodgingForNight(trip, i) === null) {
@@ -723,7 +725,7 @@ export function validateTrip(trip) {
           type:     'unbooked_night',
           severity: 'warning',
           icon:     '🛏️',
-          title:    'No hotel that night',
+          title:    'No place to stay that night',
           message:  `No accommodation is booked for the night of ${day.label} (${day.date}).`,
           hint:     'Add a hotel check-in (set its nights), or mark it as an overnight journey or a stay at home.',
           dayIndex: i,

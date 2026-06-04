@@ -68,6 +68,15 @@ exports[`validateTrip — golden snapshots (characterization) longJourney: full 
     "type": "empty_day",
   },
   {
+    "dayIndex": 0,
+    "hint": "Add a hotel check-in (set its nights), or mark it as an overnight journey or a stay at home.",
+    "icon": "🛏️",
+    "message": "No accommodation is booked for the night of Day 1 (2026-06-12).",
+    "severity": "warning",
+    "title": "No place to stay that night",
+    "type": "unbooked_night",
+  },
+  {
     "actIds": [
       "Flight",
       "Museum",
@@ -201,7 +210,7 @@ exports[`validateTrip — invariants that must survive any refactor summary coun
   "longJourney": {
     "errors": 1,
     "infos": 1,
-    "warnings": 0,
+    "warnings": 1,
   },
   "multiCity": {
     "errors": 0,

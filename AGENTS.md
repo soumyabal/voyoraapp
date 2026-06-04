@@ -207,6 +207,10 @@ src/data/sampleData.js Seed trips/travelers/groups for first launch
   `info` "tips". Surfaced as ONE calm per-day pill + a 3-state trip badge (green ✓ when every day is
   planned & clean / neutral "…" in-progress / amber for a real conflict) — not a wall of red.
 - **Auto-arrange** shares the same engine; anchors each day to where you wake.
+- **"✨ Plan my day"** (`planDay()` in autoArrange.js): one-tap, deterministic, DAY-scoped.
+  Wraps scheduleDay + honest triage (`{scheduled, changed, overflow, unresolved}`), is
+  CONVERGENT (re-tapping a planned day = calm "already arranged", no re-prompt — the old
+  "Arrange" looped by re-alerting on residual warnings), one-time education on first use.
 - **Day-1 origin** (`trip.origin = {label,lat,lng}`): set at create / Edit Trip / a tappable Day-1
   chip; anchors the first stop's travel leg + auto-arrange.
 - **Lodging**: one check-in `stay` carries `nights` (smart default = remaining trip nights);

@@ -102,6 +102,22 @@ prefills an editable name. The broader "form is overwhelming" is NOT yet address
       Both reviewers stressed: KEEP the per-family COST field visible — it's the moat —
       collapse only ADDRESS / DURATION / MEAL / Notes. — `AddActivityModal.js`
 
+## "✨ Plan my day" — shipped MVP, tray follow-up
+
+A non-planner overloaded a day and kept tapping "Arrange"; it re-flagged the same
+issues every tap (an unconditional alert on residual warnings) → felt like a loop.
+Replaced "Arrange" with one-tap **"✨ Plan my day"** (`planDay()` in autoArrange.js):
+deterministic, day-scoped, CONVERGENT (re-tapping a planned day → calm "already
+arranged", never the same prompt — gated on `changed`), with honest triage
+(`overflow` beyond pace cap, `unresolved` dark-day/permanent closures; seasonal stays
+a soft tip; nothing dropped/auto-moved). One-time gentle education on first use
+(`planDayNoteSeen`). Shown on empty days too. 4 unit tests incl. the fixed-point.
+
+- [ ] **"Didn't fit today" tray.** Today overflow/unresolved items stay ON the day
+      (flagged) and are only *reported*. Add a real tray that parks them with a one-tap
+      "Move to Day N" (reuse `autoArrange.bestDayFor`) + "Keep anyway". Needs a small
+      schema slot for trayed items (version bump). — `ItineraryScreen.js` / `store`
+
 ## Open/closed reliability + seasonal hours — shipped MVP, Phase-2 follow-ups
 
 The weekly opening-hours we cache are a snapshot of the season we fetched in, so a

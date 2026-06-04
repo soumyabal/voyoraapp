@@ -25,6 +25,7 @@ const useStore = create(
       planMode: null,
       account: { loggedIn: false, name: '', email: '', aiPlannerUsed: false, aiReviewsUsed: 0, plan: 'free' },
       subscription: { plan: 'free', aiMessagesUsed: 0, upgradedAt: null },
+      planDayNoteSeen: false,   // one-time "Plan my day" education shown yet?
 
       // ── GETTERS (computed) ──────────────────────────────────
       getCurrentTrip: () => {
@@ -36,6 +37,7 @@ const useStore = create(
       setCurrentTrip: (tripId) => set({ currentTripId: tripId, currentDay: 0 }),
       setCurrentDay: (day) => set({ currentDay: day }),
       setPlanMode: (mode) => set({ planMode: mode }),
+      markPlanDayNoteSeen: () => set({ planDayNoteSeen: true }),
 
       // ── TRIPS ───────────────────────────────────────────────
       addTrip: (trip) => set(s => ({ trips: [trip, ...s.trips] })),

@@ -470,3 +470,66 @@ export function scheduleDay(activities, opts = {}) {
 
   return all.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
 }
+
+/**
+ * planDay — one-tap, deterministic, DAY-SCOPED "Plan my day".
+ *
+ * Wraps scheduleDay (the placer) with feasibility triage + CONVERGENCE info, so the
+ * UI can show an honest result and a stable end-state instead of re-validating into
+ * the same alert (the "loop" a non-planner hit). PURE: never writes, never moves
+ * items to other days, never silently drops — over-capacity / unresolvable-closed
+ * items stay on the day and are merely *reported*.
+ *
+ *   opts = { dayRole, date, anchor, pace, families, origin }
+ *   returns {
+ *     scheduled,   // the re-timed day — write this
+ *     changed,     // did any (id,time) actually move? → drives "already optimized" (no re-prompt)
+ *     overflow:   [{ actId, name, reason:'capacity' }],            // beyond the pace cap
+ *     unresolved: [{ actId, name, reason:'closed', verifyUrl }],   // closed & re-timing can't fix
+ *     summary: { scheduledCount, overflowCount, unresolvedCount },
+ *   }
+ */
+export function planDay(activities, opts = {}) {
+  const scheduled = scheduleDay(activities, opts);
+
+  // Convergence fingerprint: a good day re-planned yields the same (id,time) set →
+  // changed=false → the UI shows a calm "already optimized", never the same prompt.
+  const fp = (arr) => (arr || [])
+    .filter((a) => a.type !== 'note' && a.status !== 'skipped')
+    .map((a) => `${a.id}@${a.time || ''}`)
+    .join('|');
+  const changed = fp(activities) !== fp(scheduled);
+
+  // Over-capacity: substantial activities beyond the pace cap (meals/stays/transport/
+  // notes don't count). Keep the earlier-scheduled ones; report the rest. Not dropped.
+  const cap = PACE_CAP[opts.pace] || PACE_CAP.moderate;
+  const substantial = scheduled.filter((a) =>
+    a.status !== 'skipped' && a.type !== 'note' && a.type !== 'stay' &&
+    a.type !== 'food' && a.type !== 'transport');
+  const overflow = substantial.slice(cap).map((a) => ({ actId: a.id, name: a.name, reason: 'capacity' }));
+
+  // Unresolvable closures: re-timing can't open a venue that's dark all day (non-
+  // seasonal) or permanently closed. Reuse validateTrip so the rule logic is shared
+  // (seasonal venues stay soft "verify" tips and are NOT reported here).
+  const nameOf = (id) => (scheduled.find((a) => a.id === id) || {}).name;
+  const dayTrip = {
+    families: opts.families || [],
+    origin: opts.origin || null,
+    days: [{ label: '', date: opts.date, activities: scheduled }],
+  };
+  const unresolved = validateTrip(dayTrip)
+    .filter((w) => w.severity === 'error' && (w.type === 'closed_venue' || w.type === 'closed_permanently'))
+    .map((w) => ({ actId: w.actIds?.[0], name: nameOf(w.actIds?.[0]), reason: 'closed', verifyUrl: w.verifyUrl }));
+
+  return {
+    scheduled,
+    changed,
+    overflow,
+    unresolved,
+    summary: {
+      scheduledCount: substantial.length,
+      overflowCount: overflow.length,
+      unresolvedCount: unresolved.length,
+    },
+  };
+}

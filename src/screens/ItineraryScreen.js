@@ -12,7 +12,7 @@ import { fmt, fmtM, getActivityIcon, uid } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
-import { scheduleDay } from '../utils/autoArrange';
+import { scheduleDay, planDay } from '../utils/autoArrange';
 import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, isOpenAt, hoursLabel } from '../utils/hours';
 import { fetchPlacePhoto } from '../utils/places';
@@ -475,7 +475,8 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
 }
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
-  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto } = useStore();
+  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto, markPlanDayNoteSeen } = useStore();
+  const planDayNoteSeen = useStore(s => s.planDayNoteSeen);
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
   const [manualSeed,            setManualSeed]            = useState(null);   // {name?,address?,lat?,lng?,tile?} prefill when manual is opened from the Discover bridge / a dropped pin
@@ -588,42 +589,57 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   };
 
   // ✨ Auto-arrange THIS day, then re-check it with the SAME rule engine the
-  // Trip Check uses (validateTrip) — scheduleDay PLACES, validateTrip CHECKS, and
-  // both share estimateDuration + the window thresholds. If anything's still off,
-  // let the user choose: review now, or keep planning and fix it later.
-  const arrangeDay = () => {
+  // ── ✨ Plan my day — one tap, deterministic, day-scoped ──────────────────────
+  // planDay PLACES (hours + travel + pace) and reports the residual honestly. The
+  // key anti-loop move: the result is gated on `changed`, so re-tapping a day that's
+  // already arranged shows a calm "already arranged" — never the same prompt again.
+  const planMyDay = () => {
     const day = trip.days[currentDay];
     if (!day) return;
     const schedulable = day.activities.filter(a => a.status !== 'skipped' && a.type !== 'note');
-    if (schedulable.length < 2) return;   // nothing to rearrange
+    if (schedulable.length < 1) {
+      showUndoAction('Add a few places (Discover) and I’ll plan your day', 'sparkles', () => {});
+      return;
+    }
     const prev = day.activities;
     const dayRole = currentDay === trip.days.length - 1 ? 'departure' : 'normal';
-    // Anchor the day's route to where you wake: Day 1 → trip.origin; later days →
-    // the previous night's hotel (derived). So every day clusters correctly.
+    // Anchor to where you wake: Day 1 → trip.origin; later days → last night's hotel.
     const anchor = dayStartAnchor(trip, currentDay) || undefined;
-    const scheduled = scheduleDay(day.activities, { dayRole, date: day.date, anchor });
-    setDayActivities(trip.id, currentDay, scheduled);
-
-    const arranged = { ...trip, days: trip.days.map((d, i) => i === currentDay ? { ...d, activities: scheduled } : d) };
-    const issues = validateTrip(arranged).filter(w => w.dayIndex === currentDay && w.severity !== 'info');
+    const r = planDay(day.activities, {
+      dayRole, date: day.date, anchor, pace: trip.pace, families: trip.families, origin: trip.origin,
+    });
+    setDayActivities(trip.id, currentDay, r.scheduled);
     const undo = () => setDayActivities(trip.id, currentDay, prev);
 
-    if (issues.length > 0) {
+    // First time only: gently explain the rules are built in (replaces the result toast).
+    if (!planDayNoteSeen) {
+      markPlanDayNoteSeen();
       Alert.alert(
-        '✨ Day arranged',
-        `Trip Check flagged ${issues.length} thing${issues.length !== 1 ? 's' : ''} on this day:\n\n` +
-          issues.slice(0, 4).map(w => `${w.icon}  ${w.title}`).join('\n') +
-          (issues.length > 4 ? '\n…' : '') +
-          '\n\nFix them now, or keep planning and sort it out later?',
-        [
-          { text: 'Undo', style: 'destructive', onPress: undo },
-          { text: 'Later', style: 'cancel' },
-          { text: 'Review now', onPress: () => onCheckTrip && onCheckTrip() },
-        ],
+        '✨ Planned for you',
+        `I ordered this day by opening hours, travel time, and your ${trip.pace} pace — the planning rules are built in. Tweak anything you like; nothing is locked.`,
+        [{ text: 'Got it' }],
       );
-    } else {
-      showUndoAction('Day arranged · looks good', 'sparkles', undo);
+      return;
     }
+
+    // Stable end-state: nothing moved → calm acknowledgement, never a re-prompt.
+    if (!r.changed) {
+      const calm = (r.overflow.length || r.unresolved.length)
+        ? 'Already arranged · see Trip Check to fine-tune'
+        : 'Day already looks good ✓';
+      showUndoAction(calm, 'sparkles', undo);
+      return;
+    }
+
+    // Something changed → say what happened, including the honest residual.
+    const bits = [];
+    if (r.overflow.length)   bits.push(`${r.overflow.length} may not fit a ${trip.pace} day`);
+    if (r.unresolved.length) bits.push(`${r.unresolved.length} closed then`);
+    showUndoAction(
+      bits.length ? `Day planned · ${bits.join(' · ')}` : 'Day planned · ordered by hours & travel',
+      'sparkles',
+      undo,
+    );
   };
 
   // ── Open this day's route in Google Maps ──────────────────────────
@@ -857,12 +873,10 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                   <Text style={styles.routeBtnText}>Route</Text>
                 </TouchableOpacity>
               )}
-              {day.activities.filter(a => a.status !== 'skipped' && a.type !== 'note').length >= 2 && (
-                <TouchableOpacity style={styles.arrangeBtn} onPress={arrangeDay} activeOpacity={0.85}>
-                  <Icon name="sparkles" size={13} color={colors.smart} />
-                  <Text style={styles.arrangeBtnText}>Arrange</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity style={styles.arrangeBtn} onPress={planMyDay} activeOpacity={0.85}>
+                <Icon name="sparkles" size={13} color={colors.smart} />
+                <Text style={styles.arrangeBtnText}>Plan my day</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.addActBtn} onPress={openAdd}>
                 <Icon name="create-outline" size={13} color="#fff" />
                 <Text style={styles.addActBtnText}>Manual</Text>

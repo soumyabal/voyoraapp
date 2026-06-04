@@ -9,7 +9,7 @@ import { colors, spacing, radius, typography, shadow, activityColors, activityIc
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
 import { fmt, fmtM, getActivityIcon, uid, tripPhase, defaultDayFor, daysBetweenISO, todayISO, nowNextOf } from '../utils/helpers';
-import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
+import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost, calcFamilyBalances } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
 import { scheduleDay, planDay } from '../utils/autoArrange';
@@ -1006,6 +1006,36 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           return (
             <View style={styles.todayBanner} accessibilityRole="text" accessibilityLabel={`Today. ${text}`}>
               <Text style={styles.todayBannerText} numberOfLines={2}>🟢 {text}</Text>
+            </View>
+          );
+        })()}
+
+        {/* During-trip running tally — the moat, LIVE. Each family's net (paid − owed)
+            so the split stays present while you spend, not just at settle-up. Read-only. */}
+        {isToday && (() => {
+          const spent = (trip.expenses || []).filter(e => !e.excluded).reduce((s, e) => s + (e.amount || 0), 0);
+          if (spent <= 0) return null;
+          const fb = calcFamilyBalances(trip);
+          const allSquare = fb.every(x => Math.abs(x.net) < 0.5);
+          return (
+            <View style={styles.tallyBanner} accessibilityRole="summary"
+              accessibilityLabel={`${Math.round(spent)} dollars logged so far. ${allSquare ? 'Everyone is square.' : fb.map(x => `${x.family.name} ${x.net >= 0 ? 'up' : 'owes'} ${Math.abs(Math.round(x.net))}`).join('. ')}`}>
+              <Text style={styles.tallyTitle}>💰 ${Math.round(spent)} logged so far</Text>
+              {allSquare ? (
+                <Text style={styles.tallySquare}>✓ Everyone's square</Text>
+              ) : (
+                <View style={styles.tallyRow}>
+                  {fb.map(x => {
+                    const up = x.net >= 0;
+                    return (
+                      <Text key={x.family.id}
+                        style={[styles.tallyChip, { backgroundColor: up ? '#dcfce7' : '#fef3c7', color: up ? '#15803d' : '#b45309' }]}>
+                        {x.family.name} {up ? '+' : '−'}${Math.abs(Math.round(x.net))}
+                      </Text>
+                    );
+                  })}
+                </View>
+              )}
             </View>
           );
         })()}
@@ -2131,6 +2161,11 @@ const styles = StyleSheet.create({
   jumpTodayText: { fontSize: 12, fontWeight: '800', color: '#15803d' },
   todayBanner: { marginHorizontal: spacing.xxl, marginTop: spacing.sm, marginBottom: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: 10, borderRadius: radius.lg, backgroundColor: '#dcfce7', borderWidth: 1, borderColor: '#86efac' },
   todayBannerText: { fontSize: 13, fontWeight: '700', color: '#15803d' },
+  tallyBanner: { marginHorizontal: spacing.xxl, marginTop: spacing.xs, marginBottom: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: 10, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  tallyTitle: { fontSize: 13, fontWeight: '800', color: colors.text },
+  tallySquare: { marginTop: 5, fontSize: 12, fontWeight: '700', color: '#15803d' },
+  tallyRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 7 },
+  tallyChip: { fontSize: 12, fontWeight: '800', overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4, borderRadius: radius.full },
   dayBtnPast: { opacity: 0.45 },
   todayDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#15803d', marginTop: 3 },
   dayNav: { marginTop: spacing.xl },

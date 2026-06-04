@@ -196,6 +196,22 @@ export function calcBalances(trip) {
     .sort((a, b) => b.net - a.net);
 }
 
+// Per-FAMILY net position (paid − owed) — the live "who's up / who owes" tally.
+// Drives the During-trip running tally banner. Sorted most-fronted first.
+export function calcFamilyBalances(trip) {
+  return (trip.families || [])
+    .map(fam => {
+      const memberIds = new Set(fam.members.map(m => m.id));
+      let paid = 0, owed = 0;
+      trip.expenses.filter(exp => !exp.excluded).forEach(exp => {
+        if (exp.paidBy && memberIds.has(exp.paidBy)) paid += exp.amount;
+        fam.members.forEach(m => { owed += memberExpenseShare(m, exp, trip); });
+      });
+      return { family: fam, paid, owed, net: paid - owed };
+    })
+    .sort((a, b) => b.net - a.net);
+}
+
 export function calcSettlements(balances) {
   const credits = balances.filter(b => b.net > 0.5).map(b => ({ ...b }));
   const debts   = balances.filter(b => b.net < -0.5).map(b => ({ ...b }));

@@ -83,8 +83,12 @@ export default function PlayTripModal({ visible, trip, onClose }) {
     if (idx < slides.length - 1) {
       timer.current = setTimeout(() => setIdx(i => Math.min(slides.length - 1, i + 1)), hold);
     } else {
-      // the closing card — let it breathe an extra beat, then close the window (movie's done)
-      timer.current = setTimeout(() => { if (onClose) onClose(); }, hold + 900);
+      // the closing card — hold a beat, then STOP the music a fraction of a second BEFORE the
+      // window closes, so it resolves into a moment of silence instead of cutting off at dismiss.
+      timer.current = setTimeout(() => {
+        try { player.volume = 0; player.pause(); } catch (e) { /* ignore */ }
+        timer.current = setTimeout(() => { if (onClose) onClose(); }, 450);
+      }, hold + 600);
     }
     return () => clearTimeout(timer.current);
   }, [idx, visible, slides]); // eslint-disable-line react-hooks/exhaustive-deps

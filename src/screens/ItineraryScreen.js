@@ -4,6 +4,7 @@ import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import DiscoverModal from '../modals/DiscoverModal';
 import SetOriginModal from '../modals/SetOriginModal';
+import PlayTripModal from '../modals/PlayTripModal';
 import { APP_NAME } from '../config';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
 import Icon from '../components/ui/Icon';
@@ -302,7 +303,7 @@ function TripExpenseChart({ trip, currentDay, onSelectDay, compact }) {
 // Left:   TRIP $X,XXX
 // Right:  Day N  $XXX  $XX/p
 // ⓘ tap: slide-up detail sheet (family totals, chart, push button)
-function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onResetDay, onResetAll }) {
+function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onResetDay, onResetAll, onPlayTrip }) {
   const [showDetail, setShowDetail] = useState(false);
   const itinTotal = calcTripItineraryTotal(trip);
   const day     = trip.days[currentDay];
@@ -384,6 +385,11 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
             </TouchableOpacity>
           );
         })()}
+
+        {/* ▶ Play my trip — watch the trip come to life as you plan (a motivator, not a share) */}
+        <TouchableOpacity style={ch.shareBtn} onPress={onPlayTrip} activeOpacity={0.7} accessibilityLabel="Play my trip">
+          <Icon name="play" size={15} color="#fff" />
+        </TouchableOpacity>
 
         {/* Share day */}
         <TouchableOpacity style={ch.shareBtn} onPress={handleShare} activeOpacity={0.7}>
@@ -503,6 +509,7 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
   const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto, markPlanDayNoteSeen, setNightPlan, toggleActivityLock, ignoreWarning } = useStore();
+  const [showPlayTrip,          setShowPlayTrip]          = useState(false);
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
   const [manualSeed,            setManualSeed]            = useState(null);   // {name?,address?,lat?,lng?,tile?} prefill when manual is opened from the Discover bridge / a dropped pin
@@ -920,6 +927,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         onCheckTrip={onCheckTrip}
         onResetDay={resetDay}
         onResetAll={resetAll}
+        onPlayTrip={() => setShowPlayTrip(true)}
       />
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -1529,6 +1537,12 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         visible={showOrigin}
         trip={trip}
         onClose={() => setShowOrigin(false)}
+      />
+
+      <PlayTripModal
+        visible={showPlayTrip}
+        trip={trip}
+        onClose={() => setShowPlayTrip(false)}
       />
 
       <AddActivityModal

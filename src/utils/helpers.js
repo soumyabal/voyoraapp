@@ -196,6 +196,23 @@ export function defaultDayFor(trip, today = todayISO()) {
 }
 
 /**
+ * "Now / next" orientation for a live (active-trip) day, from the wall-clock
+ * minute-of-day. Returns { now, next, empty } — `now` = the latest activity that
+ * has started, `next` = the first still upcoming. Skipped/notes are ignored.
+ */
+export function nowNextOf(day, nowMin) {
+  const tMin = (t) => { if (!t) return null; const [h, m] = t.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+  const acts = (day?.activities || [])
+    .filter((a) => a.time && a.status !== 'skipped' && a.type !== 'note')
+    .sort((a, b) => tMin(a.time) - tMin(b.time));
+  if (!acts.length) return { now: null, next: null, empty: true };
+  const next = acts.find((a) => tMin(a.time) > nowMin) || null;
+  let now = null;
+  for (const a of acts) { if (tMin(a.time) <= nowMin) now = a; else break; }
+  return { now, next, empty: false };
+}
+
+/**
  * effectiveMember(member, travelers)
  *
  * Returns the "merged" view of a trip member:

@@ -8,7 +8,7 @@ import { APP_NAME } from '../config';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
-import { fmt, fmtM, getActivityIcon, uid, tripPhase, defaultDayFor, daysBetweenISO, todayISO } from '../utils/helpers';
+import { fmt, fmtM, getActivityIcon, uid, tripPhase, defaultDayFor, daysBetweenISO, todayISO, nowNextOf } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
@@ -555,6 +555,9 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     if (phase === 'past')   return { tone: 'past', text: '✓ Trip complete' };
     return null;
   })();
+  // Live-trip "Today" lens: are we viewing today, and what's now/next.
+  const isToday = phase === 'active' && currentDay === todayIdx;
+  const nowMin  = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
 
   // Where you woke today (Day 1 → origin; else last night's hotel / friends-camping
   // address / home). Drives the first-stop travel leg for ANY day, not just Day 1.
@@ -897,6 +900,14 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           </View>
         )}
 
+        {/* Live trip, but you've navigated off today → one tap back to now */}
+        {phase === 'active' && !isToday && (
+          <TouchableOpacity style={styles.jumpToday} onPress={() => setCurrentDay(todayIdx)} activeOpacity={0.8}
+            accessibilityRole="button" accessibilityLabel={`Jump to today, Day ${todayIdx + 1}`}>
+            <Text style={styles.jumpTodayText}>↩ Jump to today · Day {todayIdx + 1}</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Day Navigation — during an active trip, today is dotted and past days dimmed */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayNav} contentContainerStyle={{ paddingHorizontal: spacing.xxl }}>
           {trip.days.map((d, i) => {
@@ -983,6 +994,21 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             </View>
           </View>
         )}
+
+        {/* Live "Today" orientation — now / next, only while the trip is happening */}
+        {isToday && day && (() => {
+          const { now, next, empty } = nowNextOf(day, nowMin);
+          let text;
+          if (empty) text = 'Nothing planned for today yet — add a stop or just wing it.';
+          else if (next && now) text = `Now: ${now.name}  ·  Next: ${next.name} at ${next.time}`;
+          else if (next) text = `Up next: ${next.name} at ${next.time}`;
+          else text = `That's today's plan done — log any spend so tonight's split stays live.`;
+          return (
+            <View style={styles.todayBanner} accessibilityRole="text" accessibilityLabel={`Today. ${text}`}>
+              <Text style={styles.todayBannerText} numberOfLines={2}>🟢 {text}</Text>
+            </View>
+          );
+        })()}
 
         {/* Inline Trip Check for THIS day — ONE calm summary pill (positive-first),
             not a wall of red chips. Tap to open the full checker. */}
@@ -2101,6 +2127,10 @@ const styles = StyleSheet.create({
   // ── Day navigation ───────────────────────────────────────────────
   statusPill: { alignSelf: 'center', marginTop: spacing.lg, marginBottom: -spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.full },
   statusPillText: { fontSize: 12, fontWeight: '800' },
+  jumpToday: { alignSelf: 'center', marginTop: spacing.sm, marginBottom: -spacing.xs, paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, backgroundColor: '#dcfce7', borderWidth: 1, borderColor: '#86efac' },
+  jumpTodayText: { fontSize: 12, fontWeight: '800', color: '#15803d' },
+  todayBanner: { marginHorizontal: spacing.xxl, marginTop: spacing.sm, marginBottom: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: 10, borderRadius: radius.lg, backgroundColor: '#dcfce7', borderWidth: 1, borderColor: '#86efac' },
+  todayBannerText: { fontSize: 13, fontWeight: '700', color: '#15803d' },
   dayBtnPast: { opacity: 0.45 },
   todayDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#15803d', marginTop: 3 },
   dayNav: { marginTop: spacing.xl },

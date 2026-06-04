@@ -725,6 +725,43 @@ export function validateTrip(trip) {
     warnings.push(...validateDay(day, i, trip.families || []));
   });
 
+  // ── Trip rule: first stop scheduled before you could realistically ARRIVE ─────────
+  // The "359 km at 08:00" case — a day's first stop is set earlier than you could reach it
+  // from where the day STARTS (home on Day 1, last night's hotel otherwise). Soft tip only:
+  // we're estimating a DRIVE, so if they fly it's wrong → never an error. On a multi-day
+  // arrival day with no lodging, the hint folds in a "add a hotel check-in" nudge.
+  const DEPART = 8 * 60; // earliest realistic departure from the day's start anchor
+  trip.days.forEach((day, i) => {
+    const acts = (day.activities || [])
+      .filter(a => a.status !== 'skipped' && a.type !== 'note' && a.type !== 'stay' && a.time && a.lat != null && a.lng != null)
+      .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    if (!acts.length) return;
+    const anchor = dayStartAnchor(trip, i);
+    if (!anchor || anchor.lat == null) return;
+    const first = acts[0];
+    const leg = travelLeg(anchor, first);
+    if (!leg || leg.min < 45) return;                       // only flag a real drive (≥ 45 min)
+    const arrival = DEPART + leg.min;
+    const fp = (first.time || '09:00').split(':');
+    const firstMin = (parseInt(fp[0], 10) || 0) * 60 + (parseInt(fp[1], 10) || 0);
+    if (firstMin + 30 >= arrival) return;                   // it's already late enough — no issue
+    const hours = Math.round(leg.min / 6) / 10;             // leg.min / 60, 1 decimal
+    const suggestHotel = trip.days.length >= 2 && lodgingForNight(trip, i) == null && i < trip.days.length - 1;
+    warnings.push({
+      type:     'first_stop_unreachable',
+      severity: 'info',
+      icon:     '🚗',
+      title:    'First stop is early for the drive',
+      message:  `${day.label}'s first stop is at ${first.time}, but it's ~${hours}h from ${anchor.label || 'your start'} — you'd arrive around ${formatEndTime(arrival)}.`,
+      hint:     suggestHotel
+        ? "Plan it as a travel day — and add a hotel check-in for when you arrive (~3 PM). If you're flying, ignore this."
+        : "Set it later, or plan it as a travel day. If you're flying, ignore this.",
+      suggestedTime: formatEndTime(arrival),
+      moveActId: first.id,
+      dayIndex: i,
+    });
+  });
+
   // ── Trip rule: empty or near-empty days ──────────────────────────
   const isLongTrip = trip.days.length >= 7;
 

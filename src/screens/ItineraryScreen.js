@@ -503,7 +503,6 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
   const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto, markPlanDayNoteSeen, setNightPlan } = useStore();
-  const planDayNoteSeen = useStore(s => s.planDayNoteSeen);
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
   const [manualSeed,            setManualSeed]            = useState(null);   // {name?,address?,lat?,lng?,tile?} prefill when manual is opened from the Discover bridge / a dropped pin
@@ -699,37 +698,51 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     const r = planDay(day.activities, {
       dayRole, date: day.date, anchor, pace: trip.pace, families: trip.families, origin: trip.origin,
     });
-    setDayActivities(trip.id, currentDay, r.scheduled);
-    const undo = () => setDayActivities(trip.id, currentDay, prev);
-
-    // First time only: gently explain the rules are built in (replaces the result toast).
-    if (!planDayNoteSeen) {
-      markPlanDayNoteSeen();
-      Alert.alert(
-        '✨ Planned for you',
-        `I ordered this day by opening hours, travel time, and your ${trip.pace} pace — the planning rules are built in. Tweak anything you like; nothing is locked.`,
-        [{ text: 'Got it' }],
-      );
-      return;
-    }
 
     // Stable end-state: nothing moved → calm acknowledgement, never a re-prompt.
-    if (!r.changed) {
+    if (!r.changed || r.changes.length === 0) {
       const calm = (r.overflow.length || r.unresolved.length)
         ? 'Already arranged · see Trip Check to fine-tune'
         : 'Day already looks good ✓';
-      showUndoAction(calm, 'sparkles', undo);
+      showUndoAction(calm, 'sparkles', () => {});
       return;
     }
 
-    // Something changed → say what happened, including the honest residual.
-    const bits = [];
-    if (r.overflow.length)   bits.push(`${r.overflow.length} may not fit a ${trip.pace} day`);
-    if (r.unresolved.length) bits.push(`${r.unresolved.length} closed then`);
-    showUndoAction(
-      bits.length ? `Day planned · ${bits.join(' · ')}` : 'Day planned · ordered by hours & travel',
-      'sparkles',
-      undo,
+    // PREVIEW-DIFF: show exactly what will move (times are ~approximate — they ride on
+    // a free straight-line travel estimate), and let the user Apply or Discard. Nothing
+    // is written until they tap Apply.
+    const apply = () => {
+      markPlanDayNoteSeen();
+      setDayActivities(trip.id, currentDay, r.scheduled);
+      const undo = () => setDayActivities(trip.id, currentDay, prev);
+      const bits = [];
+      const dayFull = r.unresolved.filter(u => u.reason === 'day_full').length;
+      if (dayFull) bits.push(`${dayFull} won't fit in one day`);
+      if (r.overflow.length)   bits.push(`${r.overflow.length} may not fit a ${trip.pace} day`);
+      const tight = r.unresolved.filter(u => u.reason === 'tight').length;
+      if (tight) bits.push(`${tight} locked time${tight > 1 ? 's' : ''} still tight`);
+      showUndoAction(bits.length ? `Day planned · ${bits.join(' · ')}` : 'Day planned ✓', 'sparkles', undo);
+    };
+
+    const fmtRow = (c) => `•  ${c.name.length > 26 ? c.name.slice(0, 25) + '…' : c.name}:  ${c.from || '—'} → ~${c.to}`;
+    const shown = r.changes.slice(0, 6).map(fmtRow).join('\n');
+    const more  = r.changes.length > 6 ? `\n…and ${r.changes.length - 6} more` : '';
+    const residual = [];
+    const dayFullN = r.unresolved.filter(u => u.reason === 'day_full').length;
+    if (dayFullN) residual.push(`${dayFullN} stop${dayFullN > 1 ? 's' : ''} won't fit in one day (too far apart)`);
+    if (r.overflow.length) residual.push(`${r.overflow.length} may not fit your ${trip.pace} pace`);
+    const tightN = r.unresolved.filter(u => u.reason === 'tight').length;
+    if (tightN) residual.push(`${tightN} locked time${tightN > 1 ? 's' : ''} can't move (still tight)`);
+    const note = residual.length ? `\n\n⚠️  ${residual.join(' · ')}` : '';
+    const n = r.changes.length;
+
+    Alert.alert(
+      '✨ Plan my day',
+      `I'll shift ${n} ${n === 1 ? 'time' : 'times'} so the day's travel and opening hours fit. Times are estimates (~):\n\n${shown}${more}${note}`,
+      [
+        { text: 'Discard', style: 'cancel' },
+        { text: 'Apply', onPress: apply },
+      ],
     );
   };
 

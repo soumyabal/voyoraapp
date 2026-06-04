@@ -570,15 +570,23 @@ export function comfortPass(activities, opts = {}) {
     }
 
     if (required > cur) {
-      required = roundUp(required);
-      if (a.timeLocked) {
-        unresolved.push({ actId: a.id, name: a.name, reason: 'tight' });
-        // locked → keep its time; later stops cascade from the locked (actual) time
+      // Day-end guard: if clearing the leg pushes this stop's start so late it runs
+      // past the end of the day, it simply doesn't fit (e.g. four cities 100 km apart).
+      // Keep it where it is and report it — NEVER shove past midnight (minToTime wraps
+      // 29:50 → 05:50). This is the honest "won't fit in one day" signal.
+      if (required + estimateDuration(a) > DAY_END_MIN) {
+        unresolved.push({ actId: a.id, name: a.name, reason: 'day_full' });
       } else {
-        const to = minToTime(required);
-        if (to !== a.time) {
-          changes.push({ actId: a.id, name: a.name, from: a.time, to });
-          a.time = to;
+        required = roundUp(required);
+        if (a.timeLocked) {
+          unresolved.push({ actId: a.id, name: a.name, reason: 'tight' });
+          // locked → keep its time; later stops cascade from the locked (actual) time
+        } else {
+          const to = minToTime(required);
+          if (to !== a.time) {
+            changes.push({ actId: a.id, name: a.name, from: a.time, to });
+            a.time = to;
+          }
         }
       }
     }

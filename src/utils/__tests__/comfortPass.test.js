@@ -70,6 +70,20 @@ describe('comfortPass — locks & hours', () => {
     expect(timeToMin(adjusted.find((a) => a.id === 'b').time)).toBeGreaterThanOrEqual(11 * 60);
   });
 
+  test('a day too spread out flags day_full instead of wrapping past midnight', () => {
+    // Four+ hours of driving between stops can cascade a start past 24:00; minToTime
+    // wraps (29:50 → 05:50). The guard must report day_full and never emit a pre-dawn time.
+    const A = { lat: 43.0, lng: -89.0 }, B = { lat: 44.0, lng: -89.0 }, C = { lat: 45.0, lng: -89.0 }; // ~111 km apart
+    const acts = [
+      { id: 'a', type: 'activity', name: 'A', time: '09:00', ...A },
+      { id: 'b', type: 'activity', name: 'B', time: '13:00', ...B },
+      { id: 'c', type: 'activity', name: 'C', time: '18:00', ...C },
+    ];
+    const { adjusted, unresolved } = comfortPass(acts);
+    expect(unresolved.some((u) => u.reason === 'day_full')).toBe(true);
+    adjusted.forEach((a) => expect(timeToMin(a.time)).toBeGreaterThanOrEqual(9 * 60)); // never wrapped to early AM
+  });
+
   test('missing coords → falls back to a buffer, never crashes', () => {
     const acts = [
       { id: 'a', type: 'activity', name: 'A', time: '09:00' },

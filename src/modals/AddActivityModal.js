@@ -608,42 +608,6 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               returnKeyType="next"
             />
 
-            {/* ── Address → geocode (for Airbnb / off-map stops) ── */}
-            {tile.type !== 'transport' && (
-              <>
-                <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>
-                  ADDRESS <Text style={s.optional}>(Airbnb / off-map — locates it for scheduling)</Text>
-                </Text>
-                <View style={s.addrRow}>
-                  <TextInput
-                    style={s.addrInput}
-                    value={address}
-                    onChangeText={t => { setAddress(t); setGeo(null); setGeoStatus('idle'); }}
-                    placeholder="123 River Rd, Wisconsin Dells…"
-                    placeholderTextColor={colors.muted}
-                    returnKeyType="search"
-                    onSubmitEditing={locate}
-                  />
-                  <TouchableOpacity
-                    style={[s.addrFind, geoStatus === 'ok' && s.addrFindOk]}
-                    onPress={locate}
-                    disabled={geoStatus === 'loading' || !address.trim()}
-                    activeOpacity={0.85}
-                  >
-                    {geoStatus === 'loading'
-                      ? <ActivityIndicator size="small" color="#fff" />
-                      : <Text style={s.addrFindText}>{geoStatus === 'ok' ? '✓ Located' : 'Find'}</Text>}
-                  </TouchableOpacity>
-                </View>
-                {geoStatus === 'ok' && (
-                  <Text style={s.addrOk}>📍 Pinned — this stop schedules with the rest of the day.</Text>
-                )}
-                {geoStatus === 'fail' && (
-                  <Text style={s.addrFail}>Couldn't find that address — try a fuller one (street, city).</Text>
-                )}
-              </>
-            )}
-
             {/* ── Nights (stay only) — sets which nights this hotel covers, so each
                    day knows where you sleep + where the next day's route starts ── */}
             {tile.type === 'stay' && (
@@ -741,8 +705,10 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               </>
             )}
 
-            {/* ── Time / Departs + Arrives ── (per-day smart time used in All-days mode) */}
-            {allDays ? null : tile.type === 'transport' && tile.subtype !== 'pitstop' ? (
+            {/* ── Departs + Arrives ── (transport essentials; the generic TIME
+                   fine-tune + DURATION live under "+ Details" — the slot already
+                   set a smart time and the duration auto-estimates). */}
+            {!allDays && tile.type === 'transport' && tile.subtype !== 'pitstop' && (
               <View style={s.inlineRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.sectionLabel}>DEPARTS</Text>
@@ -761,26 +727,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                   )}
                 </View>
               </View>
-            ) : (
-              <View style={s.inlineRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.sectionLabel}>TIME <Text style={s.optional}>(fine-tune)</Text></Text>
-                  <TimePickerInput value={time} onChange={setTime} />
-                </View>
-              </View>
             )}
-
-            {/* ── Duration ── */}
-            <View style={s.inlineRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.sectionLabel}>DURATION</Text>
-                <DurationPickerInput
-                  value={durationMins}
-                  onChange={setDurationMins}
-                  autoLabel={autoEstimateLabel}
-                />
-              </View>
-            </View>
 
             {/* ── Meal (food only) — auto from opening hours, or pin it ── */}
             {tile.type === 'food' && (
@@ -874,7 +821,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               </View>
             )}
 
-            {/* ── More / Less toggle ── */}
+            {/* ── Details toggle ── */}
             <TouchableOpacity
               style={s.moreToggle}
               onPress={() => setShowMore(v => !v)}
@@ -882,7 +829,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
             >
               <View style={s.moreLine} />
               <Text style={s.moreToggleText}>
-                {showMore ? '− Less' : `+ More${detail || memo || reminder ? ' ·  filled' : ''}`}
+                {showMore ? '− Less' : `+ Details${detail || memo || reminder || address || durationMins ? ' ·  filled' : ''}`}
               </Text>
               <View style={s.moreLine} />
             </TouchableOpacity>
@@ -890,8 +837,66 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
             {/* ── Secondary fields (collapsed by default) ── */}
             {showMore && (
               <>
+                {/* Address → geocode (for Airbnb / off-map stops) — non-transport */}
+                {tile.type !== 'transport' && (
+                  <>
+                    <Text style={[s.sectionLabel, { marginTop: spacing.sm }]}>
+                      ADDRESS <Text style={s.optional}>(Airbnb / off-map — locates it for scheduling)</Text>
+                    </Text>
+                    <View style={s.addrRow}>
+                      <TextInput
+                        style={s.addrInput}
+                        value={address}
+                        onChangeText={t => { setAddress(t); setGeo(null); setGeoStatus('idle'); }}
+                        placeholder="123 River Rd, Wisconsin Dells…"
+                        placeholderTextColor={colors.muted}
+                        returnKeyType="search"
+                        onSubmitEditing={locate}
+                      />
+                      <TouchableOpacity
+                        style={[s.addrFind, geoStatus === 'ok' && s.addrFindOk]}
+                        onPress={locate}
+                        disabled={geoStatus === 'loading' || !address.trim()}
+                        activeOpacity={0.85}
+                      >
+                        {geoStatus === 'loading'
+                          ? <ActivityIndicator size="small" color="#fff" />
+                          : <Text style={s.addrFindText}>{geoStatus === 'ok' ? '✓ Located' : 'Find'}</Text>}
+                      </TouchableOpacity>
+                    </View>
+                    {geoStatus === 'ok' && (
+                      <Text style={s.addrOk}>📍 Pinned — this stop schedules with the rest of the day.</Text>
+                    )}
+                    {geoStatus === 'fail' && (
+                      <Text style={s.addrFail}>Couldn't find that address — try a fuller one (street, city).</Text>
+                    )}
+                  </>
+                )}
+
+                {/* Time fine-tune (non-transport; transport sets Departs/Arrives above) */}
+                {!allDays && !(tile.type === 'transport' && tile.subtype !== 'pitstop') && (
+                  <View style={[s.inlineRow, { marginTop: spacing.lg }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.sectionLabel}>TIME <Text style={s.optional}>(fine-tune)</Text></Text>
+                      <TimePickerInput value={time} onChange={setTime} />
+                    </View>
+                  </View>
+                )}
+
+                {/* Duration — auto-estimates by type; override here if needed */}
+                <View style={[s.inlineRow, { marginTop: spacing.lg }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.sectionLabel}>DURATION</Text>
+                    <DurationPickerInput
+                      value={durationMins}
+                      onChange={setDurationMins}
+                      autoLabel={autoEstimateLabel}
+                    />
+                  </View>
+                </View>
+
                 {/* Details */}
-                <Text style={[s.sectionLabel, { marginTop: spacing.sm }]}>DETAILS <Text style={s.optional}>(optional)</Text></Text>
+                <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>DETAILS <Text style={s.optional}>(optional)</Text></Text>
                 <TextInput
                   style={s.detailInput}
                   value={detail}

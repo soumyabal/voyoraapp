@@ -11,7 +11,7 @@ import { estimateDuration } from '../tripValidator';
 import { timeToMin } from '../slots';
 
 const HOME = { lat: 43.0, lng: -89.0 };
-const FAR = { lat: 43.16, lng: -89.0 }; // ~17–18 km north → a real ~50 min drive
+const FAR = { lat: 43.7, lng: -89.0 }; // ~78 km north → a real ~1 h drive at highway speed
 const endOf = (a) => timeToMin(a.time) + Math.max(15, estimateDuration(a)); // mirrors BUFFER_MIN
 
 describe('comfortPass — travel feasibility across types', () => {
@@ -73,7 +73,7 @@ describe('comfortPass — locks & hours', () => {
   test('a day too spread out flags day_full instead of wrapping past midnight', () => {
     // Four+ hours of driving between stops can cascade a start past 24:00; minToTime
     // wraps (29:50 → 05:50). The guard must report day_full and never emit a pre-dawn time.
-    const A = { lat: 43.0, lng: -89.0 }, B = { lat: 44.0, lng: -89.0 }, C = { lat: 45.0, lng: -89.0 }; // ~111 km apart
+    const A = { lat: 43.0, lng: -89.0 }, B = { lat: 46.0, lng: -89.0 }, C = { lat: 49.0, lng: -89.0 }; // ~333 km apart each
     const acts = [
       { id: 'a', type: 'activity', name: 'A', time: '09:00', ...A },
       { id: 'b', type: 'activity', name: 'B', time: '13:00', ...B },
@@ -91,5 +91,39 @@ describe('comfortPass — locks & hours', () => {
     ];
     const { adjusted } = comfortPass(acts);
     expect(timeToMin(adjusted.find((a) => a.id === 'b').time)).toBeGreaterThanOrEqual(endOf(adjusted.find((a) => a.id === 'a')));
+  });
+});
+
+describe('comfortPass — the first stop clears the drive from where the day STARTS', () => {
+  const HQ = { lat: 42.15, lng: -87.98 };    // home (Buffalo Grove area)
+  const DEST = { lat: 44.76, lng: -85.62 };  // ~350 km away (Traverse City) — the real bug
+
+  test('a far start anchor pushes the first stop to a realistic arrival (not 8am)', () => {
+    const acts = [{ id: 's', type: 'activity', name: 'Maple Bay', time: '08:00', ...DEST }];
+    const { adjusted, changes } = comfortPass(acts, { anchor: HQ });
+    const leg = travelLeg(HQ, DEST);
+    expect(timeToMin(adjusted.find(a => a.id === 's').time)).toBeGreaterThanOrEqual(8 * 60 + leg.min); // 8am depart + drive
+    expect(timeToMin(adjusted.find(a => a.id === 's').time)).toBeGreaterThan(11 * 60);                 // an afternoon arrival
+    expect(changes.find(c => c.actId === 's')).toBeTruthy();
+  });
+
+  test('a NEAR start anchor leaves the morning untouched', () => {
+    const hotel = { lat: 44.75, lng: -85.60 };   // ~3 km from the stop
+    const acts = [{ id: 's', type: 'activity', name: 'Beach', time: '09:00', ...DEST }];
+    const { adjusted, changes } = comfortPass(acts, { anchor: hotel });
+    expect(adjusted.find(a => a.id === 's').time).toBe('09:00');   // 8am + a few min < 9am → no push
+    expect(changes).toEqual([]);
+  });
+
+  test('no anchor → unchanged (today\'s behavior)', () => {
+    const acts = [{ id: 's', type: 'activity', name: 'X', time: '08:00', ...DEST }];
+    expect(comfortPass(acts, {}).changes).toEqual([]);
+  });
+
+  test('a LOCKED early first stop with a far anchor is flagged tight, not moved', () => {
+    const acts = [{ id: 's', type: 'activity', name: 'Maple Bay', time: '08:00', timeLocked: true, ...DEST }];
+    const { adjusted, unresolved } = comfortPass(acts, { anchor: HQ });
+    expect(adjusted.find(a => a.id === 's').time).toBe('08:00');    // locked → not moved
+    expect(unresolved.some(u => u.actId === 's' && u.reason === 'tight')).toBe(true);
   });
 });

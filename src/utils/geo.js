@@ -40,7 +40,11 @@ export function travelLeg(a, b) {
   if (road <= WALK_MAX_KM) {
     return { km, min: Math.max(2, Math.round((road / WALK_KMH) * 60)), mode: 'walk' };
   }
-  return { km, min: Math.max(5, Math.round((road / DRIVE_KMH) * 60)), mode: 'drive' };
+  // Distance-aware driving speed: short hops crawl through city streets/lights/parking;
+  // longer legs run mostly highway. A flat 26 km/h made a ~360 km drive look like 14 h
+  // (so the planner thought you could be at a stop 4 h away at 8 AM). Door-to-door.
+  const kmh = road <= 15 ? DRIVE_KMH : road <= 60 ? 55 : 85;
+  return { km, min: Math.max(5, Math.round((road / kmh) * 60)), mode: 'drive' };
 }
 
 /** "850 m" / "3.2 km" — compact distance label. */

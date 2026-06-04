@@ -41,6 +41,7 @@ const FULL_DAY_MIN = 360;
 const BUFFER_MIN = 15;
 const DAY_START_MIN = 9 * 60;    // 09:00
 const DAY_END_MIN = 22 * 60;     // 22:00
+const DEPART_MIN = 8 * 60;       // earliest you'd realistically leave the day's start anchor (08:00)
 const LUNCH_MIN = 12 * 60 + 30;  // 12:30
 const DINNER_MIN = 19 * 60;      // 19:00
 
@@ -636,6 +637,16 @@ export function comfortPass(activities, opts = {}) {
       const leg = travelLeg(prev, a);
       const need = prevEnd + (leg ? Math.max(0, leg.min) : BUFFER_MIN);
       if (need > required) required = need;
+    } else if (opts.anchor && opts.anchor.lat != null) {
+      // FIRST stop: clear the drive from where the day STARTS — home on Day 1, last night's
+      // hotel otherwise. You can't be at a stop 4h away at 08:00. Assume you leave the anchor
+      // no earlier than ~08:00, so first-stop ≥ 08:00 + that leg. (Fixes "359 km to your
+      // first stop at 08:00".) Short hotel→stop legs leave the morning untouched.
+      const leg = travelLeg(opts.anchor, a);
+      if (leg) {
+        const need = DEPART_MIN + Math.max(0, leg.min);
+        if (need > required) required = need;
+      }
     }
 
     // 2) respect opening hours — never start before open; flag if it'd run past close

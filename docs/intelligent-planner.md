@@ -7,6 +7,9 @@
 > honestly, with the LLM used only for synthesis, never as the source of truth.
 >
 > Last updated: June 2026. Living document — add a row here whenever a rule is added.
+>
+> **See also:** [`engine-architecture.md`](./engine-architecture.md) — the engine's *shape* in two
+> modes (deterministic spine + optional AI layer) and the exact AI boundary contract.
 
 ---
 

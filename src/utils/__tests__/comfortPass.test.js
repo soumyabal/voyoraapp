@@ -107,6 +107,12 @@ describe('comfortPass — the first stop clears the drive from where the day STA
     expect(changes.find(c => c.actId === 's')).toBeTruthy();
   });
 
+  test('idempotent with a far anchor — re-running yields no further changes', () => {
+    const acts = [{ id: 's', type: 'activity', name: 'Maple Bay', time: '08:00', ...DEST }];
+    const once = comfortPass(acts, { anchor: HQ }).adjusted;
+    expect(comfortPass(once, { anchor: HQ }).changes).toEqual([]);   // convergent (QA P1)
+  });
+
   test('a NEAR start anchor leaves the morning untouched', () => {
     const hotel = { lat: 44.75, lng: -85.60 };   // ~3 km from the stop
     const acts = [{ id: 's', type: 'activity', name: 'Beach', time: '09:00', ...DEST }];

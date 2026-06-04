@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal, Share, Image } from 'react-native';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal, Share, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import DiscoverModal from '../modals/DiscoverModal';
@@ -17,6 +17,7 @@ import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, isOpenAt, hoursLabel } from '../utils/hours';
 import { fetchPlacePhoto } from '../utils/places';
 import { exportDayAsPDF } from '../utils/exportPlan';
+import LocationSearchField from '../components/ui/LocationSearchField';
 
 // ─── Dietary warning helper ───────────────────────────────────────
 const MEAT_WARN_RE = /\b(beef|pork|lamb|chicken|mutton|fish|prawn|shrimp|seafood|lobster|crab|sashimi|sushi|steak|burger|bbq|barbecue|bacon|ham|meat|non.?veg)\b/i;
@@ -122,11 +123,14 @@ const MEAL_LABEL = {
 
 // "How's tonight handled?" — a hotel-less night the user tells us is covered.
 // The resolver sheet rows (with plain-language subtitles)…
+// `located` reasons have a real address worth capturing (optionally) to anchor the
+// next morning's drive; the others have no fixed place (overnight = in motion;
+// heading home → the trip's origin, derived).
 const NIGHT_PLAN_OPTIONS = [
-  { key: 'overnight_travel', emoji: '🌙', label: 'Travelling overnight', sub: 'red-eye, sleeper train, night drive' },
-  { key: 'with_friends',     emoji: '🛋️', label: 'Staying with friends or family', sub: null },
-  { key: 'camping',          emoji: '⛺', label: 'Camping or RV', sub: null },
-  { key: 'heading_home',     emoji: '🏡', label: 'Heading home tonight', sub: null },
+  { key: 'overnight_travel', emoji: '🌙', label: 'Travelling overnight', sub: 'red-eye, sleeper train, night drive', located: false },
+  { key: 'with_friends',     emoji: '🛋️', label: 'Staying with friends or family', sub: null, located: true },
+  { key: 'camping',          emoji: '⛺', label: 'Camping or RV', sub: null, located: true },
+  { key: 'heading_home',     emoji: '🏡', label: 'Heading home tonight', sub: null, located: false },
 ];
 // …and the calm settled chip each one becomes on the day card (icon = the in-app Icon name).
 const NIGHT_PLAN_META = {
@@ -531,6 +535,16 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
 
   const day = trip.days[currentDay] || trip.days[0];
 
+  // Where you woke today (Day 1 → origin; else last night's hotel / friends-camping
+  // address / home). Drives the first-stop travel leg for ANY day, not just Day 1.
+  const startAnchor = day ? dayStartAnchor(trip, currentDay) : null;
+  // A located night (friends/camping) with NO address yet → we can't map the morning;
+  // offer to add it instead of silently dropping the first leg.
+  const priorNight = (day && currentDay > 0) ? lodgingForNight(trip, currentDay - 1) : null;
+  const priorNightNeedsAddr = !startAnchor && !!priorNight?.nightPlan
+    && ['with_friends', 'camping'].includes(priorNight.nightPlan.type)
+    && priorNight.nightPlan.lat == null;
+
   // Backfill place photos for this day's stops that don't have one yet (added
   // before we stored photos / via the AI planner), so the cards show a thumbnail.
   // One cached Places lookup per place; guarded so we never refetch.
@@ -570,12 +584,37 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
 
   // ── "How's tonight handled?" — resolve a hotel-less night politely ──────────
   const openNightPlan = (dayIdx) => setNightPlanDay(dayIdx);
+  const closeNightPlan = () => {
+    const idx = nightPlanDay;
+    const plan = idx != null ? trip.days?.[idx]?.nightPlan : null;
+    setNightPlanDay(null);
+    if (plan?.type) showUndoAction(
+      plan.lat != null ? 'Mapped — your morning drive is set 📍' : "Got it — tonight's handled",
+      NIGHT_PLAN_META[plan.type]?.icon || 'location',
+      () => setNightPlan(trip.id, idx, null),
+    );
+  };
   const pickNightPlan = (key) => {
     const idx = nightPlanDay;
     if (idx == null) return;
-    setNightPlan(trip.id, idx, key);
-    setNightPlanDay(null);
-    if (key) showUndoAction("Got it — tonight's handled", NIGHT_PLAN_META[key].icon, () => setNightPlan(trip.id, idx, null));
+    if (!key) { setNightPlan(trip.id, idx, null); setNightPlanDay(null); return; }  // clear / flag again
+    const prev = trip.days?.[idx]?.nightPlan;
+    // Keep a captured address if re-picking the SAME reason; else start fresh.
+    setNightPlan(trip.id, idx, prev?.type === key ? prev : { type: key });
+    // Located reasons keep the sheet open so the optional address field can show;
+    // the rest are a one-tap answer → close + acknowledge.
+    if (!NIGHT_PLAN_OPTIONS.find(o => o.key === key)?.located) {
+      setNightPlanDay(null);
+      showUndoAction("Got it — tonight's handled", NIGHT_PLAN_META[key].icon, () => setNightPlan(trip.id, idx, null));
+    }
+  };
+  // Optional address for a located night → merges coords into the night-plan object.
+  const setNightAddress = (label, coords) => {
+    const idx = nightPlanDay;
+    if (idx == null) return;
+    const cur = trip.days?.[idx]?.nightPlan;
+    if (!cur?.type) return;
+    setNightPlan(trip.id, idx, { type: cur.type, label, ...(coords ? { lat: coords.lat, lng: coords.lng } : {}) });
   };
   const addHotelFromNightPlan = () => { setNightPlanDay(null); setDiscoverNear(null); setDiscoverSlot(null); setShowDiscover(true); };
   const closeModal     = ()     => { setShowAddActivity(false); setEditActivity(null); };
@@ -1094,10 +1133,18 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                     </View>
                   </TouchableOpacity>
 
-                  {/* Day 1's first stop: leg from the trip's starting point (nothing
-                      precedes it, so the normal connector below can't fire here). */}
-                  {!isCollapsed && slotActs.length > 0 && !prevSlotLast && currentDay === 0 && trip.origin?.lat != null && (
-                    <OriginConnector origin={trip.origin} to={slotActs[0]} />
+                  {/* First stop of the day: travel leg from where you WOKE — origin on
+                      Day 1, last night's hotel / friends-camping address otherwise. */}
+                  {!isCollapsed && slotActs.length > 0 && !prevSlotLast && startAnchor?.lat != null && (
+                    <OriginConnector origin={startAnchor} to={slotActs[0]} />
+                  )}
+                  {/* Woke somewhere we can't map (friends/camping, no address) → an honest,
+                      self-explaining invite instead of a silently dropped first leg. */}
+                  {!isCollapsed && slotActs.length > 0 && !prevSlotLast && priorNightNeedsAddr && (
+                    <TouchableOpacity style={styles.wakeAskRow} onPress={() => openNightPlan(currentDay - 1)} activeOpacity={0.7}
+                      accessibilityRole="button" accessibilityLabel="Morning starts at your first stop. Add where you stayed last night to map the drive.">
+                      <Text style={styles.wakeAskText}>🌅 Morning starts at your first stop · <Text style={styles.wakeAskLink}>add where you stayed ›</Text></Text>
+                    </TouchableOpacity>
                   )}
 
                   {/* Travel from the previous section's last stop into this one */}
@@ -1185,14 +1232,18 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             // The user told us this hotel-less night is covered → calm settled chip
             // (tap to change or clear). This is the answer to the "where are you
             // staying?" question below — never an amber nag.
-            if (lod?.nightPlan && NIGHT_PLAN_META[lod.nightPlan]) {
-              const m = NIGHT_PLAN_META[lod.nightPlan];
+            if (lod?.nightPlan?.type && NIGHT_PLAN_META[lod.nightPlan.type]) {
+              const np = lod.nightPlan;
+              const m = NIGHT_PLAN_META[np.type];
+              const located = NIGHT_PLAN_OPTIONS.find(o => o.key === np.type)?.located;
               return (
                 <TouchableOpacity style={styles.lodgeChip} onPress={() => openNightPlan(currentDay)} activeOpacity={0.7}
-                  accessibilityRole="button" accessibilityLabel={`Tonight: ${m.a11y}. Settled. Opens choices to change tonight's plan.`}>
+                  accessibilityRole="button" accessibilityLabel={`Tonight: ${m.a11y}${np.label ? `, ${np.label}` : ''}. Settled. Opens choices to change tonight's plan${located && !np.label ? ' or add an address' : ''}.`}>
                   <Icon name={m.icon} size={14} color={colors.smart} />
-                  <Text style={styles.lodgeChipText}>{m.label}</Text>
-                  <Icon name="chevron-forward" size={12} color={colors.subtle} />
+                  <Text style={styles.lodgeChipText}>{m.label}{np.label ? ` · ${np.label}` : ''}</Text>
+                  {located && !np.label
+                    ? <Text style={styles.lodgeChipMuted}>· add address ›</Text>
+                    : <Icon name="chevron-forward" size={12} color={colors.subtle} />}
                 </TouchableOpacity>
               );
             }
@@ -1247,44 +1298,76 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
       )}
 
       {/* "How's tonight handled?" — a polite, one-tap resolver for a hotel-less
-          night. Picking a reason writes day.nightPlan, flips the chip to a calm
-          settled state, and stops the unbooked_night flag. Never re-prompts. */}
-      <Modal visible={nightPlanDay !== null} transparent animationType="slide" onRequestClose={() => setNightPlanDay(null)}>
-        <TouchableOpacity style={styles.npOverlay} activeOpacity={1} onPress={() => setNightPlanDay(null)}>
-          <View style={styles.npSheet} onStartShouldSetResponder={() => true}>
-            <View style={styles.npHandle} />
-            <Text style={styles.npTitle}>How's tonight handled?</Text>
-            <Text style={styles.npSubtitle}>Just so we know you've got it sorted — we won't ask again.</Text>
-            {NIGHT_PLAN_OPTIONS.map(opt => {
-              const active = nightPlanDay !== null && trip.days?.[nightPlanDay]?.nightPlan === opt.key;
-              return (
-                <TouchableOpacity key={opt.key} style={[styles.npRow, active && styles.npRowActive]}
-                  onPress={() => pickNightPlan(opt.key)} activeOpacity={0.7}
-                  accessibilityRole="button" accessibilityLabel={opt.label}>
-                  <Text style={styles.npEmoji}>{opt.emoji}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.npLabel}>{opt.label}</Text>
-                    {!!opt.sub && <Text style={styles.npSub}>{opt.sub}</Text>}
+          night. Picking a reason writes day.nightPlan; a located reason (friends/
+          camping) also offers an OPTIONAL address that anchors tomorrow's first
+          drive. Flips the chip to a calm settled state. Never re-prompts. */}
+      {nightPlanDay !== null && (() => {
+        const np = trip.days?.[nightPlanDay]?.nightPlan;
+        const activeType = np?.type || null;
+        const showAddr = !!NIGHT_PLAN_OPTIONS.find(o => o.key === activeType)?.located;
+        return (
+          <Modal visible transparent animationType="slide" onRequestClose={closeNightPlan}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <TouchableOpacity style={styles.npOverlay} activeOpacity={1} onPress={closeNightPlan}>
+              <View style={styles.npSheet} onStartShouldSetResponder={() => true}>
+                <View style={styles.npHandle} />
+                <Text style={styles.npTitle}>How's tonight handled?</Text>
+                <Text style={styles.npSubtitle}>Just so we know you've got it sorted — we won't ask again.</Text>
+                {NIGHT_PLAN_OPTIONS.map(opt => {
+                  const active = activeType === opt.key;
+                  return (
+                    <TouchableOpacity key={opt.key} style={[styles.npRow, active && styles.npRowActive]}
+                      onPress={() => pickNightPlan(opt.key)} activeOpacity={0.7}
+                      accessibilityRole="button" accessibilityLabel={opt.label}>
+                      <Text style={styles.npEmoji}>{opt.emoji}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.npLabel}>{opt.label}</Text>
+                        {!!opt.sub && <Text style={styles.npSub}>{opt.sub}</Text>}
+                      </View>
+                      {active && <Icon name="checkmark" size={16} color={colors.smart} />}
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {/* Optional address — only for a located reason; anchors the morning drive */}
+                {showAddr && (
+                  <View style={styles.npAddr}>
+                    <LocationSearchField
+                      label="Where you stayed — optional"
+                      value={np?.label || ''}
+                      placeholder="Friend's place, campground…"
+                      onSelect={(label, coords) => setNightAddress(label, coords)}
+                    />
+                    <Text style={styles.npAddrHint}>Optional — helps us map tomorrow's first drive. Skip anytime.</Text>
                   </View>
-                  {active && <Icon name="checkmark" size={16} color={colors.smart} />}
+                )}
+
+                <TouchableOpacity style={styles.npRow} onPress={addHotelFromNightPlan} activeOpacity={0.7}
+                  accessibilityRole="button" accessibilityLabel="Add a hotel instead">
+                  <Text style={styles.npEmoji}>🏨</Text>
+                  <Text style={[styles.npLabel, { flex: 1 }]}>Add a hotel instead</Text>
+                  <Icon name="chevron-forward" size={14} color={colors.subtle} />
                 </TouchableOpacity>
-              );
-            })}
-            <TouchableOpacity style={styles.npRow} onPress={addHotelFromNightPlan} activeOpacity={0.7}
-              accessibilityRole="button" accessibilityLabel="Add a hotel instead">
-              <Text style={styles.npEmoji}>🏨</Text>
-              <Text style={[styles.npLabel, { flex: 1 }]}>Add a hotel instead</Text>
-              <Icon name="chevron-forward" size={14} color={colors.subtle} />
+
+                {showAddr && (
+                  <TouchableOpacity style={styles.npDone} onPress={closeNightPlan} activeOpacity={0.85}
+                    accessibilityRole="button" accessibilityLabel="Done">
+                    <Text style={styles.npDoneText}>Done</Text>
+                  </TouchableOpacity>
+                )}
+
+                {!!activeType && (
+                  <TouchableOpacity style={styles.npClear} onPress={() => pickNightPlan(null)} activeOpacity={0.7}
+                    accessibilityRole="button" accessibilityLabel="Clear this — flag the night again">
+                    <Text style={styles.npClearText}>↺ Actually, flag this night again</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </TouchableOpacity>
-            {nightPlanDay !== null && !!trip.days?.[nightPlanDay]?.nightPlan && (
-              <TouchableOpacity style={styles.npClear} onPress={() => pickNightPlan(null)} activeOpacity={0.7}
-                accessibilityRole="button" accessibilityLabel="Clear this — flag the night again">
-                <Text style={styles.npClearText}>↺ Actually, flag this night again</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </TouchableOpacity>
-      </Modal>
+            </KeyboardAvoidingView>
+          </Modal>
+        );
+      })()}
 
       <SetOriginModal
         visible={showOrigin}
@@ -2144,6 +2227,14 @@ const styles = StyleSheet.create({
   npSub: { ...typography.caption, color: colors.muted, marginTop: 1 },
   npClear: { alignSelf: 'center', marginTop: spacing.md, paddingVertical: 6 },
   npClearText: { ...typography.caption, color: colors.muted, fontWeight: '700' },
+  npAddr: { marginTop: spacing.sm, marginBottom: spacing.xs },
+  npAddrHint: { ...typography.caption, color: colors.muted, marginTop: spacing.xs },
+  npDone: { alignSelf: 'stretch', marginTop: spacing.md, paddingVertical: 12, borderRadius: radius.full, backgroundColor: colors.primary, alignItems: 'center' },
+  npDoneText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  // Self-explaining first-leg invite when last night was friends/camping w/o an address
+  wakeAskRow: { alignSelf: 'center', marginTop: 4, marginBottom: spacing.xs, paddingVertical: 4, paddingHorizontal: spacing.sm },
+  wakeAskText: { ...typography.caption, color: colors.muted },
+  wakeAskLink: { ...typography.caption, color: colors.smartDeep, fontWeight: '700' },
 
   // Day-1 starting-point chip (bookend to lodgeChip) + its empty-state "add" affordance
   originChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.smartSoft },

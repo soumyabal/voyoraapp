@@ -2,7 +2,7 @@
  * lodging.test.js — derive "where do I sleep tonight" + the lodging Trip-Check
  * rules, without ever duplicating a stay per night (cost stays on one record).
  */
-import { lodgingForNight, validateTrip } from '../tripValidator';
+import { lodgingForNight, validateTrip, dayStartAnchor } from '../tripValidator';
 
 const day   = (label, date, activities = []) => ({ label, date, activities });
 const stay  = (name, nights, extra = {}) => ({ id: name, type: 'stay', name, time: '16:00', nights, ...extra });
@@ -102,11 +102,11 @@ describe('Trip-Check lodging rules', () => {
 
   test('a manual nightPlan ("with friends") covers the night → no unbooked_night', () => {
     const trip = { families: [], homeBase: false, days: [
-      { ...day('D1', '2026-07-10', [act('Falls')]), nightPlan: 'with_friends' }, // covered by hand
-      day('D2', '2026-07-11', [act('Cave')]),                                    // still open → warns
-      day('D3', '2026-07-12', [act('Mist')]),                                    // last day
+      { ...day('D1', '2026-07-10', [act('Falls')]), nightPlan: { type: 'with_friends' } }, // covered by hand
+      day('D2', '2026-07-11', [act('Cave')]),                                              // still open → warns
+      day('D3', '2026-07-12', [act('Mist')]),                                              // last day
     ] };
-    expect(lodgingForNight(trip, 0)).toEqual({ nightPlan: 'with_friends' });
+    expect(lodgingForNight(trip, 0)).toEqual({ nightPlan: { type: 'with_friends' } });
     const w = validateTrip(trip);
     expect(has(w, 'unbooked_night', 0)).toBe(false);
     expect(has(w, 'unbooked_night', 1)).toBe(true);
@@ -114,12 +114,27 @@ describe('Trip-Check lodging rules', () => {
 
   test('a nightPlan covers a night even after a stay has checked out', () => {
     const trip = { families: [], days: [
-      day('D1', '2026-07-10', [stay('A', 1), act('x')]),                  // covers night 0
-      { ...day('D2', '2026-07-11', [act('y')]), nightPlan: 'camping' },   // A checked out → camping
+      day('D1', '2026-07-10', [stay('A', 1), act('x')]),                              // covers night 0
+      { ...day('D2', '2026-07-11', [act('y')]), nightPlan: { type: 'camping' } },     // A checked out → camping
       day('D3', '2026-07-12', [act('z')]),
     ] };
-    expect(lodgingForNight(trip, 1)).toEqual({ nightPlan: 'camping' });
+    expect(lodgingForNight(trip, 1)).toEqual({ nightPlan: { type: 'camping' } });
     expect(has(validateTrip(trip), 'unbooked_night', 1)).toBe(false);
+  });
+
+  test('a friends/camping night WITH an address anchors the next morning', () => {
+    const trip = { families: [], origin: null, days: [
+      { ...day('D1', '2026-07-10', [act('Falls')]), nightPlan: { type: 'with_friends', label: 'Madison, WI', lat: 43.07, lng: -89.40 } },
+      day('D2', '2026-07-11', [act('Cave')]),
+    ] };
+    // The captured address becomes Day 2's wake anchor, exactly like a hotel would.
+    expect(dayStartAnchor(trip, 1)).toMatchObject({ lat: 43.07, lng: -89.40, source: 'nightPlan' });
+    // …and with no address it degrades to null (route from the first stop).
+    const noAddr = { families: [], origin: null, days: [
+      { ...day('D1', '2026-07-10', [act('Falls')]), nightPlan: { type: 'with_friends' } },
+      day('D2', '2026-07-11', [act('Cave')]),
+    ] };
+    expect(dayStartAnchor(noAddr, 1)).toBeNull();
   });
 
   test('no unbooked_night when the booking covers the interior nights', () => {

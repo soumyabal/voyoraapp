@@ -261,20 +261,38 @@ function stayAnchor(lod, source = 'stay') {
     : null;
 }
 
-/** Where you WAKE on day i: Day 1 → trip.origin; otherwise last night's hotel. */
-export function dayStartAnchor(trip, i) {
-  if (i === 0) {
-    const o = trip?.origin;
-    return o && o.lat != null && o.lng != null
-      ? { lat: o.lat, lng: o.lng, label: o.label, source: 'origin' }
-      : null;
-  }
-  return stayAnchor(lodgingForNight(trip, i - 1));
+/** A hotel-less-but-located night (friends/camping with an address) → a uniform
+ *  anchor, exactly like a hotel. null unless the night-plan carries coords. */
+function nightPlanAnchor(lod) {
+  const np = lod?.nightPlan;
+  return np && np.lat != null && np.lng != null
+    ? { lat: np.lat, lng: np.lng, label: np.label || 'Where you stayed', source: 'nightPlan' }
+    : null;
 }
 
-/** Where you SLEEP on day i: tonight's derived hotel (null when unbooked/home/overnight). */
+/** The trip's starting point as an anchor (null without coords). */
+function originAnchor(trip) {
+  const o = trip?.origin;
+  return o && o.lat != null && o.lng != null
+    ? { lat: o.lat, lng: o.lng, label: o.label, source: 'origin' }
+    : null;
+}
+
+/** Where you WAKE on day i: Day 1 → trip.origin; otherwise where last night put you
+ *  — a hotel, a friends/camping address, or (heading home) back at the origin. */
+export function dayStartAnchor(trip, i) {
+  if (i === 0) return originAnchor(trip);
+  const lod = lodgingForNight(trip, i - 1);
+  if (lod?.nightPlan?.type === 'heading_home') return originAnchor(trip);
+  return stayAnchor(lod) || nightPlanAnchor(lod);
+}
+
+/** Where you SLEEP on day i: tonight's hotel, a located night-plan, or the origin
+ *  if heading home (null when truly unknown — overnight travel / unbooked). */
 export function dayEndAnchor(trip, i) {
-  return stayAnchor(lodgingForNight(trip, i));
+  const lod = lodgingForNight(trip, i);
+  if (lod?.nightPlan?.type === 'heading_home') return originAnchor(trip);
+  return stayAnchor(lod) || nightPlanAnchor(lod);
 }
 
 /**

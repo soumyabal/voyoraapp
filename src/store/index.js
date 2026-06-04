@@ -164,13 +164,15 @@ const useStore = create(
       })),
 
       // ── NIGHT PLAN (hotel-less but covered) ─────────────────
-      // The user told us how an un-booked night is handled: 'overnight_travel'
-      // | 'with_friends' | 'camping' | 'heading_home' (or null to clear). Stored
-      // per-DAY; lodgingForNight reads it so the unbooked_night flag stops nagging.
-      setNightPlan: (tripId, dayIndex, reason) => set(s => ({
+      // How an un-booked night is handled, as an object:
+      //   { type:'overnight_travel'|'with_friends'|'camping'|'heading_home',
+      //     label?, lat?, lng? }   (or null to clear)
+      // Stored per-DAY. lodgingForNight reads it so unbooked_night stops nagging,
+      // and an optional address (friends/camping) anchors the next morning's drive.
+      setNightPlan: (tripId, dayIndex, plan) => set(s => ({
         trips: s.trips.map(t => t.id !== tripId ? t : {
           ...t,
-          days: t.days.map((d, i) => i !== dayIndex ? d : { ...d, nightPlan: reason || null }),
+          days: t.days.map((d, i) => i !== dayIndex ? d : { ...d, nightPlan: plan || null }),
         }),
       })),
 
@@ -997,11 +999,12 @@ const useStore = create(
       // shape changes (the store.test.js shape guard will fail to remind you).
       // Previously there was NO version → the only way to change shape was to
       // rename the key, which WIPES every user's trips. Versioning fixes that.
-      version: 2,
+      version: 3,
       // v0 (unversioned, older builds) → v1: backfill optional trip fields.
       // v1 → v2: added per-day `day.nightPlan` (hotel-less-but-covered nights).
-      // It's optional and reads as undefined when absent, so no per-day backfill
-      // is needed — the version bump just records the shape change (Invariant #7).
+      // v2 → v3: `day.nightPlan` widened from a STRING to { type, label?, lat?, lng? }
+      // so a friends/camping night can carry an optional address that anchors the
+      // next morning's drive. Old string values are wrapped to { type: <string> }.
       migrate: (state) => {
         if (!state) return state;
         state.trips = (state.trips || []).map((t) => ({
@@ -1010,6 +1013,10 @@ const useStore = create(
           origin: null,
           expenses: [],
           ...t, // existing values always win over the backfilled defaults
+          days: (t.days || []).map((d) => ({
+            ...d,
+            nightPlan: typeof d.nightPlan === 'string' ? { type: d.nightPlan } : (d.nightPlan || undefined),
+          })),
         }));
         return state;
       },

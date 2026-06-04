@@ -41,6 +41,20 @@ describe('first_stop_unreachable', () => {
     expect(tips(trip)).toHaveLength(0);
   });
 
+  test('a very long haul (flight territory) frames it as a travel day, not "~17h drive"', () => {
+    const CHI = { lat: 41.88, lng: -87.63 };          // Chicago
+    const FLA = { lat: 28.0, lng: -81.7 };            // central Florida (~1500 km)
+    const trip = { origin: CHI, families: [], days: [
+      { label: 'Day 1', date: '2026-06-05', activities: [{ id: 'p', type: 'activity', name: 'Park', time: '08:00', ...FLA }] },
+      { label: 'Day 2', date: '2026-06-06', activities: [] },
+    ] };
+    const t = tips(trip);
+    expect(t).toHaveLength(1);
+    expect(t[0].message).not.toMatch(/\dh from/);     // no absurd "~17h" claim
+    expect(t[0].message).toMatch(/travel day/);
+    expect(t[0].suggestedTime).toBeNull();            // arrival would wrap past day-end → omit it
+  });
+
   test('no origin set → no tip (cannot estimate the drive)', () => {
     const trip = { families: [], days: [
       { label: 'Day 1', date: '2026-06-05', activities: [act('Maple Bay', '08:00')] },

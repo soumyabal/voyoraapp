@@ -746,17 +746,22 @@ export function validateTrip(trip) {
     const firstMin = (parseInt(fp[0], 10) || 0) * 60 + (parseInt(fp[1], 10) || 0);
     if (firstMin + 30 >= arrival) return;                   // it's already late enough — no issue
     const hours = Math.round(leg.min / 6) / 10;             // leg.min / 60, 1 decimal
+    const fromLabel = anchor.label ? anchor.label.split(',')[0] : 'your start';
+    const longHaul = leg.min > 360;                          // > 6 h ⇒ realistically a flight, not a drive
     const suggestHotel = trip.days.length >= 2 && lodgingForNight(trip, i) == null && i < trip.days.length - 1;
     warnings.push({
       type:     'first_stop_unreachable',
       severity: 'info',
-      icon:     '🚗',
-      title:    'First stop is early for the drive',
-      message:  `${day.label}'s first stop is at ${first.time}, but it's ~${hours}h from ${anchor.label || 'your start'} — you'd arrive around ${formatEndTime(arrival)}.`,
+      icon:     longHaul ? '✈️' : '🚗',
+      title:    longHaul ? 'Day 1 looks like a travel day' : 'First stop is early for the drive',
+      // Long-haul ⇒ don't claim "~17 h drive" (it's a flight); frame it as a travel day.
+      message:  longHaul
+        ? `${day.label}'s first stop is at ${first.time}, but you're starting ~${Math.round(leg.km)} km away in ${fromLabel} — that's a full travel day to get there.`
+        : `${day.label}'s first stop is at ${first.time}, but it's ~${hours}h from ${fromLabel} — you'd arrive around ${formatEndTime(arrival)}.`,
       hint:     suggestHotel
-        ? "Plan it as a travel day — and add a hotel check-in for when you arrive (~3 PM). If you're flying, ignore this."
-        : "Set it later, or plan it as a travel day. If you're flying, ignore this.",
-      suggestedTime: formatEndTime(arrival),
+        ? "Plan it as a travel day — and add a hotel check-in for when you arrive. If your times already account for the trip there, ignore this."
+        : "Set it later, or plan it as a travel day. If your times already account for the trip there, ignore this.",
+      suggestedTime: arrival < 22 * 60 ? formatEndTime(arrival) : null,
       moveActId: first.id,
       dayIndex: i,
     });

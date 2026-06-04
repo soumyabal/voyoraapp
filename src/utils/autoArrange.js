@@ -140,14 +140,17 @@ function legKm(a, b) {
   return Number.isFinite(d) ? d : 0;
 }
 
-// Total straight-line distance of an anchored route (anchor → s0 → s1 → …).
-export function pathCost(seq, anchor) {
+// Total straight-line distance of a route (anchor → s0 → s1 → … → endAnchor). The
+// optional endAnchor adds a final leg, so the route can be fixed at BOTH ends — on the
+// last day, "wake → stops → the airport you depart from" instead of an open chain.
+export function pathCost(seq, anchor, endAnchor = null) {
   let c = 0;
   let prev = anchor && anchor.lat != null ? anchor : null;
   for (const s of seq) {
     if (prev) c += legKm(prev, s);
     if (s?.lat != null) prev = s;
   }
+  if (endAnchor && endAnchor.lat != null && prev) c += legKm(prev, endAnchor);
   return c;
 }
 
@@ -155,16 +158,17 @@ export function pathCost(seq, anchor) {
 // shortens the anchored path, until no improvement (capped passes). Refines the
 // greedy nearest-neighbour tour toward optimal at the 4–10 stops a real day holds —
 // plain JS, stays in Expo Go (no OR-Tools). Un-located stops ride along (neutral legs).
-export function twoOptOrder(items, anchor) {
+// With endAnchor set, it pulls the tour toward a fixed finish (the departure point).
+export function twoOptOrder(items, anchor, endAnchor = null) {
   if (!items || items.length < 4) return items || [];
   let best = items.slice();
-  let bestCost = pathCost(best, anchor);
+  let bestCost = pathCost(best, anchor, endAnchor);
   for (let pass = 0; pass < 6; pass++) {
     let improved = false;
     for (let i = 0; i < best.length - 1; i++) {
       for (let k = i + 1; k < best.length; k++) {
         const cand = best.slice(0, i).concat(best.slice(i, k + 1).reverse(), best.slice(k + 1));
-        const c = pathCost(cand, anchor);
+        const c = pathCost(cand, anchor, endAnchor);
         if (c + 1e-9 < bestCost) { best = cand; bestCost = c; improved = true; }
       }
     }
@@ -173,9 +177,9 @@ export function twoOptOrder(items, anchor) {
   return best;
 }
 
-/** Greedy nearest-neighbour seed, then a bounded 2-opt refine. */
-export function routeOrder(items, anchor) {
-  return twoOptOrder(nearestNeighborOrder(items, anchor), anchor);
+/** Greedy nearest-neighbour seed, then a bounded 2-opt refine (optionally end-anchored). */
+export function routeOrder(items, anchor, endAnchor = null) {
+  return twoOptOrder(nearestNeighborOrder(items, anchor), anchor, endAnchor);
 }
 
 // ── Place → draft Activity ────────────────────────────────────────
@@ -473,6 +477,7 @@ export function autoArrange(basket, trip, opts = {}) {
  * `time` assigned, sorted; never mutates the input. Notes/skipped are kept.
  *
  *   opts = { dayRole?: 'arrival'|'departure'|'normal', anchor?: {lat,lng},
+ *            endAnchor?: {lat,lng},  // fixes the route's FINISH (last day → the departure point)
  *            date?: 'YYYY-MM-DD' }   // date enables hours-of-operation meal fit
  *
  * Windows: hotel check-in → ~16:00 (check-out → ~10:00 on a departure day),
@@ -576,7 +581,7 @@ export function scheduleDay(activities, opts = {}) {
     return findSlotMin(occ, from, need, DAY_END_MIN)
         ?? findSlotMin(occ, DAY_START_MIN, need, DAY_END_MIN) ?? from;
   };
-  const daytime = routeOrder(acts.filter(a => windowFor(a) == null), anchor);
+  const daytime = routeOrder(acts.filter(a => windowFor(a) == null), anchor, opts.endAnchor || null);
   let cursor = DAY_START_MIN;
   daytime.forEach((a, idx) => {
     const need = Math.max(BUFFER_MIN, estimateDuration(a));

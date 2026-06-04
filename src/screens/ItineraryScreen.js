@@ -692,11 +692,20 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
       return;
     }
     const prev = day.activities;
-    const dayRole = currentDay === trip.days.length - 1 ? 'departure' : 'normal';
+    const isLastDay = currentDay === trip.days.length - 1;
+    const dayRole = isLastDay ? 'departure' : 'normal';
     // Anchor to where you wake: Day 1 → trip.origin; later days → last night's hotel.
     const anchor = dayStartAnchor(trip, currentDay) || undefined;
+    // On the last day, FINISH the route at where you depart from — the return journey's
+    // departure point (the airport you fly home from). So stops flow wake → … → airport
+    // instead of stranding you across town. Only when that departure is actually known.
+    let endAnchor;
+    if (isLastDay) {
+      const ret = day.activities.find(a => a.type === 'transport' && a.status !== 'skipped' && a.fromLat != null && a.fromLng != null);
+      if (ret) endAnchor = { lat: ret.fromLat, lng: ret.fromLng };
+    }
     const r = planDay(day.activities, {
-      dayRole, date: day.date, anchor, pace: trip.pace, families: trip.families, origin: trip.origin,
+      dayRole, date: day.date, anchor, endAnchor, pace: trip.pace, families: trip.families, origin: trip.origin,
     });
 
     // Stable end-state: nothing moved → calm acknowledgement, never a re-prompt.

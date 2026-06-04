@@ -1018,7 +1018,7 @@ const useStore = create(
       // shape changes (the store.test.js shape guard will fail to remind you).
       // Previously there was NO version → the only way to change shape was to
       // rename the key, which WIPES every user's trips. Versioning fixes that.
-      version: 4,
+      version: 5,
       // v0 (unversioned, older builds) → v1: backfill optional trip fields.
       // v1 → v2: added per-day `day.nightPlan` (hotel-less-but-covered nights).
       // v2 → v3: `day.nightPlan` widened from a STRING to { type, label?, lat?, lng? }
@@ -1028,8 +1028,15 @@ const useStore = create(
       // gained optional `checkInTime`/`checkOutTime`. All are read-time-defaulted (absent
       // → unlocked / the standard 15:00·11:00 hotel times), so no data backfill is needed —
       // this bump documents the shape change and keeps the version invariant honest.
+      // v4 → v5: REPAIR openHours for 24/7 places. The old hours parser recorded a no-close
+      // (open-24/7) Google period for SUNDAY ONLY, so a 24/7 bridge/lighthouse wrongly read
+      // "Closed" Mon–Sat. Detect that exact signature and expand it to all seven days.
       migrate: (state) => {
         if (!state) return state;
+        const fix247 = (oh) =>
+          (Array.isArray(oh) && oh.length === 1 && oh[0] && oh[0].d === 0 && oh[0].o === 0 && oh[0].c >= 1440)
+            ? [0, 1, 2, 3, 4, 5, 6].map((d) => ({ d, o: 0, c: 1440 }))
+            : oh;
         state.trips = (state.trips || []).map((t) => ({
           seenPlaces: [],
           ignoredWarnings: [],
@@ -1039,6 +1046,7 @@ const useStore = create(
           days: (t.days || []).map((d) => ({
             ...d,
             nightPlan: typeof d.nightPlan === 'string' ? { type: d.nightPlan } : (d.nightPlan || undefined),
+            activities: (d.activities || []).map((a) => (a.openHours ? { ...a, openHours: fix247(a.openHours) } : a)),
           })),
         }));
         return state;

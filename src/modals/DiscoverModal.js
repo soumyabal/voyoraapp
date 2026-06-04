@@ -14,7 +14,7 @@ import useStore from '../store';
 import { uid, getAllMembers, defaultNightsFor } from '../utils/helpers';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
-import { weekdayOf, hoursLabel } from '../utils/hours';
+import { weekdayOf, hoursLabel, compactHours } from '../utils/hours';
 import { scorePlace } from '../utils/placeScore';
 import { reverseGeocode } from '../utils/places';
 import { run as buildGroupProfile } from '../agents/FamilyProfileAgent';
@@ -120,23 +120,8 @@ const FIELD_MASK = ['nextPageToken','places.displayName','places.formattedAddres
 // Google Place Photos: a photo resource name → image URL (billed per fetch).
 const photoUrl = name => `https://places.googleapis.com/v1/${name}/media?maxWidthPx=640&maxHeightPx=420&key=${GOOGLE_PLACES_API_KEY}`;
 
-// Compact Google regularOpeningHours.periods → [{ d, o, c }] where d = weekday
-// (0=Sun), o/c = open/close minutes-of-day. Lets scheduleDay pick which meal a
-// restaurant fits. Open-ended (24h) or past-midnight closes are capped at day end.
-function compactHours(oh) {
-  const periods = oh?.periods;
-  if (!Array.isArray(periods)) return null;
-  const out = [];
-  for (const p of periods) {
-    if (!p.open) continue;
-    const d = p.open.day ?? 0;
-    const o = (p.open.hour ?? 0) * 60 + (p.open.minute ?? 0);
-    let c = p.close ? (p.close.hour ?? 0) * 60 + (p.close.minute ?? 0) : 1440;
-    if (!p.close || p.close.day !== d || c <= o) c = 1440;   // 24h / crosses midnight → cap to 24:00
-    out.push({ d, o, c });
-  }
-  return out.length ? out : null;
-}
+// compactHours (Google regularOpeningHours.periods → [{d,o,c}]) now lives in utils/hours
+// (shared + unit-tested) and correctly expands 24/7 (no-close) periods to all seven days.
 
 // Ranking now uses the shared deterministic kernel `scorePlace` (../utils/placeScore):
 // base quality (rating + damped popularity) PLUS group-fit (accessibility ♿, kids,

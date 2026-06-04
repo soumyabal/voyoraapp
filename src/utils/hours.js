@@ -24,6 +24,42 @@ export function dayName(wd) {
   return wd == null ? '' : DAY_NAMES[wd] || '';
 }
 
+/**
+ * Google Places `regularOpeningHours` → the compact [{d,o,c}] shape (minutes-of-day).
+ * Fixes the cases the naive parser got wrong:
+ *   · OPEN 24/7 — Google sends ONE period (open Sunday 00:00, NO `close`) meaning open
+ *     continuously all week. The old code recorded it for day 0 only, so a 24/7 bridge /
+ *     lighthouse read "Closed" Mon–Sat. We expand a no-close period to all seven days.
+ *   · spans past midnight / across days (`close.day` ≠ `open.day`) → split into per-day
+ *     intervals so the early hours of the next day count as open too.
+ * Returns null when hours are unknown.
+ */
+export function compactHours(oh) {
+  const periods = oh?.periods;
+  if (!Array.isArray(periods)) return null;
+  const out = [];
+  for (const p of periods) {
+    if (!p.open) continue;
+    const od = p.open.day ?? 0;
+    const o = (p.open.hour ?? 0) * 60 + (p.open.minute ?? 0);
+    if (!p.close) {                                  // no close → open 24 hours, EVERY day
+      for (let d = 0; d < 7; d += 1) out.push({ d, o: 0, c: 1440 });
+      continue;
+    }
+    const cd = p.close.day ?? od;
+    const c = (p.close.hour ?? 0) * 60 + (p.close.minute ?? 0);
+    if (cd === od) {
+      out.push({ d: od, o, c: c > o ? c : 1440 });   // same day (cap to midnight if close ≤ open)
+    } else {
+      out.push({ d: od, o, c: 1440 });               // the rest of the open day
+      let d = (od + 1) % 7, guard = 0;
+      while (d !== cd && guard < 7) { out.push({ d, o: 0, c: 1440 }); d = (d + 1) % 7; guard += 1; }
+      if (c > 0) out.push({ d: cd, o: 0, c });        // early hours of the close day
+    }
+  }
+  return out.length ? out : null;
+}
+
 /** Today's open intervals on weekday `wd`: [] = closed that day, null = unknown. */
 export function dayIntervals(openHours, wd) {
   if (!Array.isArray(openHours) || !openHours.length || wd == null) return null;

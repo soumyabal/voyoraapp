@@ -2,11 +2,47 @@
  * hours.test.js — opening-hours helpers + the closed_venue Trip Check rule.
  * 2026-06-12 is a Friday (weekday 5).
  */
-import { weekdayOf, isOpenAt, hoursLabel } from '../hours';
+import { weekdayOf, isOpenAt, hoursLabel, compactHours } from '../hours';
 import { validateTrip } from '../tripValidator';
 
 const FRI = 5;
 const NINE_TO_FIVE = [{ d: FRI, o: 9 * 60, c: 17 * 60 }];
+
+describe('compactHours (the 24/7 "shows Closed" bug)', () => {
+  test('a 24/7 place (single open period, NO close) is open EVERY day, all day', () => {
+    // Google represents open-24/7 as one period: open Sunday 00:00, no close.
+    const oh = compactHours({ periods: [{ open: { day: 0, hour: 0, minute: 0 } }] });
+    expect(oh).toHaveLength(7);
+    // the actual bug: it must read OPEN on a Tuesday at 6pm (Mackinac Bridge), not Closed.
+    expect(isOpenAt(oh, 2, 18 * 60)).toBe(true);
+    expect(isOpenAt(oh, 5, 17 * 60)).toBe(true);
+  });
+
+  test('normal same-day hours map to one interval that day', () => {
+    const oh = compactHours({ periods: [{ open: { day: 5, hour: 9 }, close: { day: 5, hour: 17 } }] });
+    expect(oh).toEqual([{ d: 5, o: 540, c: 1020 }]);
+    expect(isOpenAt(oh, 5, 12 * 60)).toBe(true);
+    expect(isOpenAt(oh, 5, 18 * 60)).toBe(false);
+  });
+
+  test('a span past midnight splits into the open day + the early hours of the next', () => {
+    // Fri 18:00 → Sat 02:00
+    const oh = compactHours({ periods: [{ open: { day: 5, hour: 18 }, close: { day: 6, hour: 2 } }] });
+    expect(oh).toEqual([{ d: 5, o: 1080, c: 1440 }, { d: 6, o: 0, c: 120 }]);
+    expect(isOpenAt(oh, 6, 1 * 60)).toBe(true);   // 1am Saturday → still open
+  });
+
+  test('per-day 24h (open Mon 00:00, close Tue 00:00) → Monday only, all day', () => {
+    const oh = compactHours({ periods: [{ open: { day: 1, hour: 0 }, close: { day: 2, hour: 0 } }] });
+    expect(oh).toEqual([{ d: 1, o: 0, c: 1440 }]);
+  });
+
+  test('unknown hours → null', () => {
+    expect(compactHours(null)).toBeNull();
+    expect(compactHours({})).toBeNull();
+    expect(compactHours({ periods: [] })).toBeNull();
+  });
+});
 
 describe('weekdayOf', () => {
   test('parses local weekday', () => {

@@ -1032,6 +1032,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
         {/* Slot picker sheet */}
         <Modal visible={!!pendingPlace} transparent animationType="slide" onRequestClose={() => setPendingPlace(null)}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <TouchableOpacity style={sp.overlay} activeOpacity={1} onPress={() => setPendingPlace(null)}>
             <View style={sp.sheet} onStartShouldSetResponder={() => true}>
               <View style={sp.handle}/>
@@ -1103,6 +1104,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
               })()}
             </View>
           </TouchableOpacity>
+          </KeyboardAvoidingView>
         </Modal>
 
 

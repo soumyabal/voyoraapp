@@ -11,5 +11,5 @@
 
 ## Background loop entries (appended by each autonomous run)
 <!-- newest at the bottom -->
-- 2026-06-04 — trip status pill + phase-aware day chips (f704b0d) ⚠️ NEEDS on-device eyeball (emulator hung this session; logic unit-tested)
+- 2026-06-04 — trip status pill + phase-aware day chips (f704b0d) ✓ verified on device ("📅 In 8 days" renders for the upcoming Wisconsin trip)
 - 2026-06-04 — 2-opt route refinement in scheduleDay/autoArrange (engine, unit-tested)

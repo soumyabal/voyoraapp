@@ -91,6 +91,11 @@ export default function PlayTripModal({ visible, trip, onClose }) {
           colors={['rgba(60,36,16,0.28)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.62)']}
           locations={[0, 0.45, 1]} style={st.full} pointerEvents="none"
         />
+        {/* progress/nudge ride a DIMMED photo (never a blank gradient) — extra darken so the
+            longer line stays legible, like a documentary intertitle over footage */}
+        {(cur.type === 'progress' || cur.type === 'nudge') && slideImg(cur) ? (
+          <View style={[st.full, { backgroundColor: 'rgba(18,11,6,0.5)' }]} pointerEvents="none" />
+        ) : null}
         {/* letterbox */}
         <View style={[st.bar, { top: 0, height: BAR }]} pointerEvents="none" />
         <View style={[st.bar, { bottom: 0, height: BAR }]} pointerEvents="none" />

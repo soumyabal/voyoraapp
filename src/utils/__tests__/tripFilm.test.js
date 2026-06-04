@@ -52,6 +52,15 @@ describe('buildTripFilm', () => {
     expect(found.length + moat.length).toBeLessThanOrEqual(2);
   });
 
+  test('no blank cards: no standalone day slide, and every card slide rides a photo', () => {
+    const film = buildTripFilm(building);
+    expect(film.some(s => s.type === 'day')).toBe(false);          // day card removed
+    const firstPhoto = film.find(s => s.type === 'photo');
+    expect(firstPhoto.kicker).toBe('Day 1');                       // day marker folded onto the photo
+    film.filter(s => s.type === 'progress' || s.type === 'nudge')
+      .forEach(s => expect(s.heroUri).toBeTruthy());               // cards ride a dimmed photo, never blank
+  });
+
   test('victory mode: every day planned, no gap → no nudge, celebratory close', () => {
     const victory = {
       name: 'Daytrip', destination: 'San Francisco',

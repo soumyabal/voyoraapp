@@ -66,6 +66,7 @@ export function buildTripFilm(trip) {
     .forEach(a => photoActs.push({ name: a.name, photo: a.photo, dayIndex: i })));
   const hero = photoActs[0]?.photo || null;                                  // open on the first
   const closer = photoActs.length ? photoActs[photoActs.length - 1].photo : hero; // close on the last (keeper)
+  const cardBg = photoActs.length ? photoActs[Math.floor((photoActs.length - 1) / 2)].photo : null; // a mid photo behind card slides — never a blank gradient
 
   const plannedDays = days.filter(d => (d.activities || []).some(a => a.status !== 'skipped' && a.type !== 'note')).length;
   const placeCount = photoActs.length;
@@ -93,14 +94,15 @@ export function buildTripFilm(trip) {
     days.forEach((d, i) => {
       const photos = (d.activities || []).filter(a => a.photo && a.status !== 'skipped');
       if (!photos.length || count >= MAX_PHOTOS) return;
-      slides.push({ type: 'day', kicker: `Day ${i + 1}`, title: d.label || trip.destination || `Day ${i + 1}` });
       photos.slice(0, 3).forEach((a, j) => {
         if (count >= MAX_PHOTOS) return;
         // Teach by CREDIT, not instruction. Foreground Test: "<place> — you found this one"
         // still rewards their taste if you ignore the Discover credit underneath.
         let caption = a.name;
         if (taught === 0 && i === 0 && j === 0) { caption = `${a.name} — you found this one.`; taught += 1; }
-        slides.push({ type: 'photo', uri: a.photo, caption });
+        const slide = { type: 'photo', uri: a.photo, caption };
+        if (j === 0) slide.kicker = `Day ${i + 1}`;   // day chapter marker folded onto its first photo — no blank day card
+        slides.push(slide);
         count += 1;
       });
     });
@@ -108,16 +110,16 @@ export function buildTripFilm(trip) {
     // ── PROGRESS / MOAT beat — momentum + the one feature worth teaching (reward-framed) ──
     if (famN >= 2) {
       slides.push({
-        type: 'progress', kicker: 'NICE',
+        type: 'progress', kicker: 'NICE', heroUri: cardBg,
         title: `${famN} families, one trip — costs split as you go.`,
         subtitle: `${placeCount} ${placeCount === 1 ? 'place' : 'places'} · ${plannedDays} of ${dayN} days planned`,
       });
     } else {
-      slides.push({ type: 'progress', title: `${placeCount} ${placeCount === 1 ? 'place' : 'places'} · ${plannedDays} of ${dayN} days planned` });
+      slides.push({ type: 'progress', heroUri: cardBg, title: `${placeCount} ${placeCount === 1 ? 'place' : 'places'} · ${plannedDays} of ${dayN} days planned` });
     }
 
-    // ── ONE forward nudge (never in victory mode) ──
-    if (nudge && !isVictory) slides.push({ type: 'nudge', kicker: nudge.kicker, title: nudge.title, dayIndex: nudge.dayIndex });
+    // ── ONE forward nudge (never in victory mode) — rides a dimmed photo, never a blank card ──
+    if (nudge && !isVictory) slides.push({ type: 'nudge', kicker: nudge.kicker, title: nudge.title, dayIndex: nudge.dayIndex, heroUri: cardBg });
   }
 
   // ── CLOSE bookend — image-backed keeper frame, always hopeful, NEVER on a gap ──

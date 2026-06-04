@@ -607,7 +607,11 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
         // the group's dietary bias here (that turned "Great Wolf Lodge" into "Great Wolf Lodge
         // vegetarian" and returned nothing). Dietary bias only applies to Eat-layer browsing.
         const q = area ? text : `${text} near ${loc}`;
-        const places = near(await cachedFetch(q, bias, 2));   // up to 40 for a typed search
+        // A TYPED search is UNCLAMPED: don't drop a specific place just because it sits
+        // outside the current map viewport (the ~1.6× area clamp is for layer-browse only).
+        // The location bias still ranks nearby matches first. Fixes "Great Wolf Lodge"
+        // (just outside the viewport) showing "no results".
+        const places = await cachedFetch(q, bias, 2);   // up to 40 for a typed search
         setTextResults(places);
         if (!places.length) setError(`No results for "${text}".`);
       } else {

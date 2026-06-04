@@ -27,7 +27,7 @@
  */
 import { timeToMin, minToTime } from './slots';
 import { checkInOf, checkOutOf } from './helpers';
-import { estimateDuration, validateTrip, dayRouteAnchor } from './tripValidator';
+import { estimateDuration, validateTrip, dayRouteAnchor, dayStartAnchor } from './tripValidator';
 import { travelLeg } from './geo';
 import { weekdayOf, dayIntervals } from './hours';
 
@@ -213,6 +213,24 @@ function placeToDraft(place, draftId, extra = {}) {
 //   · one-day trip (no separate return)         · no home origin set (→ soft tip instead)
 //   · a way home is already planned (find-or-update: any transport on the last day)
 const ARRIVAL_MODE_WORD = { flight: 'Flight', car: 'Drive', train: 'Train', ship: 'Ferry', bus: 'Bus' };
+const LOOP_KM = 60;   // trip ends within this of home → a road-trip loop; you're already home
+
+// Where the trip ENDS (so the return departs from there, not from where you arrived —
+// the open-jaw case: fly into LA, drive to San Diego, fly home FROM San Diego). Derived,
+// not guessed: last night's lodging (where you wake on the last day) → else the last
+// located stop. Returns { lat, lng, label } | null.
+function tripEndLocation(trip) {
+  const days = trip?.days || [];
+  const anchor = dayStartAnchor(trip, days.length - 1);   // wake point of the last day = last night's place
+  if (anchor && anchor.lat != null) return { lat: anchor.lat, lng: anchor.lng, label: anchor.label };
+  for (let i = days.length - 1; i >= 0; i--) {            // fallback: the last located, non-transport stop
+    const located = (days[i]?.activities || [])
+      .filter(a => a.status !== 'skipped' && a.type !== 'transport' && a.lat != null);
+    if (located.length) { const a = located[located.length - 1]; return { lat: a.lat, lng: a.lng, label: a.city || a.name }; }
+  }
+  return null;
+}
+
 export function returnJourneyDraft(trip) {
   const days = trip?.days || [];
   if (days.length < 2) return null;                       // one-day trip
@@ -220,20 +238,27 @@ export function returnJourneyDraft(trip) {
   if (!origin || !origin.label) return null;              // no home → the "no way home" tip handles it
   const lastDay = days[days.length - 1];
   const acts = (lastDay.activities || []).filter(a => a.status !== 'skipped');
-  if (acts.some(a => a.type === 'transport')) return null; // a return is already there — propose nothing
+  if (acts.some(a => a.type === 'transport')) return null; // a departure is already there — propose nothing
 
-  // Mirror HOW they arrived (Day-1's first transport), else a generic drive. KNOWN fact.
+  // Loop guard: a road trip that ENDS back at the origin city needs no return leg.
+  const end = tripEndLocation(trip);
+  if (end && origin.lat != null && haversine(end, origin) < LOOP_KM) return null;
+
+  // Mirror HOW they arrived (Day-1's first transport) → the home-bound mode. Soft + editable.
   const arrival = (days[0].activities || []).find(a => a.type === 'transport' && a.subtype);
   const subtype = arrival?.subtype || 'car';
   const word = ARRIVAL_MODE_WORD[subtype] || 'Trip';
+  const fromCity = end?.label ? String(end.label).split(',')[0].trim() : null;   // departs where the trip ENDS
   return {
     type: 'transport',
     subtype,
-    name: `${word} home to ${origin.label}`,
+    name: fromCity ? `${word} home to ${origin.label} from ${fromCity}` : `${word} home to ${origin.label}`,
     time: '16:00',            // SOFT default (sorts to the day's tail); editable, never locked
     detail: '',
     lat: origin.lat ?? null,  // destination = home
     lng: origin.lng ?? null,
+    fromLat: end?.lat ?? null, // departs from the trip's END (open-jaw aware), not the arrival point
+    fromLng: end?.lng ?? null,
     costPerPerson: 0,         // NEVER guess a fare — leave it blank to protect the split
     costMode: 'per_person',
     costAmount: 0,

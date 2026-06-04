@@ -1004,16 +1004,19 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           const draft = returnJourneyDraft(trip);
           if (!draft) return null;
           const emoji = { flight: '✈️', car: '🚗', train: '🚆', ship: '⛴️', bus: '🚌' }[draft.subtype] || '🧳';
+          const isFlight = draft.subtype === 'flight';
           const addReturn = () => {
             const id = uid();
             addActivity(trip.id, currentDay, { ...draft, id });
-            showUndoAction(`${emoji} ${draft.name} added · set the time + cost`, 'airplane-outline', () => deleteActivity(trip.id, id));
+            showUndoAction(`${emoji} ${draft.name} added · ${isFlight ? 'set the time' : 'set the time + cost'}`, 'airplane-outline', () => deleteActivity(trip.id, id));
           };
           return (
             <View style={styles.returnCard}>
               <Text style={styles.returnTitle}>{emoji}  Heading home?</Text>
               <Text style={styles.returnBody}>
-                It's your last day — add your way home. We pre-filled “{draft.name}”; just set the time and cost.
+                {isFlight
+                  ? `Your return flight is usually booked round-trip (already paid) — add “${draft.name}” so the last day plans around it. We left the cost off; just set the time.`
+                  : `Add your way home — we pre-filled “${draft.name}”. Set the time, and the cost if there is one.`}
               </Text>
               <View style={styles.returnBtnRow}>
                 <TouchableOpacity style={styles.returnAddBtn} onPress={addReturn} activeOpacity={0.85}>

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sampleTrips, sampleTravelers, sampleGroups } from '../data/sampleData';
-import { uid, getAllMembers, findMemberFamily, TRIP_EMOJIS, TRIP_BG_COLORS, familyPalette } from '../utils/helpers';
+import { uid, getAllMembers, findMemberFamily, TRIP_EMOJIS, TRIP_BG_COLORS, familyPalette, defaultDayFor } from '../utils/helpers';
 import { getExpSplitBetween } from '../utils/costs';
 import { activityToExpense, rebuildItineraryExpenses } from '../utils/expenses';
 import { generateSmartItinerary as planSmartItinerary } from '../utils/itineraryPlanner';
@@ -34,7 +34,12 @@ const useStore = create(
       },
 
       // ── NAVIGATION ──────────────────────────────────────────
-      setCurrentTrip: (tripId) => set({ currentTripId: tripId, currentDay: 0 }),
+      // Land on the phase-correct day: upcoming/past → Day 1; active → today's day
+      // (never a stale "Day 2" before the trip has started).
+      setCurrentTrip: (tripId) => set((s) => {
+        const trip = s.trips.find((t) => t.id === tripId);
+        return { currentTripId: tripId, currentDay: trip ? defaultDayFor(trip) : 0 };
+      }),
       setCurrentDay: (day) => set({ currentDay: day }),
       setPlanMode: (mode) => set({ planMode: mode }),
       markPlanDayNoteSeen: () => set({ planDayNoteSeen: true }),

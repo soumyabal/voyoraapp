@@ -152,6 +152,49 @@ export function defaultNightsFor(trip, checkInDayIdx) {
   return Math.max(1, end - checkInDayIdx);
 }
 
+// ─── Trip lifecycle (before / during / after) ────────────────────────────────
+// Dates are ISO 'YYYY-MM-DD'; compare as local civil days (no time-of-day / TZ math).
+
+/** Today as 'YYYY-MM-DD' in the device's local timezone. */
+export function todayISO(now = new Date()) {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/** Whole days from ISO date a → b (b−a). Parses as local midnight to avoid TZ drift. */
+export function daysBetweenISO(a, b) {
+  if (!a || !b) return 0;
+  const pa = a.split('-').map(Number);
+  const pb = b.split('-').map(Number);
+  const da = new Date(pa[0], pa[1] - 1, pa[2]);
+  const db = new Date(pb[0], pb[1] - 1, pb[2]);
+  return Math.round((db - da) / 86400000);
+}
+
+/** A trip's lifecycle phase vs today: 'upcoming' | 'active' | 'past' | 'undated'. */
+export function tripPhase(trip, today = todayISO()) {
+  const s = trip?.startDate, e = trip?.endDate;
+  if (!s || !e) return 'undated';
+  if (today < s) return 'upcoming';
+  if (today > e) return 'past';
+  return 'active';
+}
+
+/**
+ * The day index the Itinerary should LAND on when a trip is opened — derived from
+ * the trip's phase, never a stale global. Upcoming/past/undated → Day 1 (planning /
+ * recap). Active → today's day (clamped). This is the fix for "a not-started trip
+ * opens on Day 2": the landing day can no longer drift out of sync with the dates.
+ */
+export function defaultDayFor(trip, today = todayISO()) {
+  const n = (trip?.days || []).length;
+  if (n === 0) return 0;
+  if (tripPhase(trip, today) !== 'active') return 0;
+  return Math.max(0, Math.min(daysBetweenISO(trip.startDate, today), n - 1));
+}
+
 /**
  * effectiveMember(member, travelers)
  *

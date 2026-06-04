@@ -14,3 +14,4 @@
 - 2026-06-04 — trip status pill + phase-aware day chips (f704b0d) ✓ verified on device ("📅 In 8 days" renders for the upcoming Wisconsin trip)
 - 2026-06-04 — 2-opt route refinement in scheduleDay/autoArrange (engine, unit-tested)
 - 2026-06-04 — "Today" lens: now/next banner + jump-to-today for active trips (engine+UI; active visuals pending an active-dated trip) 
+- 2026-06-04 — tiring_day Trip-Check tip (few-but-long day, hours-on-your-feet) (dfd1449)

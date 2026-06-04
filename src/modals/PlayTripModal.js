@@ -82,6 +82,9 @@ export default function PlayTripModal({ visible, trip, onClose }) {
     Animated.timing(kb, { toValue: 1, duration: hold + FADE, easing: Easing.inOut(Easing.quad), useNativeDriver: true }).start();
     if (idx < slides.length - 1) {
       timer.current = setTimeout(() => setIdx(i => Math.min(slides.length - 1, i + 1)), hold);
+    } else {
+      // the closing card — let it breathe an extra beat, then close the window (movie's done)
+      timer.current = setTimeout(() => { if (onClose) onClose(); }, hold + 900);
     }
     return () => clearTimeout(timer.current);
   }, [idx, visible, slides]); // eslint-disable-line react-hooks/exhaustive-deps

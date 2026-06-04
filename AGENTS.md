@@ -1,7 +1,8 @@
 # Voyara — AI Agent Guide & Architecture
 
 > **Read this first.** Everything an AI agent needs to work on this codebase without asking follow-up questions.
-> Last updated: May 2026 · Stack: React Native · Expo 54 · Zustand · Claude API · Google Places API
+> Last updated: June 2026 · Stack: React Native 0.81 · Expo 54 · Zustand 5 (persisted) · Claude API · Google Places API
+> Jump to **[Current State (June 2026)](#current-state-june-2026)** for what's shipped recently — the rest of this doc is the original Phase-1 architecture and some of it has drifted; the Current State section is authoritative where they disagree.
 
 ---
 
@@ -93,11 +94,13 @@ FastAPI Backend (Python)
 
 | Key | Location | Status |
 |-----|----------|--------|
-| `CLAUDE_API_KEY` | `src/config.js` | ✅ Live — `claude-haiku-4-5-20251001` |
-| `GOOGLE_PLACES_API_KEY` | `src/config.js` | ✅ Live — Text Search (New) |
+| `CLAUDE_API_KEY` | `src/config.js` | **`null`** — AI features are flag-gated OFF (`RELEASE_FLAGS.aiPlanner/aiReview = false`). Provide a key + flip flags to enable. Model: `claude-haiku-4-5-20251001`. |
+| `GOOGLE_PLACES_API_KEY` | `src/config.js` | ✅ Live — Text Search (New), Place Photos, geocode/reverse-geocode. ⚠️ **In the bundle** — for TestFlight, restrict it in the Google Cloud console to the bundle ID + Places API. |
 | `CLAUDE_API_URL` | `src/config.js` | `https://api.anthropic.com/v1/messages` |
+| `APP_NAME` | `src/config.js` | The product name — **rename the app here** (one line); every user-facing string + AI prompt reads it. Does NOT change the storage key or `app.json` (both load-bearing). |
+| `RELEASE_FLAGS` | `src/config.js` | `manualPlanner` (on), `aiPlanner`/`aiReview`/`expertMode` (off), `distanceWarnings` (on), `accounts` (off — hides the demo Sign In for the free/local TestFlight; flip on with the Phase-2 backend). |
 
-> ⚠️ For production/App Store: move all API keys to FastAPI backend. Never ship keys in the app bundle.
+> ⚠️ For production/App Store: move all API keys to a backend. Never ship keys in the app bundle (Phase 2).
 
 ---
 
@@ -152,17 +155,75 @@ itineraryPlanner.js   Curated activity DB for SD/LA/SF. Used by legacyFallback s
 plannerRules.js       System + user prompt builders for single-LLM legacy path.
                       buildRefinementPrompt() includes current plan for Claude context.
 helpers.js            uid(), fmt(), fmtM(), getAllMembers(), effectiveMember(), familyPalette
-costs.js              Split engine: resolveMode → calcBalances → calcSettlements
+                      (single source — theme.js no longer defines it), defaultNightsFor()
+costs.js              Split engine: resolveMode → calcBalances → calcSettlements (THE MOAT)
+tripValidator.js      Trip Check rules engine (~18 rules) + estimateDuration, lodgingForNight,
+                      and the per-day routing anchors dayStartAnchor/dayEndAnchor/dayRouteAnchor.
+                      NOTE: rules are still inline (procedural) — a "rule registry" refactor is
+                      planned (gated by the validateTrip golden snapshot).
+autoArrange.js        scheduleDay() (per-day) + autoArrange() (basket → days). Anchors each day
+                      via dayRouteAnchor. "One engine PLACES, the same engine CHECKS."
+geo.js                travelLeg() / haversineKm() — FREE straight-line distance + time estimate.
+hours.js              Opening-hours model (weekdayOf, dayIntervals, isOpenAt, hoursLabel).
+slots.js              Day slots (Morning/Afternoon/Evening/Night) + suggested-time math.
+expenses.js           activityToExpense / rebuildItineraryExpenses (itinerary → Splitwise).
+places.js             Google Places: fetchPlacePhoto, geocodeAddress, reverseGeocode (cached).
+mapsRoute.js          dayRoutePoints + googleMapsDayUrl — a day's plan → a Google Maps route.
+exportPlan.js         Trip → PDF (expo-print + expo-sharing).
+distanceChecker.js    Optional real-distance Trip Check (user-toggle; has API cost).
 useKeyboardOffset.js  Keyboard height hook (kept for future use; AIChatModal now uses KAV)
 ```
 
 ### State & Config
 ```
-src/store/index.js    Zustand store. ALL global state + actions. Persisted to AsyncStorage.
-src/config.js         CLAUDE_API_KEY · GOOGLE_PLACES_API_KEY · CLAUDE_MODEL · billing config
-src/theme.js          colors, spacing, radius, typography, shadow, activityColors
+src/store/index.js    Zustand store. ALL global state + actions. Persisted to AsyncStorage
+                      with name:'voyara-storage', version:1, migrate (see Invariants #7).
+src/config.js         APP_NAME · CLAUDE_API_KEY · GOOGLE_PLACES_API_KEY · CLAUDE_MODEL ·
+                      RELEASE_FLAGS · billing config
+src/theme.js          colors (legacy + Refined-Warm semantic tokens), spacing, radius, typography
+src/components/ErrorBoundary.js  Top-level error boundary (no white screens) — wraps App.js
 src/data/sampleData.js Seed trips/travelers/groups for first launch
 ```
+
+---
+
+## Current State (June 2026)
+
+> Authoritative summary of what's shipped beyond the original Phase-1 doc above.
+
+**Tooling & quality**
+- **Tests:** jest + jest-expo. 88 tests across `src/utils/__tests__` (pure utils) AND
+  `src/store/__tests__` (store/money-path characterization). Two golden nets gate refactors:
+  `store.test.js` (createTrip/addActivity/the moat/settlement + a **persisted-shape guard**) and
+  `tripValidator.snapshot.test.js` (full validateTrip output). Run: `npm test`.
+- **Lint/format:** `npm run lint` (eslint 9 flat, eslint-config-expo) / `npm run format` (prettier).
+  Non-blocking baseline (~420 findings) to clean incrementally.
+- **Stability:** ErrorBoundary in `App.js`; AsyncStorage is **versioned + migrated** (no data wipe
+  on upgrade).
+
+**Planning intelligence (deterministic, no LLM)**
+- **Trip Check** (`tripValidator.js`): severity is RE-TIERED — `error` only for provable conflicts
+  (closed venue, 6h+ journey); estimate-based heuristics (overlap, travel time, packed) are soft
+  `info` "tips". Surfaced as ONE calm per-day pill + a 3-state trip badge (green ✓ when every day is
+  planned & clean / neutral "…" in-progress / amber for a real conflict) — not a wall of red.
+- **Auto-arrange** shares the same engine; anchors each day to where you wake.
+- **Day-1 origin** (`trip.origin = {label,lat,lng}`): set at create / Edit Trip / a tappable Day-1
+  chip; anchors the first stop's travel leg + auto-arrange.
+- **Lodging**: one check-in `stay` carries `nights` (smart default = remaining trip nights);
+  `lodgingForNight()` derives per-night coverage (no per-day rows → no double-bill).
+- **Per-day routing anchors** (`dayStartAnchor`/`dayEndAnchor`/`dayRouteAnchor`): wake → stops →
+  tonight's hotel. Feeds **"Route this day in Google Maps"** (`mapsRoute.js`, free URL; in-app
+  Directions-API polyline is Phase 2).
+
+**Discover** (`DiscoverModal.js`): Leaflet/WebView map, composite ranking, draggable drop-pin for
+off-Places stops (Airbnb), seen/added states, explore-nearby.
+
+**TestFlight target = free + local** (no logins, no IAP). `RELEASE_FLAGS.accounts=false` hides the
+demo auth; AI/Pro are flag-gated off; credits code removed (subscription scaffolding kept for the
+future freemium phase). Remaining (non-code): privacy policy URL + manifest, Google-key restriction.
+
+See `docs/backlog.md` for tracked follow-ups (rule-registry refactor, theming layer, uncovered-night
+CTA, in-app route polyline, store-slice split).
 
 ---
 
@@ -282,6 +343,12 @@ Each family gets Expense[] with participatingFamilies: [thisFamily.id]
 4. **At least one family must always participate** in an expense (`toggleFamilySplit` guard).
 5. **`trip.days[]` is not regenerated when dates change.** `EditTripModal` has a destructive-change guard.
 6. **Always use `effectiveMember(member, travelers)`** from `helpers.js`. Never read `tripMember.dietary` directly.
+7. **Persisted shape is versioned.** Any change to the saved trip/store shape MUST bump
+   `version` + add a `migrate` case in `store/index.js` persist config. `store.test.js` has a
+   shape guard that fails if you change the trip's top-level keys without doing so. Never change
+   the persist `name` (`'voyara-storage'`) — that wipes every user's data.
+8. **Lodging is modeled once, derived per-night.** One check-in `stay` carries `nights`; use
+   `lodgingForNight()` — never add a hotel row per day (it would double-bill the booking).
 
 ---
 

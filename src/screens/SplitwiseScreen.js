@@ -421,6 +421,17 @@ function ExpenseCard({
     }
   };
 
+  // Jump straight into the custom per-family/-person editor, seeded from the even
+  // split (so it starts balanced). Same path as the "Custom" distribution chip.
+  const switchToCustom = () => {
+    const seeds = {};
+    if (effectiveMode === 'family') effFams.forEach(f => { seeds[f.id] = parseFloat(spf.toFixed(2)); });
+    else effMembers.forEach(m => { seeds[m.id] = parseFloat(spp.toFixed(2)); });
+    setCustomAmounts(seeds);
+    onUpdateCustomShares(seeds, true);
+  };
+  const isLodging = exp.category === '🏨';
+
   return (
     <View style={[styles.expCard, isExcluded && styles.expCardExcluded]}>
       {/* ── Collapsed header ── */}
@@ -450,6 +461,9 @@ function ExpenseCard({
                   <Icon name="card-outline" size={11} color={colors.subtle} />
                   <Text style={styles.expPayer}>{payer.name.split(' ')[0]}{payerFam ? ` · ${payerFam.name}` : ''}</Text>
                 </View>
+              )}
+              {isLodging && !isUneven && (
+                <Text style={styles.lodgeNudge}>{'\u{1F6CF}'} Same hotel, different rooms? Tap to adjust</Text>
               )}
             </>
           )}
@@ -545,6 +559,19 @@ function ExpenseCard({
                   </TouchableOpacity>
                 ))}
               </View>
+
+              {/* Lodging-only: honest explainer for the equal-by-group default */}
+              {isLodging && !isUneven && (
+                <View style={styles.lodgeSplitTip}>
+                  <Text style={styles.lodgeSplitTipTitle}>Split equally between groups — adjust if rooms differ</Text>
+                  <Text style={styles.lodgeSplitTipBody}>
+                    We split this hotel equally because we can't tell which group took which room. If a family had a bigger or pricier room, set each group's share.
+                  </Text>
+                  <TouchableOpacity onPress={switchToCustom} activeOpacity={0.7}>
+                    <Text style={styles.lodgeSplitTipCta}>Set custom amounts →</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
               {/* 4. Distribution — Even or Custom (uneven) */}
               <Text style={[styles.splitLabel, { marginTop: 12 }]}>DISTRIBUTION</Text>
@@ -860,6 +887,11 @@ const styles = StyleSheet.create({
   expSubRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   expSub: { ...typography.tiny, color: colors.muted },
   expPayer: { ...typography.tiny, color: colors.muted },
+  lodgeNudge: { ...typography.tiny, color: colors.muted, marginTop: 2, fontStyle: 'italic' },
+  lodgeSplitTip: { backgroundColor: '#fefce8', borderWidth: 1, borderColor: '#fde68a', borderRadius: radius.lg, padding: spacing.md, marginTop: 12 },
+  lodgeSplitTipTitle: { fontSize: 12, fontWeight: '800', color: '#78350f', marginBottom: 4 },
+  lodgeSplitTipBody: { fontSize: 11, color: '#92400e', lineHeight: 16, marginBottom: 6 },
+  lodgeSplitTipCta: { fontSize: 12, fontWeight: '800', color: '#b45309' },
   skippedHint: { ...typography.tiny, color: colors.muted, fontStyle: 'italic', marginTop: 2 },
   expRight: { alignItems: 'flex-end', gap: 2 },
   amountCol: { alignItems: 'flex-end' },

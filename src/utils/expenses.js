@@ -23,7 +23,10 @@ export function activityToExpense(act, dayLabel, allMembers, allFamilyIds) {
     estimatedAmount: amount,          // frozen reference to the original estimate
     category: catFor(act.type),
     paidBy: allMembers[0]?.id ?? null,
-    splitMode: null,                  // inherit from trip
+    // Lodging splits EQUALLY BY FAMILY (a shared hotel is a per-group cost, and the
+    // app can't infer who took the bigger/pricier room → the Split tab's custom
+    // amounts handle that). Everything else inherits the trip's split mode.
+    splitMode: act.type === 'stay' ? 'family' : null,
     participatingFamilies: [...allFamilyIds],
     participatingMembers: null,       // null = all members in participating families
     excluded: false,

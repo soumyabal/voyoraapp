@@ -52,6 +52,24 @@ export function expSharePerPerson(exp, trip) {
   return members.length ? exp.amount / members.length : 0;
 }
 
+// ── UNEVEN-SPLIT BALANCE GUARD ───────────────────────────────────
+
+/**
+ * Custom shares only drive settlement when they sum to the (frozen) total.
+ * An in-progress or unbalanced edit safely falls back to the EVEN split, so the
+ * books never leak — `calcBalances` credits the payer the full `amount`, so the
+ * group's debits MUST also sum to `amount` or `calcSettlements` invents phantom
+ * transfers. The "✅ Balanced" indicator in the editor tells the user when their
+ * custom split has gone live.
+ */
+export function unevenActive(exp, trip) {
+  if (!exp.unevenSplit || !exp.customShares) return false;
+  const mode = resolveMode(exp, trip);
+  const units = mode === 'family' ? getEffectiveFamilies(exp, trip) : getEffectiveMembers(exp, trip);
+  const sum = units.reduce((s, u) => s + (exp.customShares[u.id] || 0), 0);
+  return Math.abs(sum - exp.amount) < 0.01;
+}
+
 // ── FAMILY SHARE FOR ONE EXPENSE ─────────────────────────────────
 
 /**
@@ -65,8 +83,8 @@ export function famExpenseShare(fam, exp, trip) {
 
   const mode = resolveMode(exp, trip);
 
-  // Uneven split — use stored custom amounts
-  if (exp.unevenSplit && exp.customShares) {
+  // Uneven split — use stored custom amounts (only when they balance to the total)
+  if (unevenActive(exp, trip)) {
     if (mode === 'family') {
       return exp.customShares[fam.id] || 0;
     }
@@ -96,8 +114,8 @@ export function memberExpenseShare(member, exp, trip) {
   const mode = resolveMode(exp, trip);
   const fam = trip.families.find(f => f.members.some(m => m.id === member.id));
 
-  // Uneven split — use stored custom amounts
-  if (exp.unevenSplit && exp.customShares) {
+  // Uneven split — use stored custom amounts (only when they balance to the total)
+  if (unevenActive(exp, trip)) {
     if (mode === 'family') {
       // Only family head carries the custom family share
       const head = fam?.members[0];

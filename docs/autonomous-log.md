@@ -15,3 +15,4 @@
 - 2026-06-04 — 2-opt route refinement in scheduleDay/autoArrange (engine, unit-tested)
 - 2026-06-04 — "Today" lens: now/next banner + jump-to-today for active trips (engine+UI; active visuals pending an active-dated trip) 
 - 2026-06-04 — tiring_day Trip-Check tip (few-but-long day, hours-on-your-feet) (dfd1449)
+- 2026-06-04 — fixed 3 real lint-surfaced bugs: Discover reverseGeocode crash + 2 dead-style dupe keys (83b58de)

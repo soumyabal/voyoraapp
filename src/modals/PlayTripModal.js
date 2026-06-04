@@ -60,6 +60,7 @@ const isPhoto = s => s && s.type === 'photo';
 export default function PlayTripModal({ visible, trip, onClose }) {
   const slides = useMemo(() => (visible ? buildTripFilm(trip) : []), [visible, trip]);
   const [idx, setIdx] = useState(0);
+  const [failed, setFailed] = useState(() => new Set()); // photo URLs that errored → graded card, never a black void
   const fade = useRef(new Animated.Value(0)).current;  // current layer cross-fade
   const kb = useRef(new Animated.Value(0)).current;    // ken-burns progress 0→1
   const timer = useRef(null);
@@ -86,19 +87,24 @@ export default function PlayTripModal({ visible, trip, onClose }) {
   const scale = kb.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.06] });
   const pan = kb.interpolate({ inputRange: [0, 1], outputRange: [0, idx % 2 ? -14 : 14] }); // alternate vector
 
+  const onImgError = (uri) => setFailed(prev => (prev.has(uri) ? prev : new Set(prev).add(uri)));
+
   const renderLayer = (s, animated) => {
-    if (isPhoto(s)) {
+    if (isPhoto(s) && !failed.has(s.uri)) {
       return animated
-        ? <Animated.Image source={{ uri: s.uri }} style={[st.full, { transform: [{ scale }, { translateX: pan }] }]} resizeMode="cover" />
-        : <Image source={{ uri: s.uri }} style={st.full} resizeMode="cover" />;
+        ? <Animated.Image source={{ uri: s.uri }} onError={() => onImgError(s.uri)} style={[st.full, { transform: [{ scale }, { translateX: pan }] }]} resizeMode="cover" />
+        : <Image source={{ uri: s.uri }} onError={() => onImgError(s.uri)} style={st.full} resizeMode="cover" />;
     }
-    // title-type slide → a warm graded field
+    // title slide OR a failed/missing photo → a warm graded field, NEVER a black void
     return <LinearGradient colors={['#241a12', '#5b3d27', '#1c140d']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={st.full} />;
   };
 
   return (
     <Modal visible={visible} animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={st.root}>
+        {/* warm base — a graded backdrop is ALWAYS present while an image loads or if one
+            fails, so a missing photo / empty slide can never render as a black void */}
+        <LinearGradient colors={['#1c140d', '#3a281a', '#120c08']} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={st.full} pointerEvents="none" />
         {/* prev layer (under) so the current cross-fades OVER it */}
         {prev ? <View style={st.full}>{renderLayer(prev, false)}</View> : null}
         {/* current layer */}

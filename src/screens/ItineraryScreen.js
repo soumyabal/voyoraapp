@@ -8,7 +8,7 @@ import { APP_NAME } from '../config';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
-import { fmt, fmtM, getActivityIcon, uid } from '../utils/helpers';
+import { fmt, fmtM, getActivityIcon, uid, tripPhase, defaultDayFor, daysBetweenISO, todayISO } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
@@ -105,6 +105,13 @@ const SEV_CHIP = {
 // One calm per-day summary pill (replaces the wall of red chips). Tone is set by
 // the worst severity present; the icon SHAPE + the words carry severity (not just
 // colour — WCAG 1.4.1). Deliberately soft: even "to fix" is amber, never alarm-red.
+// Trip-phase status pill tones (before/during/after)
+const PILL_TONE = {
+  upcoming: { bg: '#eef2ff', fg: '#4f46e5' },  // anticipatory
+  active:   { bg: '#dcfce7', fg: '#15803d' },  // live green
+  past:     { bg: '#f1f5f9', fg: '#64748b' },  // settled / muted
+};
+
 const DAY_PILL = {
   fix:   { bg: '#fdf3e2', fg: '#b45309', icon: 'warning-outline' },          // a genuine conflict
   check: { bg: '#fdf3e2', fg: '#b45309', icon: 'information-circle-outline' },// real, worth a look
@@ -535,6 +542,20 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
 
   const day = trip.days[currentDay] || trip.days[0];
 
+  // Trip lifecycle: phase + the calendar "today" day index (active trips only), used
+  // by the status pill and the phase-aware day chips.
+  const phase    = tripPhase(trip);
+  const todayIdx = phase === 'active' ? defaultDayFor(trip) : -1;
+  const statusPill = (() => {
+    if (phase === 'upcoming') {
+      const n = daysBetweenISO(todayISO(), trip.startDate);
+      return { tone: 'upcoming', text: n <= 0 ? '📅 Starts today' : n === 1 ? '📅 Tomorrow' : `📅 In ${n} days` };
+    }
+    if (phase === 'active') return { tone: 'active', text: `🟢 Day ${todayIdx + 1} of ${trip.days.length} · today` };
+    if (phase === 'past')   return { tone: 'past', text: '✓ Trip complete' };
+    return null;
+  })();
+
   // Where you woke today (Day 1 → origin; else last night's hotel / friends-camping
   // address / home). Drives the first-stop travel leg for ANY day, not just Day 1.
   const startAnchor = day ? dayStartAnchor(trip, currentDay) : null;
@@ -868,19 +889,30 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-        {/* Day Navigation */}
+        {/* Trip status pill — before / during / after (📅 In 8 days · 🟢 Day 2 of 3 · today · ✓ Trip complete) */}
+        {statusPill && (
+          <View style={[styles.statusPill, { backgroundColor: PILL_TONE[statusPill.tone].bg }]}
+            accessibilityRole="text" accessibilityLabel={statusPill.text.replace(/^[^\w]+/, '')}>
+            <Text style={[styles.statusPillText, { color: PILL_TONE[statusPill.tone].fg }]}>{statusPill.text}</Text>
+          </View>
+        )}
+
+        {/* Day Navigation — during an active trip, today is dotted and past days dimmed */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayNav} contentContainerStyle={{ paddingHorizontal: spacing.xxl }}>
           {trip.days.map((d, i) => {
             const dc = calcDayCostForTrip(d, trip);
+            const isToday = i === todayIdx;
+            const isPast  = phase === 'active' && i < todayIdx;
             return (
               <TouchableOpacity
                 key={d.date}
-                style={[styles.dayBtn, i === currentDay && styles.dayBtnActive]}
+                style={[styles.dayBtn, i === currentDay && styles.dayBtnActive, isPast && styles.dayBtnPast]}
                 onPress={() => setCurrentDay(i)}
               >
                 <Text style={[styles.dayBtnLabel, i === currentDay && styles.dayBtnLabelActive]}>{d.label}</Text>
                 <Text style={[styles.dayBtnDate, i === currentDay && { color: colors.primary }]}>{fmt(d.date)}</Text>
                 {dc > 0 && <Text style={styles.dayCost}>{fmtM(dc)}</Text>}
+                {isToday && <View style={styles.todayDot} />}
               </TouchableOpacity>
             );
           })}
@@ -2067,6 +2099,10 @@ const styles = StyleSheet.create({
   mustDosChipTextDone: { color: '#15803d', textDecorationLine: 'line-through' },
 
   // ── Day navigation ───────────────────────────────────────────────
+  statusPill: { alignSelf: 'center', marginTop: spacing.lg, marginBottom: -spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.full },
+  statusPillText: { fontSize: 12, fontWeight: '800' },
+  dayBtnPast: { opacity: 0.45 },
+  todayDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#15803d', marginTop: 3 },
   dayNav: { marginTop: spacing.xl },
   dayBtn: {
     paddingHorizontal: spacing.lg,

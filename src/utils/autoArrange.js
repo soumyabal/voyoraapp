@@ -26,6 +26,7 @@
  *        summary    : { placed, unplaced, daysUsed }
  */
 import { timeToMin, minToTime } from './slots';
+import { checkInOf, checkOutOf } from './helpers';
 import { estimateDuration, validateTrip, dayRouteAnchor } from './tripValidator';
 import { travelLeg } from './geo';
 import { weekdayOf, dayIntervals } from './hours';
@@ -446,9 +447,10 @@ export function scheduleDay(activities, opts = {}) {
   // 1. Transport with a user-set time anchors the day (departures/arrivals).
   sched.filter(a => a.type === 'transport' && a.time && !isLocked(a))
        .forEach(a => addInterval(occ, timeToMin(a.time), Math.max(BUFFER_MIN, estimateDuration(a))));
-  // 2. Stays → check-in window (or check-out on the departure day).
+  // 2. Stays → the hotel's REAL check-in time (or check-out on the departure day).
+  //    Defaults to 3pm/11am; never schedules the room before the hotel will give it.
   sched.filter(a => a.type === 'stay' && !isLocked(a))
-       .forEach(a => place(a, dayRole === 'departure' ? WINDOWS.checkout : WINDOWS.checkin));
+       .forEach(a => place(a, timeToMin(dayRole === 'departure' ? checkOutOf(a) : checkInOf(a))));
   // 3. Meals → breakfast / lunch / dinner. Each restaurant lands in a meal it is
   //    actually OPEN for (hours of operation), unless the user pinned a meal
   //    (`a.meal`) — their choice always wins. Among the meals a place is open

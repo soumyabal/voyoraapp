@@ -17,8 +17,15 @@ describe('scheduleDay', () => {
     expect(museum.time < hotel.time).toBe(true);   // sightsee, then check in
   });
 
-  test('check-out goes to the morning on the departure day', () => {
+  test('check-out goes to the morning on the departure day (default 11am)', () => {
     const out = scheduleDay([a('Hotel', 'stay')], { dayRole: 'departure' });
+    expect(out[0].time).toBe('11:00');                         // default check-out
+  });
+
+  test("a hotel's real check-in / check-out times override the defaults", () => {
+    const inn = scheduleDay([a('Late Inn', 'stay', { checkInTime: '16:00' })], { dayRole: 'normal' });
+    expect(inn[0].time).toBe('16:00');
+    const out = scheduleDay([a('Early Out', 'stay', { checkOutTime: '10:00' })], { dayRole: 'departure' });
     expect(out[0].time).toBe('10:00');
   });
 

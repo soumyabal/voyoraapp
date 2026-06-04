@@ -152,6 +152,16 @@ export function defaultNightsFor(trip, checkInDayIdx) {
   return Math.max(1, end - checkInDayIdx);
 }
 
+// ─── Hotel check-in / check-out (real times, with industry-standard defaults) ────
+// A hotel can't give you the room before check-in; you must be out by check-out.
+// These default to the common 3pm / 11am so the planner is right out of the box —
+// the user only sets them when their hotel differs. Single source for both engine
+// (scheduleDay places check-in no earlier than this) and UI.
+export const DEFAULT_CHECK_IN = '15:00';
+export const DEFAULT_CHECK_OUT = '11:00';
+export const checkInOf  = (stay) => (stay && stay.checkInTime)  || DEFAULT_CHECK_IN;
+export const checkOutOf = (stay) => (stay && stay.checkOutTime) || DEFAULT_CHECK_OUT;
+
 // ─── Trip lifecycle (before / during / after) ────────────────────────────────
 // Dates are ISO 'YYYY-MM-DD'; compare as local civil days (no time-of-day / TZ math).
 

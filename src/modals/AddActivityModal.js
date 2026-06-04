@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import useStore from '../store';
 import { colors, spacing, radius, typography, shadow } from '../theme';
-import { uid, defaultNightsFor } from '../utils/helpers';
+import { uid, defaultNightsFor, DEFAULT_CHECK_IN, DEFAULT_CHECK_OUT } from '../utils/helpers';
 import { estimateDuration, formatDuration } from '../utils/tripValidator';
 import { geocodeAddress, reverseGeocode } from '../utils/places';
 import { APP_NAME } from '../config';
@@ -365,6 +365,10 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
 
   // Hotel nights (stay only) — drives lodgingForNight() coverage + day-routing anchors
   const [nights, setNights]       = useState(1);
+  // Hotel's real check-in / check-out (stay only). Default to industry-standard 3pm/11am;
+  // the planner won't schedule the room before check-in. User sets only if theirs differ.
+  const [checkInTime, setCheckInTime]   = useState(DEFAULT_CHECK_IN);
+  const [checkOutTime, setCheckOutTime] = useState(DEFAULT_CHECK_OUT);
 
   // Notes + Reminder
   const [memo, setMemo]           = useState('');
@@ -396,6 +400,8 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setDurationMins(editActivity.durationMins > 0 ? editActivity.durationMins : 0);
       setMeal(editActivity.meal || null);
       setNights(editActivity.nights > 0 ? editActivity.nights : 1);
+      setCheckInTime(editActivity.checkInTime || DEFAULT_CHECK_IN);
+      setCheckOutTime(editActivity.checkOutTime || DEFAULT_CHECK_OUT);
       setShowMore(!!(editActivity.detail || editActivity.memo || editActivity.reminder));
       setAddress(editActivity.address || '');
       const hasGeo = editActivity.lat != null && editActivity.lng != null;
@@ -503,6 +509,8 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       durationMins: durationMins > 0 ? durationMins : null,
       meal:         tile.type === 'food' ? (meal || null) : null,
       nights:       tile.type === 'stay' ? Math.max(1, nights) : undefined,
+      checkInTime:  tile.type === 'stay' ? checkInTime  : undefined,
+      checkOutTime: tile.type === 'stay' ? checkOutTime : undefined,
       detail:       detail.trim(),
       costMode,
       costAmount:   parsedCost,
@@ -630,6 +638,21 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                     <Text style={s.nightsBtnText}>+</Text>
                   </TouchableOpacity>
                 </View>
+
+                <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>
+                  CHECK-IN / OUT <Text style={s.optional}>(tap if your hotel differs)</Text>
+                </Text>
+                <View style={s.checkRow}>
+                  <View style={s.checkCol}>
+                    <Text style={s.checkColLabel}>🔑 Check-in</Text>
+                    <TimePickerInput value={checkInTime} onChange={setCheckInTime} />
+                  </View>
+                  <View style={s.checkCol}>
+                    <Text style={s.checkColLabel}>🧳 Check-out</Text>
+                    <TimePickerInput value={checkOutTime} onChange={setCheckOutTime} />
+                  </View>
+                </View>
+                <Text style={s.checkHint}>We won't plan the room before check-in.</Text>
               </>
             )}
 
@@ -1102,6 +1125,10 @@ const s = StyleSheet.create({
   nightsBtn:    { width: 44, height: 44, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   nightsBtnText:{ fontSize: 22, fontWeight: '700', color: colors.accent, lineHeight: 24 },
   nightsValue:  { fontSize: 15, fontWeight: '700', color: colors.text, minWidth: 96, textAlign: 'center' },
+  checkRow:     { flexDirection: 'row', gap: spacing.md },
+  checkCol:     { flex: 1 },
+  checkColLabel:{ fontSize: 12, fontWeight: '700', color: colors.subtle, marginBottom: 6 },
+  checkHint:    { fontSize: 12, color: colors.muted, marginTop: 6 },
 
   // Day picker (chips) + smart When slot grid
   dayRow:    { gap: spacing.sm, paddingBottom: spacing.xs },

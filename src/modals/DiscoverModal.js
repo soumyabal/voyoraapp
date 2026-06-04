@@ -1059,25 +1059,31 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
               </ScrollView>
 
               <Text style={sp.sectionLabel}>When</Text>
-              <View style={sp.slotGrid}>
+              {/* Compact pill row (matches Add Activity). Selected slot's smart time
+                  + fullness show on the meta line; others carry a fullness dot. */}
+              <View style={sp.slotPillRow}>
                 {SLOTS.map(slot => {
-                  const suggested = getSuggestedTime(trip, pickerDay, slot.key);
-                  const count     = getSlotCount(trip, pickerDay, slot.key);
-                  const isActive  = pickerSlot===slot.key;
+                  const count    = getSlotCount(trip, pickerDay, slot.key);
+                  const isActive = pickerSlot===slot.key;
+                  const dotColor = count === 0 ? '#22c55e' : count <= 2 ? '#86efac' : '#fb923c';
                   return (
                     <TouchableOpacity key={slot.key}
-                      style={[sp.slotBtn, isActive&&sp.slotBtnActive]}
-                      onPress={() => setPickerSlot(slot.key)} activeOpacity={0.7}>
-                      <View style={sp.slotBtnTop}>
-                        <Text style={sp.slotEmoji}>{slot.emoji}</Text>
-                        <Text style={[sp.slotLabel, isActive&&{color:colors.primary}]}>{slot.label}</Text>
-                      </View>
-                      <Text style={sp.slotMeta}>Add at {suggested}</Text>
-                      <Text style={sp.slotCount}>{count===0?'Open':`${count} act${count!==1?'s':''}`}</Text>
+                      style={[sp.slotPill, isActive&&sp.slotPillActive]}
+                      onPress={() => setPickerSlot(slot.key)} activeOpacity={0.7}
+                      accessibilityRole="button" accessibilityState={{ selected: isActive }}
+                      accessibilityLabel={`${slot.label}, suggested ${getSuggestedTime(trip, pickerDay, slot.key)}, ${count===0?'open':`${count} planned`}`}>
+                      <Text style={sp.slotPillEmoji}>{slot.emoji}</Text>
+                      <Text style={[sp.slotPillLabel, isActive&&{color:colors.primary,fontWeight:'800'}]} numberOfLines={1}>{slot.label}</Text>
+                      {!isActive && <View style={[sp.slotDot, { backgroundColor: dotColor }]} />}
                     </TouchableOpacity>
                   );
                 })}
               </View>
+              {(() => {
+                const lbl = SLOTS.find(sl => sl.key === pickerSlot)?.label || '';
+                const c = getSlotCount(trip, pickerDay, pickerSlot);
+                return <Text style={sp.slotPillMeta}>{lbl} · Add at {getSuggestedTime(trip, pickerDay, pickerSlot)} · {c===0?'Open':`${c} act${c!==1?'s':''}`}</Text>;
+              })()}
 
               {pendingPlace?.activityType === 'stay' && (
                 <View style={sp.hotelBox}>
@@ -1269,6 +1275,13 @@ const sp = StyleSheet.create({
   slotLabel:{...typography.bodyBold,color:colors.text,fontSize:13},
   slotMeta:{fontSize:13,fontWeight:'700',color:colors.primary},
   slotCount:{fontSize:10,color:colors.muted},
+  slotPillRow:{flexDirection:'row',gap:spacing.sm},
+  slotPill:{flex:1,alignItems:'center',justifyContent:'center',gap:2,borderWidth:1.5,borderColor:colors.border,borderRadius:radius.lg,backgroundColor:'#fff',paddingVertical:8,minHeight:52},
+  slotPillActive:{borderColor:colors.primary,borderWidth:2,backgroundColor:colors.primary+'12'},
+  slotPillEmoji:{fontSize:16},
+  slotPillLabel:{fontSize:11,fontWeight:'700',color:colors.text},
+  slotDot:{width:6,height:6,borderRadius:3,marginTop:1},
+  slotPillMeta:{fontSize:13,fontWeight:'700',color:colors.primary,marginTop:spacing.sm,marginBottom:spacing.md,textAlign:'center'},
   hotelBox:{backgroundColor:colors.smartSoft,borderRadius:radius.lg,padding:spacing.md,marginBottom:spacing.md},
   hotelHint:{fontSize:11,color:colors.subtle,marginBottom:spacing.sm,lineHeight:15},
   hotelRow:{flexDirection:'row',alignItems:'flex-end',gap:spacing.sm},

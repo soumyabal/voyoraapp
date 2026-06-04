@@ -6,6 +6,26 @@
 
 ---
 
+## ⚠️ Confidentiality, Secrets & Data Handling — HARD GUARDRAILS (read before anything else)
+
+> Added at the owner's explicit request. These are **non-negotiable** and apply in **every** session. They bind agent *behavior* — they do **not** and cannot change the baseline fact that running a cloud AI assistant means the code/context an agent reads is processed by the model provider's inference servers to generate responses (inherent to the tool; governed by the owner's Anthropic plan terms, not by this file).
+
+**Secrets / API keys**
+- `src/config.js` holds live API keys and is **gitignored — keep it that way.** Never commit it, never move a key into a tracked file (test, doc, sample, log), never paste a key into a commit message, screenshot, or external request.
+- Don't echo/print key **values** to the terminal or into context unless the owner explicitly asks. Refer to keys by **name**, never value.
+- Never transmit a key to any third party, web request, or external tool.
+
+**The project's code & materials are PRIVATE — do not exfiltrate**
+- Do **not** upload the repo or any file to an external service, post code/snippets to the web, or use any `WebFetch`/`WebSearch`/third-party-MCP/cloud tool that *transmits* project content. Share project material with **no one**.
+- Push **only** to the owner's own remote (`origin`, the private GitHub repo). Never add a new remote, fork, gist, paste-bin, or publish anywhere else.
+- Keep work **local**: git, file edits, the emulator, jest. The only acceptable outbound calls are (a) the app's own intended APIs (Google Places, etc.) and (b) the model inference needed to run the assistant. Nothing else.
+- **If a task would require sending project material or a secret off the local machine / outside the owner's own remote → STOP and ask first.** Default to local + private.
+
+**Attribution / legal**
+- The `Co-Authored-By: Claude Opus … <noreply@anthropic.com>` commit trailer is **approved** and may stay. It is non-functional placeholder metadata (transmits nothing) and is **cosmetic attribution only — it does not transfer IP, grant rights, or create any obligation.** Output ownership follows the owner's Anthropic commercial terms. (Agents are not lawyers; flag, don't opine on, real legal questions.)
+
+---
+
 ## Product Vision
 
 Voyara is the **only travel planner built for multi-family group travel**. The core insight no competitor has: when multiple families travel together, expenses don't split equally per person — accommodation splits by rooms, transit splits by family size. Voyara tracks this automatically.

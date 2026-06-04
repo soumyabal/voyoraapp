@@ -43,6 +43,17 @@ const TILES = [
 
 function tileKey(t) { return `${t.type}:${t.subtype || ''}` ; }
 
+// The 5 transport sub-modes collapse under ONE primary "Transport" tile, so the
+// top row is the 4 mental categories of a trip (Activity/Meal/Stay/Transport) and
+// the modes (✈️🚗🚂🚢⛽) reveal inline only when Transport is chosen.
+const TRANSPORT_MODES = TILES.filter(t => t.type === 'transport');
+const PRIMARY_TYPES = [
+  TILES.find(t => t.type === 'activity'),
+  TILES.find(t => t.type === 'food'),
+  TILES.find(t => t.type === 'stay'),
+  { type: 'transport', subtype: 'car', icon: '🚗', label: 'Transport', color: '#3b82f6' },
+];
+
 // ─── Outlook-style time picker ────────────────────────────────────────────────
 const SLOT_H = 44;
 const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
@@ -531,29 +542,57 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
             showsVerticalScrollIndicator={false}
           >
 
-            {/* ── Type grid ── */}
+            {/* ── Type — 4 categories; Transport expands its modes inline ── */}
             <Text style={s.sectionLabel}>TYPE</Text>
             <View style={s.tileGrid}>
-              {TILES.map(t => {
-                const active = tileKey(t) === tileKey(tile);
+              {PRIMARY_TYPES.map(p => {
+                const active = p.type === 'transport' ? tile.type === 'transport' : tileKey(p) === tileKey(tile);
                 return (
                   <TouchableOpacity
-                    key={tileKey(t)}
-                    style={[s.tile, active && { borderColor: t.color, backgroundColor: t.color + '18' }]}
+                    key={p.type}
+                    style={[s.tile, active && { borderColor: p.color, backgroundColor: p.color + '18' }]}
                     onPress={() => {
-                      setTile(t);
-                      // Pick a type → prefill an editable name, so the field is
-                      // satisfied without typing. Skipped once the user types their own.
-                      if (!nameTouched) setName(t.label);
+                      // Transport keeps the last-picked mode (default Drive); the rest set their type.
+                      const next = p.type === 'transport'
+                        ? (tile.type === 'transport' ? tile : TILES.find(t => t.subtype === 'car'))
+                        : p;
+                      setTile(next);
+                      // Prefill an editable name from the type so the field is satisfied without typing.
+                      if (!nameTouched) setName(next.label);
                     }}
                     activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={p.type === 'transport' ? 'Transport, choose a mode' : p.label}
                   >
-                    <Text style={s.tileIcon}>{t.icon}</Text>
-                    <Text style={[s.tileLabel, active && { color: t.color, fontWeight: '700' }]}>{t.label}</Text>
+                    <Text style={s.tileIcon}>{p.icon}</Text>
+                    <Text style={[s.tileLabel, active && { color: p.color, fontWeight: '700' }]}>{p.label}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
+            {/* Transport modes — revealed only when Transport is the chosen type */}
+            {tile.type === 'transport' && (
+              <View style={s.subTypeRow}>
+                {TRANSPORT_MODES.map(t => {
+                  const active = tileKey(t) === tileKey(tile);
+                  return (
+                    <TouchableOpacity
+                      key={tileKey(t)}
+                      style={[s.subTypeChip, active && { borderColor: t.color, backgroundColor: t.color + '18' }]}
+                      onPress={() => { setTile(t); if (!nameTouched) setName(t.label); }}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={t.label}
+                    >
+                      <Text style={s.subTypeIcon}>{t.icon}</Text>
+                      <Text style={[s.subTypeLabel, active && { color: t.color, fontWeight: '700' }]}>{t.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
 
             {/* ── Name ── (optional — defaults from the type if left blank) */}
             <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>
@@ -565,7 +604,6 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               onChangeText={v => { setName(v); setNameTouched(true); }}
               placeholder={tile.type === 'transport' ? `e.g. ${tile.label} to Paris` : tile.type === 'stay' ? 'e.g. Marriott Downtown' : tile.type === 'food' ? 'e.g. Breakfast at hotel' : 'e.g. Visit Eiffel Tower'}
               placeholderTextColor={colors.muted}
-              autoFocus={!isEdit}
               selectTextOnFocus
               returnKeyType="next"
             />
@@ -661,39 +699,40 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                 </ScrollView>
 
                 <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>WHEN</Text>
-                <View style={s.slotGrid}>
+                {/* One compact pill row (was a 2×2 grid). The selected slot's smart
+                    time + fullness show on the meta line below; others carry a
+                    fullness dot. Tapping still sets the gap-aware suggested time. */}
+                <View style={s.slotPillRow}>
                   {SLOTS.map(slot => {
                     const count    = allDays ? 0 : getSlotCount(trip, dayIdx, slot.key);
                     const suggested= allDays ? slot.defaultTime : getSuggestedTime(trip, dayIdx, slot.key, needMins);
                     const isActive = slotKey === slot.key;
-                    const isLate   = (trip.families || []).some(f => f.wakeTime === 'late') && slot.key === 'morning';
-                    // Fullness hint only — never blocks. Trip Checker flags real conflicts.
-                    const fill     = allDays ? s.slotFree : count === 0 ? s.slotFree : count <= 2 ? s.slotSome : s.slotBusy;
+                    const dotColor = allDays ? null : count === 0 ? '#22c55e' : count <= 2 ? '#86efac' : '#fb923c';
                     return (
                       <TouchableOpacity
                         key={slot.key}
-                        style={[s.slotBtn, fill, isActive && s.slotBtnActive]}
-                        onPress={() => {
-                          setSlotKey(slot.key);
-                          setTime(suggested);
-                        }}
+                        style={[s.slotPill, isActive && s.slotPillActive]}
+                        onPress={() => { setSlotKey(slot.key); setTime(suggested); }}
                         activeOpacity={0.7}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isActive }}
+                        accessibilityLabel={allDays
+                          ? `${slot.label}, around ${slot.defaultTime}`
+                          : `${slot.label}, suggested ${suggested}, ${count === 0 ? 'open' : `${count} ${count === 1 ? 'activity' : 'activities'} planned`}`}
                       >
-                        <View style={s.slotBtnTop}>
-                          <Text style={s.slotEmoji}>{slot.emoji}</Text>
-                          <Text style={[s.slotLabel, isActive && { color: colors.primary }]}>{slot.label}</Text>
-                          {isLate && <Text style={s.slotOwl}>🦉</Text>}
-                        </View>
-                        <Text style={s.slotMeta}>{allDays ? `~${slot.defaultTime}` : `Add at ${suggested}`}</Text>
-                        {!allDays && (
-                          <Text style={s.slotCount}>
-                            {count === 0 ? 'Open' : `${count} ${count === 1 ? 'activity' : 'activities'}`}
-                          </Text>
-                        )}
+                        <Text style={s.slotPillEmoji}>{slot.emoji}</Text>
+                        <Text style={[s.slotPillLabel, isActive && { color: colors.primary, fontWeight: '800' }]} numberOfLines={1}>{slot.label}</Text>
+                        {dotColor && !isActive && <View style={[s.slotDot, { backgroundColor: dotColor }]} />}
                       </TouchableOpacity>
                     );
                   })}
                 </View>
+                {(() => {
+                  const lbl = SLOTS.find(sl => sl.key === slotKey)?.label || '';
+                  if (allDays) return <Text style={s.slotPillMeta}>~{SLOTS.find(sl => sl.key === slotKey)?.defaultTime} in {lbl.toLowerCase()} each day</Text>;
+                  const c = getSlotCount(trip, dayIdx, slotKey);
+                  return <Text style={s.slotPillMeta}>{lbl} · Add at {getSuggestedTime(trip, dayIdx, slotKey, needMins)} · {c === 0 ? 'Open' : `${c} ${c === 1 ? 'activity' : 'activities'}`}</Text>;
+                })()}
                 {allDays && (
                   <Text style={s.allDaysHint}>
                     Adds “{name.trim() || 'this activity'}” to all {(trip.days || []).length} days at the best open time in {SLOTS.find(sl => sl.key === slotKey)?.label?.toLowerCase()} each day.
@@ -979,6 +1018,19 @@ const s = StyleSheet.create({
   },
   tileIcon:  { fontSize: 22 },
   tileLabel: { fontSize: 10, color: colors.muted, fontWeight: '600', textAlign: 'center' },
+  // Transport sub-mode chips (revealed when Transport is the chosen type)
+  subTypeRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  subTypeChip:  { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.full, backgroundColor: '#fff', paddingHorizontal: spacing.md, paddingVertical: 7 },
+  subTypeIcon:  { fontSize: 14 },
+  subTypeLabel: { fontSize: 12, color: colors.muted, fontWeight: '600' },
+  // Compact WHEN slot pills (one row; replaced the tall 2×2 grid)
+  slotPillRow:   { flexDirection: 'row', gap: spacing.sm },
+  slotPill:      { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.lg, backgroundColor: '#fff', paddingVertical: 8, minHeight: 52 },
+  slotPillActive:{ borderColor: colors.primary, borderWidth: 2, backgroundColor: colors.primary + '12' },
+  slotPillEmoji: { fontSize: 16 },
+  slotPillLabel: { fontSize: 11, fontWeight: '700', color: colors.text },
+  slotDot:       { width: 6, height: 6, borderRadius: 3, marginTop: 1 },
+  slotPillMeta:  { fontSize: 13, fontWeight: '700', color: colors.primary, marginTop: spacing.sm, textAlign: 'center' },
 
   // Name
   nameInput: {

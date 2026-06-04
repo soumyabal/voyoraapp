@@ -18,7 +18,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, View, Text, Image, Animated, Easing, TouchableOpacity, Dimensions, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { buildTripFilm } from '../utils/tripFilm';
+
+// The music bed is ORIGINAL — synthesized from scratch by scripts/gen-music.js (no sample,
+// no third-party track), so there is nothing to license or infringe. In-app only.
+const BED = require('../../assets/playtrip-bed.wav');
 
 const { width: W, height: H } = Dimensions.get('window');
 const BAR = Math.round(H * 0.055);     // letterbox bar height
@@ -39,8 +44,33 @@ export default function PlayTripModal({ visible, trip, onClose }) {
   const fade = useRef(new Animated.Value(0)).current;  // current layer cross-fade
   const kb = useRef(new Animated.Value(0)).current;    // ken-burns progress 0→1
   const timer = useRef(null);
+  const player = useAudioPlayer(BED);
 
   useEffect(() => { if (visible) setIdx(0); }, [visible]);
+
+  // Music bed — loop + gentle fade-in while the film plays, stop on close. Wrapped so any
+  // audio hiccup never breaks the film. Plays in silent mode (it's an explicit Play tap).
+  useEffect(() => {
+    if (!visible) return undefined;
+    let ramp;
+    try {
+      setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+      player.loop = true;
+      player.volume = 0;
+      player.seekTo(0);
+      player.play();
+      let v = 0;
+      ramp = setInterval(() => {
+        v = Math.min(0.55, v + 0.05);
+        try { player.volume = v; } catch (e) { /* ignore */ }
+        if (v >= 0.55) clearInterval(ramp);
+      }, 90);
+    } catch (e) { /* film still plays without music */ }
+    return () => {
+      clearInterval(ramp);
+      try { player.pause(); player.seekTo(0); } catch (e) { /* ignore */ }
+    };
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!visible || !slides.length) return undefined;

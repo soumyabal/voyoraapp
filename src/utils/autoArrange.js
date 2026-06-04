@@ -26,7 +26,7 @@
  *        summary    : { placed, unplaced, daysUsed }
  */
 import { timeToMin, minToTime } from './slots';
-import { estimateDuration, validateTrip } from './tripValidator';
+import { estimateDuration, validateTrip, dayRouteAnchor } from './tripValidator';
 import { travelLeg } from './geo';
 import { weekdayOf, dayIntervals } from './hours';
 
@@ -184,7 +184,10 @@ export function autoArrange(basket, trip, opts = {}) {
   const loadMin = days.map((_, i) =>
     work[i].activities.filter(a => a.type !== 'note').reduce((s, a) => s + estimateDuration(a), 0));
   const wasEmpty = days.map((_, i) => substantialOn(i) === 0);   // captured before we place
-  const dayAnchor = i => work[i].activities.find(a => a.type === 'stay' && a.lat != null) || null;
+  // Anchor each day's route to where you wake (last night's hotel; Day 1 → trip
+  // origin), falling back to tonight's hotel then the day's first located stop —
+  // so middle days cluster correctly, not just the check-in day.
+  const dayAnchor = i => dayRouteAnchor(trip, i, work[i].activities);
 
   // Reserve a draft into a day's plan (capacity + load bookkeeping only;
   // exact time is assigned later once a day's full set is known).

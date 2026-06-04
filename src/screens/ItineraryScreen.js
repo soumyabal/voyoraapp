@@ -10,7 +10,7 @@ import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
 import { fmt, fmtM, getActivityIcon, uid } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost } from '../utils/costs';
-import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight } from '../utils/tripValidator';
+import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { scheduleDay } from '../utils/autoArrange';
 import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, isOpenAt, hoursLabel } from '../utils/hours';
@@ -597,9 +597,9 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     if (schedulable.length < 2) return;   // nothing to rearrange
     const prev = day.activities;
     const dayRole = currentDay === trip.days.length - 1 ? 'departure' : 'normal';
-    // Day 1 has no prior-night hotel to route from — anchor it to the trip's
-    // starting point so the first stops cluster near where the group arrives.
-    const anchor = currentDay === 0 && trip.origin?.lat != null ? trip.origin : undefined;
+    // Anchor the day's route to where you wake: Day 1 → trip.origin; later days →
+    // the previous night's hotel (derived). So every day clusters correctly.
+    const anchor = dayStartAnchor(trip, currentDay) || undefined;
     const scheduled = scheduleDay(day.activities, { dayRole, date: day.date, anchor });
     setDayActivities(trip.id, currentDay, scheduled);
 

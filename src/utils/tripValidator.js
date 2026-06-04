@@ -224,6 +224,52 @@ export function lodgingForNight(trip, dayIndex) {
   return null;
 }
 
+// ─── Per-day routing anchors ──────────────────────────────────────
+// The geographic points a day's plan routes between: you START where you woke
+// (last night's hotel; Day 1 → the trip's starting point) and END where you sleep
+// tonight (the hotel). Derived from lodgingForNight + trip.origin — no per-day
+// rows, no double-billing. Uniform return shape {lat,lng,label,source} | null, so
+// a future check-in/out-DATE model only changes lodgingForNight's internals, not
+// these callers (auto-arrange, the day router, Google Maps export).
+
+/** A lodgingForNight result → a uniform coord anchor (or null when it has no coords). */
+function stayAnchor(lod, source = 'stay') {
+  const s = lod?.stay;
+  return s && s.lat != null && s.lng != null
+    ? { lat: s.lat, lng: s.lng, label: s.name, source }
+    : null;
+}
+
+/** Where you WAKE on day i: Day 1 → trip.origin; otherwise last night's hotel. */
+export function dayStartAnchor(trip, i) {
+  if (i === 0) {
+    const o = trip?.origin;
+    return o && o.lat != null && o.lng != null
+      ? { lat: o.lat, lng: o.lng, label: o.label, source: 'origin' }
+      : null;
+  }
+  return stayAnchor(lodgingForNight(trip, i - 1));
+}
+
+/** Where you SLEEP on day i: tonight's derived hotel (null when unbooked/home/overnight). */
+export function dayEndAnchor(trip, i) {
+  return stayAnchor(lodgingForNight(trip, i));
+}
+
+/**
+ * Best anchor to route day i's stops around — never throws, degrades gracefully:
+ * where you woke → tonight's hotel → the day's first located stop. `dayActs` is
+ * that day's activity array (for the fallback).
+ */
+export function dayRouteAnchor(trip, i, dayActs = []) {
+  const fromStop = dayActs.find((a) => a.lat != null && a.lng != null);
+  return (
+    dayStartAnchor(trip, i) ||
+    dayEndAnchor(trip, i) ||
+    (fromStop ? { lat: fromStop.lat, lng: fromStop.lng, label: fromStop.name, source: 'stop' } : null)
+  );
+}
+
 // ─── Per-day validation ───────────────────────────────────────────
 
 function validateDay(day, dayIndex, families = []) {

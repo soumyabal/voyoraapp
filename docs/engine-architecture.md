@@ -183,3 +183,57 @@ bolt a *thin, grounded* AI layer on the edges for discovery and natural language
 proposes and the rules always dispose.** First concrete step: `placeScore.js` — it makes today's
 Discover smarter with zero AI and hands the future AI the exact same function to call, cementing
 the spine before any AI lands.
+
+---
+
+## Data tiers — what stays bundled, what moves to a database, when
+
+Two recurring questions, with the boundaries written down so we don't move data prematurely (or
+too late).
+
+### `placeScore.js` is a kernel, not a store — keep it ~250 lines forever
+
+It's stateless math: `score(place, groupProfile, context)` + a handful of tiny pure sub-scorers
+(`qualityScore`, `accessFilter` ♿ hard-filter, `ageFit`, `dietaryFit`, `interestMatch`,
+`distancePenalty`, `hoursFit`, `budgetFit`, `noveltyPenalty`). It stays small because it **holds no
+data** — data arrives as the `place`/`profile` arguments.
+
+- **The one rule that keeps it small:** never put *data* inside it (POI lists, per-city tips,
+  curated dwell-times, a big taxonomy). The only inline data allowed is a small code-cadence
+  taxonomy (interest keywords, `types→activityType` map) — put that in
+  `placeScore.constants.js`, not in the scorer.
+- **Signal you've crossed the line:** a change to `placeScore.js` adds *a place* or *a fact about a
+  place* rather than *a rule about scoring*. That belongs in data/DB, not the kernel.
+- **Payoff:** because it takes data as input and holds none, the scorer is **identical** whether
+  the data comes from the mock today or a Postgres+PostGIS catalog later — you never rewrite it
+  when the data moves.
+
+### Three data stores, three different triggers — don't conflate them
+
+| Store | Today | Move to a DB when… |
+|---|---|---|
+| **Trip state** | Zustand → AsyncStorage (versioned + `migrate`, invariant #7) | Cross-device **sync**, multi-family **collaboration** on one trip, or survive-reinstall is promised. *Not* a size problem (trips are ~1–10 KB; thousands fit). Gated on the **accounts / Phase-2** feature, not on data growth. |
+| **POI / activity catalog** | Live Google Places + the `itineraryPlanner.js` mock (SD/LA/SF) | The **real "move to DB" moment**: when a curated catalog is *queried by geo + category + rating* rather than fetched-by-id. AsyncStorage is a key-value blob — no geo/full-text query — so a server DB with a geo index (Postgres+PostGIS / SQLite+R-tree) is required the instant the catalog is *queryable*. |
+| **Places API cache** | In-memory + per-call cache in `places.js` | API **cost / rate-limits** bite at scale → a shared **server-side** cache (1,000 users searching "Niagara" = 1 upstream call). Pairs with moving the key off the bundle. |
+
+### The decision rule (whichever fires first)
+
+> **Bundle/embed data while it's small, static, and release-cadence-fresh. Move it to a DB the
+> moment it must be (a) _queried_ by the server, (b) _updated faster than you ship a release_,
+> (c) _shared/synced_ across users or devices, or (d) _too big for the bundle_.**
+
+- **(b) usually fires first** — bundled data (`itineraryPlanner.js`) can only change on a new build.
+  The day seasonal hours / prices / "what's new" must update *between* releases, that data must be
+  server-side. Static facts (a museum's normal hours) can stay bundled longer.
+- **(d) bundle size** — one curated city as JSON is fine (that's `itineraryPlanner.js`). Tens of
+  cities with hours/photo refs = tens of MB of bloat → DB. A national catalog is GB → never bundle.
+- **AsyncStorage's ~few-MB ceiling is NOT the pressure point** — trips are tiny. Move trip data for
+  **sync/collaboration**, never for size.
+
+### Sequence for Voyara
+
+`placeScore.js` (kernel — now, no backend) → **backend + catalog DB + AI keys (one Phase-2
+milestone — they arrive together, not separately)** → trip-sync DB (later, gated on `accounts`).
+"Move data to a DB" and "stand up the FastAPI backend" are the **same milestone**, triggered by the
+first feature that needs a *queryable, between-release-fresh* catalog (generative fill) — which is
+also the feature that needs server-side AI keys.

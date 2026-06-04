@@ -16,6 +16,7 @@ import { colors, spacing, radius, typography, shadow } from '../theme';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
 import { weekdayOf, hoursLabel } from '../utils/hours';
 import { scorePlace } from '../utils/placeScore';
+import { reverseGeocode } from '../utils/places';
 import { run as buildGroupProfile } from '../agents/FamilyProfileAgent';
 import { WebView } from 'react-native-webview';
 import Icon from '../components/ui/Icon';

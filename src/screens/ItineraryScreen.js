@@ -2378,10 +2378,6 @@ const styles = StyleSheet.create({
   reorderBtnDisabled: {
     opacity: 0.2,
   },
-  reorderBtnText: {
-    fontSize: 10,
-    color: colors.textSecondary,
-  },
   slotEmpty: {
     marginHorizontal: spacing.xxl,
     marginBottom: spacing.sm,

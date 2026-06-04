@@ -1213,7 +1213,6 @@ const ch = StyleSheet.create({
   typingProgress: { ...typography.caption, color: 'rgba(255,255,255,0.45)', marginTop: 4 },
 
   inputBar:      { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
-  inputBar:       { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
   inputWrap:      { flex: 1, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 999, paddingHorizontal: 16, paddingVertical: 12 },
   inputWrapActive:{ borderColor: '#e86c3a' },
   input:          { fontSize: 15, color: '#fff', padding: 0, margin: 0 },

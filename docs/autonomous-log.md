@@ -16,3 +16,5 @@
 - 2026-06-04 — "Today" lens: now/next banner + jump-to-today for active trips (engine+UI; active visuals pending an active-dated trip) 
 - 2026-06-04 — tiring_day Trip-Check tip (few-but-long day, hours-on-your-feet) (dfd1449)
 - 2026-06-04 — fixed 3 real lint-surfaced bugs: Discover reverseGeocode crash + 2 dead-style dupe keys (83b58de)
+- 2026-06-04 — feature buckets doc: all forward work organized before/during/after the trip (6f32871)
+- 2026-06-04 — DURING: per-family running tally on the Today view (calcFamilyBalances, 4 tests) (21f73fc); status pill re-verified on device, active-state render still pending an active-dated trip

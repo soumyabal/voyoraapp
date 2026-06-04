@@ -454,7 +454,7 @@ export function autoArrange(basket, trip, opts = {}) {
       cursor = start + need + BUFFER_MIN;
     }
 
-    added[i].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    added[i].sort((a, b) => timeToMin(a.time || '99:99') - timeToMin(b.time || '99:99'));
   }
 
   // 6) Validate the MERGED result so the preview can surface any remaining
@@ -594,7 +594,7 @@ export function scheduleDay(activities, opts = {}) {
     cursor = start + need + (leg ? Math.max(BUFFER_MIN, leg.min) : BUFFER_MIN);
   });
 
-  return all.sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+  return all.sort((a, b) => timeToMin(a.time || '99:99') - timeToMin(b.time || '99:99'));
 }
 
 /**
@@ -687,7 +687,7 @@ export function comfortPass(activities, opts = {}) {
     prev = a;
   }
 
-  const adjusted = all.sort((x, y) => (x.time || '99:99').localeCompare(y.time || '99:99'));
+  const adjusted = all.sort((x, y) => timeToMin(x.time || '99:99') - timeToMin(y.time || '99:99'));
   return { adjusted, changes, unresolved };
 }
 
@@ -733,11 +733,15 @@ export function planDay(activities, opts = {}) {
 
   // Over-capacity: substantial activities beyond the pace cap (meals/stays/transport/
   // notes don't count). Keep the earlier-scheduled ones; report the rest. Not dropped.
+  // A LOCKED stop is explicit user intent (they pinned it) — never flag it as overflow,
+  // same as we never move it; reporting a pinned stop as "may not fit" is noise.
   const cap = PACE_CAP[opts.pace] || PACE_CAP.moderate;
   const substantial = scheduled.filter((a) =>
     a.status !== 'skipped' && a.type !== 'note' && a.type !== 'stay' &&
     a.type !== 'food' && a.type !== 'transport');
-  const overflow = substantial.slice(cap).map((a) => ({ actId: a.id, name: a.name, reason: 'capacity' }));
+  const overflow = substantial.slice(cap)
+    .filter((a) => !a.timeLocked)
+    .map((a) => ({ actId: a.id, name: a.name, reason: 'capacity' }));
 
   // Unresolvable closures: re-timing can't open a venue that's dark all day (non-
   // seasonal) or permanently closed. Reuse validateTrip so the rule logic is shared

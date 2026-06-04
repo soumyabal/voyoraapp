@@ -44,3 +44,35 @@ describe('planDay — closed handling', () => {
     expect(r.unresolved).toHaveLength(0);
   });
 });
+
+describe('planDay — a locked stop is intent, not overflow', () => {
+  test('a LOCKED substantial stop past the cap is never reported as capacity overflow', () => {
+    // relaxed cap = 3. Four sights, the LATEST one pinned by the user → it lands in the
+    // slice(cap) tail, but it's their booking, not an over-pack. Must NOT be flagged.
+    const acts = [
+      act('A', '09:00'), act('B', '11:00'), act('C', '13:00'),
+      act('Booked Tour', '20:00', { timeLocked: true }),
+    ];
+    const r = planDay(acts, { date: FRI, pace: 'relaxed' });
+    expect(r.overflow.find((o) => o.actId === 'Booked Tour')).toBeFalsy();
+    expect(r.scheduled.find((a) => a.id === 'Booked Tour').time).toBe('20:00'); // locked, unmoved
+  });
+});
+
+describe('planDay — unpadded times sort chronologically (not as strings)', () => {
+  test('a single-digit-hour time orders before a two-digit one (no "9:30 after 10:00")', () => {
+    // Manually-entered "9:30" used to localeCompare AFTER "10:00" → mis-sequenced + drift.
+    const acts = [act('Early', '9:30'), act('Late', '10:00')];
+    const r = planDay(acts, { date: FRI, pace: 'moderate' });
+    const early = r.scheduled.findIndex((a) => a.id === 'Early');
+    const late = r.scheduled.findIndex((a) => a.id === 'Late');
+    expect(early).toBeLessThan(late); // chronological, not "1" < "9"
+  });
+
+  test('idempotent even with unpadded input times (no string-sort drift)', () => {
+    const acts = [act('A', '9:00'), act('B', '13:30'), act('C', '16:00')];
+    const first = planDay(acts, { date: FRI, pace: 'moderate' });
+    const second = planDay(first.scheduled, { date: FRI, pace: 'moderate' });
+    expect(second.changed).toBe(false);
+  });
+});

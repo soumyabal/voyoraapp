@@ -644,7 +644,10 @@ export function comfortPass(activities, opts = {}) {
       // first stop at 08:00".) Short hotel→stop legs leave the morning untouched.
       const leg = travelLeg(opts.anchor, a);
       if (leg) {
-        const need = DEPART_MIN + Math.max(0, leg.min);
+        // Cap the push at mid-afternoon: a very long leg is realistically a flight (the
+        // straight-line DRIVE estimate is meaningless there), so don't shove the first stop
+        // to a 25h-drive time — assume you've arrived by ~15:00 at the latest.
+        const need = Math.min(DEPART_MIN + Math.max(0, leg.min), 15 * 60);
         if (need > required) required = need;
       }
     }

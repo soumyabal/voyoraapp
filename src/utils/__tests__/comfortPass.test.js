@@ -126,6 +126,14 @@ describe('comfortPass — the first stop clears the drive from where the day STA
     expect(comfortPass(acts, {}).changes).toEqual([]);
   });
 
+  test('a flight-distance anchor caps the first stop at ~15:00 (not a 25h-drive time)', () => {
+    const CHI = { lat: 41.88, lng: -87.63 };
+    const FLA = { lat: 28.0, lng: -81.7 };   // ~1500 km — a flight, not a drive
+    const acts = [{ id: 's', type: 'activity', name: 'Park', time: '08:00', ...FLA }];
+    const { adjusted } = comfortPass(acts, { anchor: CHI });
+    expect(timeToMin(adjusted.find(a => a.id === 's').time)).toBe(15 * 60);   // capped, never wrapped/day_full
+  });
+
   test('a LOCKED early first stop with a far anchor is flagged tight, not moved', () => {
     const acts = [{ id: 's', type: 'activity', name: 'Maple Bay', time: '08:00', timeLocked: true, ...DEST }];
     const { adjusted, unresolved } = comfortPass(acts, { anchor: HQ });

@@ -435,11 +435,19 @@ export function scheduleDay(activities, opts = {}) {
     addInterval(occ, start, need);
   };
 
+  // 0. LOCKED stops (a booking, or a time the user set) are fixed anchors: reserve
+  //    their slot up-front and exclude them from every placement pass below, so the
+  //    rest of the day flows AROUND them and they never move. (Same mechanic that has
+  //    always anchored transport-with-a-time — now generalized to any locked stop.)
+  const isLocked = a => a.timeLocked && a.time;
+  sched.filter(isLocked)
+       .forEach(a => addInterval(occ, timeToMin(a.time), Math.max(BUFFER_MIN, estimateDuration(a))));
+
   // 1. Transport with a user-set time anchors the day (departures/arrivals).
-  sched.filter(a => a.type === 'transport' && a.time)
+  sched.filter(a => a.type === 'transport' && a.time && !isLocked(a))
        .forEach(a => addInterval(occ, timeToMin(a.time), Math.max(BUFFER_MIN, estimateDuration(a))));
   // 2. Stays → check-in window (or check-out on the departure day).
-  sched.filter(a => a.type === 'stay')
+  sched.filter(a => a.type === 'stay' && !isLocked(a))
        .forEach(a => place(a, dayRole === 'departure' ? WINDOWS.checkout : WINDOWS.checkin));
   // 3. Meals → breakfast / lunch / dinner. Each restaurant lands in a meal it is
   //    actually OPEN for (hours of operation), unless the user pinned a meal
@@ -448,7 +456,7 @@ export function scheduleDay(activities, opts = {}) {
   //    when hours are unknown we keep the classic lunch-first-then-dinner order.
   const wd = weekdayOf(opts.date);
   const mealCount = { breakfast: 0, lunch: 0, dinner: 0 };
-  const foods = sched.filter(a => a.type === 'food');
+  const foods = sched.filter(a => a.type === 'food' && !isLocked(a));
   const mealOf = new Map();
   // Pass 1: explicit user choice, or a clear breakfast/brunch by name.
   foods.forEach(a => {
@@ -471,7 +479,7 @@ export function scheduleDay(activities, opts = {}) {
   });
   foods.forEach(a => place(a, WINDOWS[mealOf.get(a)]));
   // 4. Window-anchored activities (sunrise / sunset / nightlife).
-  const acts = sched.filter(a => a.type === 'activity');
+  const acts = sched.filter(a => a.type === 'activity' && !isLocked(a));
   const windowFor = a => SUNRISE_RE.test(text(a)) ? WINDOWS.sunrise
                        : SUNSET_RE.test(text(a))   ? WINDOWS.sunset
                        : NIGHTLIFE_RE.test(text(a)) ? WINDOWS.nightlife : null;

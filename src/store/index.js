@@ -842,6 +842,20 @@ const useStore = create(
         }),
       })),
 
+      // Pin/unpin an exact time. A locked stop is a fixed anchor "Plan my day" never
+      // moves (a booking, or a time you set). The lock pin on the card toggles this.
+      toggleActivityLock: (tripId, actId) => set(s => ({
+        trips: s.trips.map(t => t.id !== tripId ? t : {
+          ...t,
+          days: t.days.map(d => ({
+            ...d,
+            activities: d.activities.map(a =>
+              a.id !== actId ? a : { ...a, timeLocked: !a.timeLocked }
+            ),
+          })),
+        }),
+      })),
+
       saveDraftPlan: (tripId, dayActivities) => set(s => ({
         trips: s.trips.map(t => t.id !== tripId ? t : {
           ...t,
@@ -1004,12 +1018,16 @@ const useStore = create(
       // shape changes (the store.test.js shape guard will fail to remind you).
       // Previously there was NO version → the only way to change shape was to
       // rename the key, which WIPES every user's trips. Versioning fixes that.
-      version: 3,
+      version: 4,
       // v0 (unversioned, older builds) → v1: backfill optional trip fields.
       // v1 → v2: added per-day `day.nightPlan` (hotel-less-but-covered nights).
       // v2 → v3: `day.nightPlan` widened from a STRING to { type, label?, lat?, lng? }
       // so a friends/camping night can carry an optional address that anchors the
       // next morning's drive. Old string values are wrapped to { type: <string> }.
+      // v3 → v4: activities gained optional `timeLocked` (a fixed-time anchor) and stays
+      // gained optional `checkInTime`/`checkOutTime`. All are read-time-defaulted (absent
+      // → unlocked / the standard 15:00·11:00 hotel times), so no data backfill is needed —
+      // this bump documents the shape change and keeps the version invariant honest.
       migrate: (state) => {
         if (!state) return state;
         state.trips = (state.trips || []).map((t) => ({

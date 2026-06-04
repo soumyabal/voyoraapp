@@ -502,7 +502,7 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
 }
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
-  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto, markPlanDayNoteSeen, setNightPlan } = useStore();
+  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto, markPlanDayNoteSeen, setNightPlan, toggleActivityLock } = useStore();
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
   const [manualSeed,            setManualSeed]            = useState(null);   // {name?,address?,lat?,lng?,tile?} prefill when manual is opened from the Discover bridge / a dropped pin
@@ -816,6 +816,16 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     markActivityStatus(trip.id, act.id, next);
     showUndo(next === 'skipped' ? "Marked as didn't do" : 'Status cleared',
              next === 'skipped' ? 'close-circle' : 'ellipse-outline', act.id, prev);
+  };
+
+  // Pin/unpin an exact time — a locked stop is a fixed anchor "Plan my day" won't move.
+  const toggleLock = (act) => {
+    toggleActivityLock(trip.id, act.id);
+    showUndoAction(
+      act.timeLocked ? `${act.time} unlocked · free to move` : `🔒 ${act.time} locked · won't be moved`,
+      act.timeLocked ? 'lock-open-outline' : 'lock-closed',
+      () => toggleActivityLock(trip.id, act.id),
+    );
   };
 
   // Long-press → move activity to a different time slot (same day)
@@ -1297,6 +1307,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                           onDelete={() => deleteWithUndo(act)}
                           onMoveRequest={() => setMovingAct(act)}
                           onSlotMove={() => openSlotMove(act)}
+                          onToggleLock={() => toggleLock(act)}
                           onExploreNearby={() => exploreNearby(act)}
                         />
                         </>
@@ -1554,7 +1565,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   );
 }
 
-function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onMarkSkipped, onEdit, onDelete, onMoveRequest, onSlotMove, onExploreNearby }) {
+function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onMarkSkipped, onEdit, onDelete, onMoveRequest, onSlotMove, onToggleLock, onExploreNearby }) {
   const status    = act.status ?? null;
   const isDone    = status === 'done';
   const isSkipped = status === 'skipped';
@@ -1641,6 +1652,7 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
             {!dimmed && (
               <Text style={styles.actEyebrow} numberOfLines={1}>
                 <Text style={styles.actEyebrowTime}>{act.time}</Text>
+                {act.timeLocked ? '  🔒' : ''}
                 {act.type === 'transport' && !!act.arriveTime ? ` → ${act.arriveTime}` : ''}
                 {durationLabel ? `  ·  ~${durationLabel}` : ''}
               </Text>
@@ -1775,6 +1787,11 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
             <TouchableOpacity onPress={onMoveRequest} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
               <Icon name="calendar-outline" size={15} color={colors.subtle} />
             </TouchableOpacity>
+            {act.time && act.type !== 'note' && act.status !== 'done' && act.status !== 'skipped' && (
+              <TouchableOpacity onPress={onToggleLock} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
+                <Icon name={act.timeLocked ? 'lock-closed' : 'lock-open-outline'} size={15} color={act.timeLocked ? colors.primary : colors.subtle} />
+              </TouchableOpacity>
+            )}
             <Text style={styles.swipeHintText}>← swipe</Text>
           </View>
         </View>

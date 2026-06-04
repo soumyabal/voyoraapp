@@ -89,6 +89,26 @@ describe('scheduleDay', () => {
     expect(new Set(times).size).toBe(times.length);      // distinct (spaced)
   });
 
+  test('a LOCKED time is a fixed anchor — never re-windowed; the rest flows around it', () => {
+    // Without timeLocked, scheduleDay would pull this food into the lunch window (12:30).
+    const out = scheduleDay([
+      a('Dinner Reservation', 'food', { time: '19:00', timeLocked: true }),
+      a('Museum', 'activity'),
+    ]);
+    expect(out.find(x => x.name === 'Dinner Reservation').time).toBe('19:00'); // immovable
+    expect(out.find(x => x.name === 'Museum').time >= '09:00').toBe(true);      // still placed
+  });
+
+  test('a locked stop blocks its slot — a flowed stop does not overlap it', () => {
+    const out = scheduleDay([
+      a('Locked Tour', 'activity', { time: '10:00', timeLocked: true, durationMins: 90 }),
+      a('Other', 'activity', { durationMins: 60 }),
+    ]);
+    expect(out.find(x => x.name === 'Locked Tour').time).toBe('10:00');
+    const other = out.find(x => x.name === 'Other').time;
+    expect(other === '09:00' || other >= '11:30').toBe(true); // before, or after the locked block
+  });
+
   test('notes and skipped items are preserved', () => {
     const out = scheduleDay([
       a('Rest day note', 'note', { time: '11:00' }),

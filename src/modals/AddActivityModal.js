@@ -339,6 +339,11 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
   const [name, setName]           = useState('');
   const [nameTouched, setNameTouched] = useState(false);  // user typed their own → don't auto-fill from the type
   const [time, setTime]           = useState(defaultTime || '09:00');
+  // timeLocked: an EXACT time the user picked (vs a soft slot suggestion) is a fixed
+  // anchor "Plan my day" never moves. Picking a time via the time picker sets it;
+  // choosing a slot pill clears it (slots are soft "around this time"). User-overridable.
+  const [timeExplicit, setTimeExplicit] = useState(false);
+  const pickExactTime = (t) => { setTime(t); setTimeExplicit(true); };
   const [arriveTime, setArriveTime] = useState('');
   const [detail, setDetail]       = useState('');
 
@@ -381,6 +386,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setName(editActivity.name || '');
       setNameTouched(true);   // existing name — never auto-overwrite on a type change
       setTime(editActivity.time || '09:00');
+      setTimeExplicit(!!editActivity.timeLocked);   // preserve an existing lock
       setArriveTime(editActivity.arriveTime || '');
       setDetail(editActivity.detail || '');
       setCostMode(editActivity.costMode || 'per_person');
@@ -510,15 +516,15 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
     };
 
     if (isEdit) {
-      updateActivity(trip.id, editActivity.id, { ...base, time });
+      updateActivity(trip.id, editActivity.id, { ...base, time, timeLocked: timeExplicit });
     } else if (allDays) {
-      // Add to every day, smart-placing in the chosen slot so it fits each day.
+      // Add to every day, smart-placing in the chosen slot so it fits each day → soft.
       (trip.days || []).forEach((_, i) => {
         const t = getSuggestedTime(trip, i, slotKey, needMins);
-        addActivity(trip.id, i, { ...base, time: t, id: uid() });
+        addActivity(trip.id, i, { ...base, time: t, timeLocked: false, id: uid() });
       });
     } else {
-      addActivity(trip.id, dayIdx, { ...base, time, id: uid() });
+      addActivity(trip.id, dayIdx, { ...base, time, timeLocked: timeExplicit, id: uid() });
     }
     onClose();
   };
@@ -652,6 +658,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                           setAllDays(false);
                           setDayIdx(i);
                           setTime(getSuggestedTime(trip, i, slotKey, needMins));
+                          setTimeExplicit(false);
                         }}
                         activeOpacity={0.7}
                       >
@@ -676,7 +683,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                       <TouchableOpacity
                         key={slot.key}
                         style={[s.slotPill, isActive && s.slotPillActive]}
-                        onPress={() => { setSlotKey(slot.key); setTime(suggested); }}
+                        onPress={() => { setSlotKey(slot.key); setTime(suggested); setTimeExplicit(false); }}
                         activeOpacity={0.7}
                         accessibilityRole="button"
                         accessibilityState={{ selected: isActive }}
@@ -712,7 +719,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               <View style={s.inlineRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.sectionLabel}>DEPARTS</Text>
-                  <TimePickerInput value={time} onChange={setTime} />
+                  <TimePickerInput value={time} onChange={pickExactTime} />
                 </View>
                 <View style={s.arrowSep}>
                   <Text style={s.arrowSepText}>→</Text>
@@ -736,7 +743,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               <View style={s.inlineRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.sectionLabel}>TIME</Text>
-                  <TimePickerInput value={time} onChange={setTime} />
+                  <TimePickerInput value={time} onChange={pickExactTime} />
                 </View>
               </View>
             )}
@@ -891,7 +898,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                   <View style={[s.inlineRow, { marginTop: spacing.lg }]}>
                     <View style={{ flex: 1 }}>
                       <Text style={s.sectionLabel}>TIME <Text style={s.optional}>(fine-tune)</Text></Text>
-                      <TimePickerInput value={time} onChange={setTime} />
+                      <TimePickerInput value={time} onChange={pickExactTime} />
                     </View>
                   </View>
                 )}

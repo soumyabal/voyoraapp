@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      # Blocking: the test suite (money path + validator golden snapshots) must stay green.
+      - name: Test
+        run: npx jest --ci
+      # Non-blocking until the ~99-finding lint baseline is cleaned incrementally.
+      - name: Lint (report only)
+        run: npx eslint . || true

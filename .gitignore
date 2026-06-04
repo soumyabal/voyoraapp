@@ -43,7 +43,8 @@ src/config.js
 
 # typescript
 *.tsbuildinfo
-*.config.js
+# NOTE: do NOT ignore tooling configs (babel/eslint/metro) — they're needed for
+# jest + CI on a fresh checkout. Only src/config.js (API keys) is ignored, above.
 
 # generated native folders
 /ios

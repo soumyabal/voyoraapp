@@ -18,3 +18,4 @@
 - 2026-06-04 — fixed 3 real lint-surfaced bugs: Discover reverseGeocode crash + 2 dead-style dupe keys (83b58de)
 - 2026-06-04 — feature buckets doc: all forward work organized before/during/after the trip (6f32871)
 - 2026-06-04 — DURING: per-family running tally on the Today view (calcFamilyBalances, 4 tests) (21f73fc); status pill re-verified on device, active-state render still pending an active-dated trip
+- 2026-06-04 — BEFORE: "Plan my day" now makes a day TIME-feasible (comfortPass — clears the meal→far-sight travel leg scheduleDay's per-type passes miss) + a PREVIEW-DIFF the user Applies/Discards (panel-reviewed, user chose preview). ✓ verified on device; device testing caught & fixed a midnight-wrap bug (29:50→05:50) → now honest "won't fit in one day". 156 tests

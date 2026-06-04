@@ -19,8 +19,10 @@ within dates · **after** = today > endDate. Most value here needs **no backend*
 - Lodging model (one check-in carries nights) · "How's tonight handled?" night-plan resolver · optional night address → anchors next morning · overnight-arrival anchor
 - Trip Check rules incl. `unbooked_night`, `tiring_day` · per-family lodging split + "adjust if rooms differ" + balance-guard
 - Planner engine: `scheduleDay`/auto-arrange · **2-opt** route refinement · phase-correct day landing
+- **"Plan my day" comfort pass** — makes a day TIME-feasible (clears the meal→far-sight travel leg) + a **preview-diff** you Apply/Discard; honest "won't fit in one day" when stops are too far apart
 
 **Queued ▶ (no backend)**
+- **`timeLocked` lock-on-edit** — a time you set (or a booking) survives "Plan my day" untouched; comfort pass already respects the flag, nothing sets it yet (needs a store version bump)
 - Close-time-first ordering (visit what closes first) · per-day load-balance · rule-registry refactor
 - **Who-books-what**: `assignedFamilyId` + `bookingStatus` on stay/transit items (the multi-family-specific gap)
 - **Pre-trip checklist** (packing/docs) seeded from the group profile (infant → stroller/formula; ♿ → confirm accessible room)

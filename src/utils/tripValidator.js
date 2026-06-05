@@ -352,11 +352,14 @@ function validateDay(day, dayIndex, families = []) {
     if (act.time) return;
     if (act.type !== 'activity' && act.type !== 'food') return;
     if (act.status === 'skipped') return;
+    if (SEASONAL_RE.test(`${act.name || ''} ${act.detail || ''}`)) return; // seasonal stays soft
     const ivs = dayIntervals(act.openHours, weekdayOf(day.date));
     if (!ivs || !ivs.length) return;   // unknown / closed-all-day → not this rule
     const lbl = hoursLabel(act.openHours, weekdayOf(day.date));
     warnings.push({
-      type: 'no_fit_hours', severity: 'warning', icon: '🗓️',
+      // PROVABLE: known hours, can't fit the day → ERROR (blocks the green badge; no false
+      // green). The honest "move it to another day" signal, surfaced loudly but actionably.
+      type: 'no_fit_hours', severity: 'error', icon: '🗓️',
       title: "Doesn't fit this day",
       message: `"${act.name}" is open ${lbl}, but this day is too packed to fit it. Move it to another day.`,
       hint: 'Tap the activity’s 📅 to move it to a day with room.',
@@ -710,11 +713,13 @@ function validateDay(day, dayIndex, families = []) {
   });
 
   // ── Rule 13b: Scheduled outside opening hours ──
-  // The weekly hours are a snapshot of the season we fetched in, so confidence varies:
+  // Opening hours are HARD: a non-seasonal venue scheduled when it's shut is a PROVABLE
+  // conflict (we know the hours, we know the time) → ERROR, so it blocks the green badge
+  // (no false green) and Plan-my-day + Trip Check agree it must move. Confidence tiers:
   //   · seasonal-prone venue  → never red; soft "verify hours for your dates" tip
   //     (the snapshot can't see the trip's season — a false "closed" is the worst error)
-  //   · closed that whole weekday, non-seasonal → red error (season-robust, provable)
-  //   · open that day but scheduled outside the window → amber warning
+  //   · closed that whole weekday, non-seasonal → error ("Closed that day")
+  //   · open that day but scheduled outside the window, non-seasonal → error ("Closed at that time")
   // Unknown hours stay silent (isOpenAt → null).
   const venueWd = weekdayOf(day.date);
   timeline.forEach(({ act, startMin }) => {
@@ -740,9 +745,9 @@ function validateDay(day, dayIndex, families = []) {
       };
     } else {
       warning = {
-        severity: 'warning', icon: '🕐', title: 'Outside opening hours',
-        message: `"${act.name}" is at ${act.time}, but it’s open ${lbl} that day.`,
-        hint: 'Shift it into the open window, or double-check.',
+        severity: 'error', icon: '🔒', title: 'Closed at that time',
+        message: `"${act.name}" is at ${act.time}, but it’s only open ${lbl} that day.`,
+        hint: 'Move it into the open window — or to another day.',
       };
     }
     warnings.push({ type: 'closed_venue', ...warning, verifyUrl: verifyHoursUrl(act), dayIndex, actIds: [act.id] });

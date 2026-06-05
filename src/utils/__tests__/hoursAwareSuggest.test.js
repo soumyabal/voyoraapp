@@ -29,3 +29,23 @@ test('an overlap that CAN move later within hours still suggests the time', () =
   expect(w.suggestedTime).toBe('13:00');
   expect(w.impactedActivities[0].suggestedTime).toBe('13:00');
 });
+
+describe('no false green — a venue outside its hours is a green-blocking error', () => {
+  const { summariseWarnings } = require('../tripValidator');
+  test('a venue scheduled past its close raises an ERROR (badge cannot be green)', () => {
+    const acts = [
+      { id: 'g', type: 'activity', name: 'Garden', time: '17:45', durationMins: 60, openHours: [{ d: 5, o: 600, c: 1020 }] }, // 10–5, scheduled 17:45
+    ];
+    const w = validateTrip(trip(acts));
+    expect(summariseWarnings(w).errors).toBeGreaterThanOrEqual(1);
+    expect(w.find(x => x.type === 'closed_venue').severity).toBe('error');
+  });
+
+  test('an unscheduled venue that cannot fit its hours is also a green-blocking error', () => {
+    const acts = [
+      { id: 'g', type: 'activity', name: 'Garden', durationMins: 60, openHours: [{ d: 5, o: 600, c: 1020 }] }, // no time → unscheduled
+    ];
+    const w = validateTrip(trip(acts));
+    expect(w.some(x => x.type === 'no_fit_hours' && x.severity === 'error')).toBe(true);
+  });
+});

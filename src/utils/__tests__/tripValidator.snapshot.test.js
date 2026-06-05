@@ -107,12 +107,13 @@ describe('validateTrip — invariants that must survive any refactor', () => {
     expect(tt[0].severity).toBe('info');
   });
 
-  test('closed-venue confidence is tiered (dark-day=error, time-edge=warning, seasonal=tip)', () => {
+  test('closed-venue confidence is tiered (dark-day & time-edge = provable error, seasonal = tip)', () => {
     const cv = (fx) => validateTrip(fx).find((x) => x.type === 'closed_venue');
-    // dark weekday, non-seasonal → provable red error
+    // dark weekday, non-seasonal → provable error
     expect(cv(FIXTURES.closedDarkDay).severity).toBe('error');
-    // open that day but scheduled outside the window → amber warning
-    expect(cv(FIXTURES.closedTimeEdge).severity).toBe('warning');
+    // open that day but scheduled OUTSIDE the window, non-seasonal → provable error too
+    // (we know the hours + the time → it's shut then). Blocks the green badge: no false green.
+    expect(cv(FIXTURES.closedTimeEdge).severity).toBe('error');
     // seasonal-prone → never red; soft verify tip (false "closed" is the worst error)
     expect(cv(FIXTURES.closedSeasonal).severity).toBe('info');
     // every closed-venue flag carries a tap-through to the live hours

@@ -114,7 +114,7 @@ export function buildTripFilm(trip) {
   slides.push({
     type: 'close', grad: GRADS.ink, brand: true,
     title: isVictory ? 'All set. ✨' : 'See you out there. ✨',
-    subtitle: 'Effortless planning. Shared memories.',
+    subtitle: 'Easy to plan. Fun to travel. Fair to share.',
   });
 
   return slides;

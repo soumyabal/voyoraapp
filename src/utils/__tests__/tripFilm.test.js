@@ -30,7 +30,7 @@ describe('buildTripFilm (photo-free Trip Wrapped)', () => {
     expect(f[0].emoji).toBe('🌴');
     expect(last(f).type).toBe('close');
     expect(last(f).brand).toBe(true);
-    expect(last(f).subtitle).toMatch(/shared memories/i);
+    expect(last(f).subtitle).toMatch(/fair to share/i);
   });
 
   test('no baked/Google image URLs — every slide has a gradient fallback', () => {

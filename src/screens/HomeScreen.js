@@ -603,7 +603,7 @@ export default function HomeScreen({ navigation }) {
               <KithovaMark size={20} hub={colors.white} />
               <KithovaWordmark variant="onDark" size={22} />
             </View>
-            <Text style={styles.brandTagline}>Effortless planning. Shared memories.</Text>
+            <Text style={styles.brandTagline} numberOfLines={1} adjustsFontSizeToFit>Easy to plan. Fun to travel. Fair to share.</Text>
           </View>
           {/* Accounts are a freemium feature (RELEASE_FLAGS.accounts) — hidden in the
               free/local TestFlight build so there's no non-functional Sign In UI. */}

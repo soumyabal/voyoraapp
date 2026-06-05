@@ -2,6 +2,37 @@
 
 exports[`validateTrip — golden snapshots (characterization) allClear: full warnings array is stable 1`] = `[]`;
 
+exports[`validateTrip — golden snapshots (characterization) businessStatus: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "gone",
+    ],
+    "dayIndex": 0,
+    "hint": "Remove it and pick an alternative.",
+    "icon": "🚫",
+    "message": ""Old Cafe" is marked permanently closed.",
+    "severity": "error",
+    "title": "Permanently closed",
+    "type": "closed_permanently",
+    "verifyUrl": "https://www.google.com/maps/search/?api=1&query=Old%20Cafe",
+  },
+  {
+    "actIds": [
+      "maybe",
+    ],
+    "dayIndex": 0,
+    "hint": "Check the venue’s current status.",
+    "icon": "⛔",
+    "message": ""Renovating Museum" is marked temporarily closed — confirm it's reopened.",
+    "severity": "warning",
+    "title": "May be temporarily closed",
+    "type": "closed_temporarily",
+    "verifyUrl": "https://www.google.com/maps/search/?api=1&query=Renovating%20Museum",
+  },
+]
+`;
+
 exports[`validateTrip — golden snapshots (characterization) closedDarkDay: full warnings array is stable 1`] = `
 [
   {
@@ -52,6 +83,146 @@ exports[`validateTrip — golden snapshots (characterization) closedTimeEdge: fu
     "title": "Closed at that time",
     "type": "closed_venue",
     "verifyUrl": "https://www.google.com/maps/search/?api=1&query=Cafe",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) dietary: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "meat",
+    ],
+    "dayIndex": 0,
+    "hint": "Confirm this restaurant has suitable vegetarian options, or swap for a veg-friendly place.",
+    "icon": "🥦",
+    "message": ""BBQ Steakhouse" may contain meat/seafood — Greens are vegetarian/vegan.",
+    "severity": "warning",
+    "title": "Dietary conflict",
+    "type": "dietary_conflict",
+  },
+  {
+    "actIds": [
+      "alco",
+    ],
+    "dayIndex": 0,
+    "hint": "Check if a non-alcoholic option is available, or consider an alternative activity.",
+    "icon": "🚫",
+    "message": ""Rooftop Cocktail Bar" involves alcohol — Sober prefer no alcohol.",
+    "severity": "warning",
+    "title": "Alcohol in activity",
+    "type": "dietary_conflict",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) duplicate: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "d1",
+      "d2",
+    ],
+    "dayIndex": 0,
+    "hint": "Remove the extra copy unless the repeat is intentional.",
+    "icon": "🔁",
+    "message": ""City Tour" appears 2 times on this day.",
+    "severity": "warning",
+    "title": "Added more than once",
+    "type": "duplicate_activity",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) edgeHours: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "show",
+    ],
+    "dayIndex": 0,
+    "hint": "Start it earlier or move it to an evening slot.",
+    "icon": "🌙",
+    "message": ""Late show" (start 23:00, 2h) may end ~1h into the next day.",
+    "severity": "info",
+    "title": "Runs past midnight",
+    "type": "past_midnight",
+  },
+  {
+    "actIds": [
+      "sun",
+    ],
+    "dayIndex": 0,
+    "hint": "Check if this is intentional (e.g. a sunrise trek).",
+    "icon": "⏰",
+    "message": ""Sunrise viewpoint" is scheduled at 05:00 — before 6am.",
+    "severity": "info",
+    "title": "Very early start",
+    "type": "early_start",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) emptyMidTrip: full warnings array is stable 1`] = `
+[
+  {
+    "dayIndex": 1,
+    "hint": "Add activities or insert a rest-day note so the group knows what to expect.",
+    "icon": "📅",
+    "message": "Day 2 (2026-06-13) has nothing planned.",
+    "severity": "warning",
+    "title": "No activities planned",
+    "type": "empty_day",
+  },
+  {
+    "dayIndex": 0,
+    "hint": "Add a hotel check-in (set its nights), or mark it as an overnight journey or a stay at home.",
+    "icon": "🛏️",
+    "message": "No accommodation is booked for the night of Day 1 (2026-06-12).",
+    "severity": "warning",
+    "title": "No place to stay that night",
+    "type": "unbooked_night",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) fullDayVenue: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "pk",
+      "o1",
+    ],
+    "dayIndex": 0,
+    "hint": "Move "o1" to 17:00 or later.",
+    "icon": "⏱",
+    "impactedActivities": [
+      {
+        "id": "o1",
+        "name": "o1",
+        "suggestedTime": "17:00",
+        "time": "10:00",
+      },
+    ],
+    "message": ""Theme Park" typically takes 8h, overlapping with "o1" by ~420 min.",
+    "moveActId": "o1",
+    "moveActName": "o1",
+    "severity": "warning",
+    "suggestedTime": "17:00",
+    "title": "Schedule overlap",
+    "type": "overlap",
+  },
+  {
+    "actIds": [
+      "pk",
+    ],
+    "dayIndex": 0,
+    "hint": "Move other major activities to a different day.",
+    "icon": "🎡",
+    "message": ""Theme Park" typically takes a full day (8h). 2 other activities may not fit.",
+    "severity": "warning",
+    "title": "Full-day venue",
+    "type": "full_day_conflict",
   },
 ]
 `;
@@ -127,6 +298,64 @@ exports[`validateTrip — golden snapshots (characterization) multiCity: full wa
 ]
 `;
 
+exports[`validateTrip — golden snapshots (characterization) noFitHours: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "squeeze",
+    ],
+    "dayIndex": 0,
+    "hint": "Tap the activity’s 📅 to move it to a day with room.",
+    "icon": "🗓️",
+    "message": ""Local Gallery" is open 9 AM–5 PM, but this day is too packed to fit it. Move it to another day.",
+    "severity": "error",
+    "title": "Doesn't fit this day",
+    "type": "no_fit_hours",
+    "verifyUrl": "https://www.google.com/maps/search/?api=1&query=Local%20Gallery",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) noMeal: full warnings array is stable 1`] = `
+[
+  {
+    "dayIndex": 0,
+    "hint": "Add a lunch or dinner stop to keep the group energised.",
+    "icon": "🍽️",
+    "message": "This is a ~7.5h day with no food stops.",
+    "severity": "info",
+    "title": "No meal planned",
+    "type": "no_meal",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) notesOnly: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "n",
+    ],
+    "dayIndex": 0,
+    "hint": "Check if this is intentional (e.g. a sunrise trek).",
+    "icon": "⏰",
+    "message": ""Rest day" is scheduled at 00:00 — before 6am.",
+    "severity": "info",
+    "title": "Very early start",
+    "type": "early_start",
+  },
+  {
+    "dayIndex": 0,
+    "hint": "Add meals, transport, or experiences to this day.",
+    "icon": "📝",
+    "message": "Day 1 (2026-06-12) has notes but no planned activities or transport.",
+    "severity": "info",
+    "title": "Notes only — no activities",
+    "type": "notes_only_day",
+  },
+]
+`;
+
 exports[`validateTrip — golden snapshots (characterization) overlapBig: full warnings array is stable 1`] = `
 [
   {
@@ -152,6 +381,95 @@ exports[`validateTrip — golden snapshots (characterization) overlapBig: full w
     "suggestedTime": "12:00",
     "title": "Schedule overlap",
     "type": "overlap",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) overnightTransit: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "tr",
+    ],
+    "dayIndex": 0,
+    "hint": "Start it earlier or move it to an evening slot.",
+    "icon": "🌙",
+    "message": ""Night train" (start 22:00, 8h) may end ~6h into the next day.",
+    "severity": "info",
+    "title": "Runs past midnight",
+    "type": "past_midnight",
+  },
+  {
+    "actIds": [
+      "tr",
+    ],
+    "dayIndex": 0,
+    "hint": "Consider adding the arrival on the next day so your schedule stays accurate.",
+    "icon": "🌙",
+    "message": ""Night train" departs 22:00 and arrives 06:00 — looks like it crosses midnight into the next day.",
+    "severity": "info",
+    "title": "Overnight journey",
+    "type": "multi_day_journey",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) packedDay: full warnings array is stable 1`] = `
+[
+  {
+    "dayIndex": 0,
+    "hint": "Spread some activities to adjacent days for a more relaxed pace.",
+    "icon": "😓",
+    "message": "8 activities in one day is ambitious. You may feel rushed.",
+    "severity": "info",
+    "title": "Busy day",
+    "type": "packed",
+  },
+  {
+    "dayIndex": 0,
+    "hint": "Add a lunch or dinner stop to keep the group energised.",
+    "icon": "🍽️",
+    "message": "This is a ~7.5h day with no food stops.",
+    "severity": "info",
+    "title": "No meal planned",
+    "type": "no_meal",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) stayLifecycle: full warnings array is stable 1`] = `
+[
+  {
+    "dayIndex": 2,
+    "hint": "Arrange a late check-out with the hotel if your morning runs long.",
+    "icon": "🧳",
+    "message": "You check out of Grand Hotel this morning — be packed and out by 11:00.",
+    "severity": "info",
+    "title": "Check-out this morning",
+    "type": "check_out_by",
+  },
+  {
+    "dayIndex": 2,
+    "hint": "Add your hotel check-out and the journey home (flight, train, or drive).",
+    "icon": "🧳",
+    "message": "Day 3 (2026-06-14) is your last day but has no check-out or trip home.",
+    "severity": "info",
+    "title": "No way home planned",
+    "type": "lastday_missing_checkout",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) tiringLong: full warnings array is stable 1`] = `
+[
+  {
+    "dayIndex": 0,
+    "hint": "Trim one or move it to a lighter day so nobody burns out.",
+    "icon": "🥵",
+    "message": "About 11h of activities here — a lot for one day, even in just 2 stops.",
+    "severity": "info",
+    "title": "Long day on your feet",
+    "type": "tiring_day",
   },
 ]
 `;
@@ -185,12 +503,67 @@ exports[`validateTrip — golden snapshots (characterization) travelTight: full 
 ]
 `;
 
+exports[`validateTrip — golden snapshots (characterization) unreachable: full warnings array is stable 1`] = `
+[
+  {
+    "dayIndex": 0,
+    "hint": "Set it later, or plan it as a travel day. If your times already account for the trip there, ignore this.",
+    "icon": "✈️",
+    "message": "Day 1's first stop is at 08:30, but you're starting ~556 km away in Home City — that's a full travel day to get there.",
+    "moveActId": "far",
+    "severity": "info",
+    "suggestedTime": "16:30",
+    "title": "Day 1 looks like a travel day",
+    "type": "first_stop_unreachable",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) wakeLate: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "w",
+    ],
+    "dayIndex": 0,
+    "hint": "Consider moving this activity to the afternoon, or confirm the group is OK with an early start.",
+    "icon": "🦉",
+    "message": ""Morning museum" starts at 08:00 — Owls tend to wake late (after 9am).",
+    "severity": "info",
+    "title": "Early for late risers",
+    "type": "wake_time",
+  },
+]
+`;
+
+exports[`validateTrip — golden snapshots (characterization) wakeRegular: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "w",
+    ],
+    "dayIndex": 0,
+    "hint": "Check this is intentional (e.g. a sunrise trek or early flight connection).",
+    "icon": "⏰",
+    "message": ""Early market" starts at 06:30 — before 7am for Larks.",
+    "severity": "info",
+    "title": "Very early for the group",
+    "type": "wake_time",
+  },
+]
+`;
+
 exports[`validateTrip — invariants that must survive any refactor summary counts are locked per fixture (survives jest -u) 1`] = `
 {
   "allClear": {
     "errors": 0,
     "infos": 0,
     "warnings": 0,
+  },
+  "businessStatus": {
+    "errors": 1,
+    "infos": 0,
+    "warnings": 1,
   },
   "closedDarkDay": {
     "errors": 1,
@@ -207,6 +580,31 @@ exports[`validateTrip — invariants that must survive any refactor summary coun
     "infos": 0,
     "warnings": 0,
   },
+  "dietary": {
+    "errors": 0,
+    "infos": 0,
+    "warnings": 2,
+  },
+  "duplicate": {
+    "errors": 0,
+    "infos": 0,
+    "warnings": 1,
+  },
+  "edgeHours": {
+    "errors": 0,
+    "infos": 2,
+    "warnings": 0,
+  },
+  "emptyMidTrip": {
+    "errors": 0,
+    "infos": 0,
+    "warnings": 2,
+  },
+  "fullDayVenue": {
+    "errors": 0,
+    "infos": 0,
+    "warnings": 2,
+  },
   "longJourney": {
     "errors": 1,
     "infos": 1,
@@ -217,12 +615,62 @@ exports[`validateTrip — invariants that must survive any refactor summary coun
     "infos": 0,
     "warnings": 1,
   },
+  "noFitHours": {
+    "errors": 1,
+    "infos": 0,
+    "warnings": 0,
+  },
+  "noMeal": {
+    "errors": 0,
+    "infos": 1,
+    "warnings": 0,
+  },
+  "notesOnly": {
+    "errors": 0,
+    "infos": 2,
+    "warnings": 0,
+  },
   "overlapBig": {
     "errors": 0,
     "infos": 0,
     "warnings": 1,
   },
+  "overnightTransit": {
+    "errors": 0,
+    "infos": 2,
+    "warnings": 0,
+  },
+  "packedDay": {
+    "errors": 0,
+    "infos": 2,
+    "warnings": 0,
+  },
+  "stayLifecycle": {
+    "errors": 0,
+    "infos": 2,
+    "warnings": 0,
+  },
+  "tiringLong": {
+    "errors": 0,
+    "infos": 1,
+    "warnings": 0,
+  },
   "travelTight": {
+    "errors": 0,
+    "infos": 1,
+    "warnings": 0,
+  },
+  "unreachable": {
+    "errors": 0,
+    "infos": 1,
+    "warnings": 0,
+  },
+  "wakeLate": {
+    "errors": 0,
+    "infos": 1,
+    "warnings": 0,
+  },
+  "wakeRegular": {
     "errors": 0,
     "infos": 1,
     "warnings": 0,

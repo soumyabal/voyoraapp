@@ -84,6 +84,115 @@ const FIXTURES = {
     ]),
     day('Day 2', '2026-06-13', []),
   ]),
+
+  // ── Coverage fixtures: gate the rules the originals never exercised, so the
+  //    rule-registry extraction is byte-locked across the WHOLE engine. ──
+
+  // Mid-trip empty day → empty_day=warning (edges are info).
+  emptyMidTrip: tripOf([
+    day('Day 1', FRI, [A('a', 'activity', '10:00', { durationMins: 60 })]),
+    day('Day 2', '2026-06-13', []),
+    day('Day 3', '2026-06-14', [A('b', 'activity', '10:00', { durationMins: 60 })]),
+  ]),
+  // A day with only a note → notes_only_day=info.
+  notesOnly: tripOf([
+    day('Day 1', FRI, [A('n', 'note', '00:00', { name: 'Rest day' })]),
+  ]),
+  // 8 substantial stops → packed=info (and no food → no_meal).
+  packedDay: tripOf([
+    day('Day 1', FRI, Array.from({ length: 8 }, (_, k) =>
+      A(`s${k}`, 'activity', `${String(7 + k).padStart(2, '0')}:00`, { durationMins: 30 }))),
+  ]),
+  // Few-but-long touring day → tiring_day=info.
+  tiringLong: tripOf([
+    day('Day 1', FRI, [
+      A('hk', 'activity', '08:00', { name: 'Full-day excursion', durationMins: 480 }),
+      A('pk', 'activity', '17:00', { name: 'Evening park', durationMins: 180 }),
+    ]),
+  ]),
+  // 3+ activities, 4h+ span, no food → no_meal=info.
+  noMeal: tripOf([
+    day('Day 1', FRI, [
+      A('m1', 'activity', '09:00', { durationMins: 120 }),
+      A('m2', 'activity', '12:00', { durationMins: 120 }),
+      A('m3', 'activity', '15:00', { durationMins: 90 }),
+    ]),
+  ]),
+  // Before-6am start + after-midnight end → early_start + past_midnight.
+  edgeHours: tripOf([
+    day('Day 1', FRI, [
+      A('sun', 'activity', '05:00', { name: 'Sunrise viewpoint', durationMins: 60 }),
+      A('show', 'activity', '23:00', { name: 'Late show', durationMins: 120 }),
+    ]),
+  ]),
+  // Same name twice → duplicate_activity=warning.
+  duplicate: tripOf([
+    day('Day 1', FRI, [
+      A('d1', 'activity', '10:00', { name: 'City Tour', durationMins: 60 }),
+      A('d2', 'activity', '14:00', { name: 'City Tour', durationMins: 60 }),
+    ]),
+  ]),
+  // Transport arriving earlier than it departs → multi_day_journey=info.
+  overnightTransit: tripOf([
+    day('Day 1', FRI, [
+      A('tr', 'transport', '22:00', { name: 'Night train', subtype: 'train', arriveTime: '06:00' }),
+    ]),
+  ]),
+  // Late-riser family, pre-9am stop → wake_time (late branch), info.
+  wakeLate: tripOf([
+    day('Day 1', FRI, [A('w', 'activity', '08:00', { name: 'Morning museum', durationMins: 60 })]),
+  ], { families: [{ id: 'fOwl', name: 'Owls', wakeTime: 'late', members: [] }] }),
+  // Regular family, pre-7am stop → wake_time (regular branch), info.
+  wakeRegular: tripOf([
+    day('Day 1', FRI, [A('w', 'activity', '06:30', { name: 'Early market', durationMins: 60 })]),
+  ], { families: [{ id: 'fLark', name: 'Larks', members: [] }] }),
+  // Veg + no-alcohol families with meat & alcohol stops → dietary_conflict ×2 (warning).
+  dietary: tripOf([
+    day('Day 1', FRI, [
+      A('meat', 'food', '13:00', { name: 'BBQ Steakhouse', durationMins: 90 }),
+      A('alco', 'food', '20:00', { name: 'Rooftop Cocktail Bar', durationMins: 90 }),
+    ]),
+  ], {
+    families: [
+      { id: 'fVeg', name: 'Greens', dietary: ['vegetarian'], members: [] },
+      { id: 'fDry', name: 'Sober', dietary: ['no-alcohol'], members: [] },
+    ],
+  }),
+  // Time-less, known-hours, non-seasonal venue → no_fit_hours=error.
+  noFitHours: tripOf([
+    day('Day 1', FRI, [
+      A('booked', 'activity', '10:00', { durationMins: 120 }),
+      A('squeeze', 'activity', undefined, { name: 'Local Gallery', openHours: [{ d: 5, o: 540, c: 1020 }] }),
+    ]),
+  ]),
+  // Google businessStatus → closed_permanently=error + closed_temporarily=warning.
+  businessStatus: tripOf([
+    day('Day 1', FRI, [
+      A('gone', 'activity', '10:00', { name: 'Old Cafe', durationMins: 60, businessStatus: 'CLOSED_PERMANENTLY' }),
+      A('maybe', 'activity', '14:00', { name: 'Renovating Museum', durationMins: 60, businessStatus: 'CLOSED_TEMPORARILY' }),
+    ]),
+  ]),
+  // 6h+ venue + 2 other stops → full_day_conflict=warning (+ a natural overlap).
+  fullDayVenue: tripOf([
+    day('Day 1', FRI, [
+      A('pk', 'activity', '09:00', { name: 'Theme Park', durationMins: 480 }),
+      A('o1', 'activity', '10:00', { durationMins: 60 }),
+      A('o2', 'activity', '11:00', { durationMins: 60 }),
+    ]),
+  ]),
+  // Multi-night stay → check_out_by + lastday_missing_checkout, and NO unbooked_night.
+  stayLifecycle: tripOf([
+    day('Day 1', FRI, [
+      A('in', 'stay', '15:00', { name: 'Grand Hotel', nights: 2, lat: 0, lng: 0 }),
+      A('din', 'food', '19:00', { name: 'Dinner', durationMins: 90 }),
+    ]),
+    day('Day 2', '2026-06-13', [A('tour', 'activity', '10:00', { durationMins: 120 })]),
+    day('Day 3', '2026-06-14', [A('brunch', 'food', '10:00', { name: 'Brunch', durationMins: 60 })]),
+  ]),
+  // First stop far from the trip origin → first_stop_unreachable=info.
+  unreachable: tripOf([
+    day('Day 1', FRI, [A('far', 'activity', '08:30', { name: 'Far Stop', durationMins: 120, lat: 0, lng: 5 })]),
+  ], { origin: { label: 'Home City', lat: 0, lng: 0 } }),
 };
 
 describe('validateTrip — golden snapshots (characterization)', () => {
@@ -124,6 +233,36 @@ describe('validateTrip — invariants that must survive any refactor', () => {
     const lj = validateTrip(FIXTURES.longJourney).filter((x) => x.type === 'long_journey_conflict');
     expect(lj).toHaveLength(1);
     expect(lj[0].severity).toBe('error');
+  });
+
+  test('coverage fixtures fire their target rule at the right severity (survives jest -u)', () => {
+    const has = (fx, type) => validateTrip(FIXTURES[fx]).filter(w => w.type === type);
+    const one = (fx, type) => { const m = has(fx, type); expect(m).toHaveLength(1); return m[0]; };
+
+    expect(one('emptyMidTrip', 'empty_day').severity).toBe('warning'); // mid-trip = warning
+    one('notesOnly', 'notes_only_day');
+    expect(one('packedDay', 'packed').severity).toBe('info');
+    expect(one('tiringLong', 'tiring_day').severity).toBe('info');
+    expect(one('noMeal', 'no_meal').severity).toBe('info');
+    expect(one('edgeHours', 'early_start').severity).toBe('info');
+    expect(one('edgeHours', 'past_midnight').severity).toBe('info');
+    expect(one('duplicate', 'duplicate_activity').severity).toBe('warning');
+    expect(one('overnightTransit', 'multi_day_journey').severity).toBe('info');
+    expect(one('wakeLate', 'wake_time').severity).toBe('info');
+    expect(one('wakeRegular', 'wake_time').severity).toBe('info');
+    expect(has('dietary', 'dietary_conflict')).toHaveLength(2);
+    has('dietary', 'dietary_conflict').forEach(w => expect(w.severity).toBe('warning'));
+    const nf = one('noFitHours', 'no_fit_hours');
+    expect(nf.severity).toBe('error');
+    expect(nf.verifyUrl).toBeTruthy();
+    expect(one('businessStatus', 'closed_permanently').severity).toBe('error');
+    expect(one('businessStatus', 'closed_temporarily').severity).toBe('warning');
+    expect(one('fullDayVenue', 'full_day_conflict').severity).toBe('warning');
+    // multi-night stay: lodging covers both nights → zero unbooked_night
+    expect(has('stayLifecycle', 'unbooked_night')).toHaveLength(0);
+    expect(has('stayLifecycle', 'check_out_by').length).toBeGreaterThanOrEqual(1);
+    one('stayLifecycle', 'lastday_missing_checkout');
+    expect(one('unreachable', 'first_stop_unreachable').severity).toBe('info');
   });
 
   test('summary counts are locked per fixture (survives jest -u)', () => {

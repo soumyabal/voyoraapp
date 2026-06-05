@@ -666,14 +666,28 @@ export function comfortPass(activities, opts = {}) {
       }
     }
 
-    // 2) respect opening hours — never start before open; flag if it'd run past close
+    // 2) respect opening hours — never start before open, and NEVER place past close.
+    //    If clearing the leg would push this stop past its closing time, it can't fit
+    //    around the rest of the day → UNSCHEDULE it (time=null), exactly like the placer.
+    //    It is NOT shoved to a closed time (the "17:45 for a 5pm venue" bug). planDay
+    //    surfaces it as "doesn't fit — move to another day". Locked = user intent (keep,
+    //    flag); seasonal hours are low-confidence (keep, flag — may not match the season).
     const intervals = dayIntervals(a.openHours, wd);   // null=unknown, []=closed today
     if (intervals && intervals.length) {
       const open = intervals[0].o;
       const close = intervals[intervals.length - 1].c;
       if (required < open) required = open;
       if (required + estimateDuration(a) > close) {
-        unresolved.push({ actId: a.id, name: a.name, reason: 'closes' });
+        if (a.timeLocked) {
+          unresolved.push({ actId: a.id, name: a.name, reason: 'closes' });
+          prev = a; continue;                          // keep the locked time, flag it
+        }
+        if (!SEASONAL_RE.test(`${a.name || ''} ${a.detail || ''}`)) {
+          if (a.time != null) changes.push({ actId: a.id, name: a.name, from: a.time, to: null });
+          a.time = null;                               // unscheduled — never a closed time
+          continue;                                    // don't advance prev (next cascades from last scheduled)
+        }
+        unresolved.push({ actId: a.id, name: a.name, reason: 'closes' }); // seasonal → keep + flag
       }
     }
 

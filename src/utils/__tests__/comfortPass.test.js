@@ -60,6 +60,27 @@ describe('comfortPass — locks & hours', () => {
     expect(unresolved.some((u) => u.actId === 'c' && u.reason === 'tight')).toBe(true);
   });
 
+  test('a venue the travel push would land AFTER it closes is UNSCHEDULED, not placed at a closed time (the 17:45-for-a-5pm-venue bug)', () => {
+    // Fri 2026-06-12 = wd 5. A 2h stop far away ends + drive pushes the next stop past 5pm.
+    const acts = [
+      { id: 'first', type: 'activity', name: 'Big Park', time: '15:00', durationMins: 120, lat: 43.0, lng: -89.0 },
+      { id: 'garden', type: 'activity', name: 'Botanic Garden', time: '15:30', durationMins: 90, lat: 43.7, lng: -89.0, openHours: [{ d: 5, o: 10 * 60, c: 17 * 60 }] },
+    ];
+    const { adjusted } = comfortPass(acts, { date: '2026-06-12' });
+    const garden = adjusted.find((a) => a.id === 'garden');
+    expect(garden.time).toBeNull();   // unscheduled — never shoved to ~17:45 (after 5pm close)
+  });
+
+  test('a LOCKED venue past its close keeps its time (user intent), flagged not unscheduled', () => {
+    const acts = [
+      { id: 'first', type: 'activity', name: 'Big Park', time: '15:00', durationMins: 120, lat: 43.0, lng: -89.0 },
+      { id: 'g', type: 'activity', name: 'Garden', time: '18:00', timeLocked: true, durationMins: 90, lat: 43.7, lng: -89.0, openHours: [{ d: 5, o: 10 * 60, c: 17 * 60 }] },
+    ];
+    const { adjusted, unresolved } = comfortPass(acts, { date: '2026-06-12' });
+    expect(adjusted.find((a) => a.id === 'g').time).toBe('18:00');           // locked → kept
+    expect(unresolved.some((u) => u.actId === 'g')).toBe(true);
+  });
+
   test("respects opening hours — won't start a venue before it opens", () => {
     // Fri 2026-06-12 = weekday 5; venue opens 11:00.
     const acts = [

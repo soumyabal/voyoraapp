@@ -364,12 +364,25 @@ function validateDay(day, dayIndex, families = []) {
     });
   });
 
+  // Would moving `act` to start at `startMin` run it PAST its closing time? If so, that's
+  // not a real fix — it just re-creates a "closed" problem (the cyclic "move to 19:44" for
+  // a 5 PM venue). When true, the overlap/travel tips drop the closed-time button and say
+  // "move it to another day" instead. Unknown / closed-all-day hours → not guarded here.
+  const wdForFit = weekdayOf(day.date);
+  const wouldCloseBefore = (act, startMin) => {
+    const ivs = dayIntervals(act.openHours, wdForFit);
+    if (!ivs || !ivs.length) return false;
+    return startMin + estimateDuration(act) > ivs[ivs.length - 1].c;
+  };
+
   // ── Rule 1: Schedule overlaps ─────────────────────────────────────
   for (let i = 0; i < timeline.length - 1; i++) {
     const curr = timeline[i];
     const next = timeline[i + 1];
     if (curr.duration > 0 && curr.endMin > next.startMin) {
       const overlapMin = curr.endMin - next.startMin;
+      const sug = formatEndTime(curr.endMin);
+      const fitsLater = !wouldCloseBefore(next.act, curr.endMin); // moving later still within hours?
       warnings.push({
         type:          'overlap',
         // Estimate-based (durations are guessed) → big overlap = worth checking,
@@ -378,15 +391,16 @@ function validateDay(day, dayIndex, families = []) {
         icon:          '⏱',
         title:         'Schedule overlap',
         message:       `"${curr.act.name}" typically takes ${formatDuration(curr.duration)}, overlapping with "${next.act.name}" by ~${overlapMin} min.`,
-        hint:          `Move "${next.act.name}" to ${formatEndTime(curr.endMin)} or later.`,
-        suggestedTime:      formatEndTime(curr.endMin),
-        moveActId:          next.act.id,
-        moveActName:        next.act.name,
+        // Don't suggest a CLOSED time — if "later" is past close, point to another day.
+        hint:          fitsLater
+          ? `Move "${next.act.name}" to ${sug} or later.`
+          : `"${next.act.name}" is open ${hoursLabel(next.act.openHours, wdForFit)} — it can’t shift later here. Move it to another day.`,
+        ...(fitsLater ? { suggestedTime: sug, moveActId: next.act.id, moveActName: next.act.name } : {}),
         impactedActivities: [{
           id:            next.act.id,
           name:          next.act.name,
           time:          next.act.time,
-          suggestedTime: formatEndTime(curr.endMin),
+          ...(fitsLater ? { suggestedTime: sug } : {}),
         }],
         dayIndex,
         actIds: [curr.act.id, next.act.id],
@@ -410,6 +424,9 @@ function validateDay(day, dayIndex, families = []) {
     if (gap < 0 || gap >= leg.min) continue;       // overlap → Rule 1; enough time → fine
     const short = leg.min - gap;
     if (short < 5) continue;                        // within rounding noise
+    const sugStart = curr.endMin + leg.min;
+    const sug = formatEndTime(sugStart);
+    const fitsLater = !wouldCloseBefore(next.act, sugStart); // does it still fit its hours after the drive?
     warnings.push({
       type:     'travel_time',
       // Straight-line estimate (not real routing) — the biggest false-alarm risk,
@@ -418,15 +435,16 @@ function validateDay(day, dayIndex, families = []) {
       icon:     leg.mode === 'walk' ? '🚶' : '🚗',
       title:    'Tight travel time',
       message:  `"${next.act.name}" starts ${formatDuration(gap)} after "${curr.act.name}" ends, but they're ~${formatKm(leg.km)} apart (~${leg.min} min ${leg.mode}).`,
-      hint:     `Start "${next.act.name}" around ${formatEndTime(curr.endMin + leg.min)} or later, or add the drive between them.`,
-      suggestedTime:      formatEndTime(curr.endMin + leg.min),
-      moveActId:          next.act.id,
-      moveActName:        next.act.name,
+      // Don't suggest a CLOSED time — if it can't start that late, point to another day.
+      hint:     fitsLater
+        ? `Start "${next.act.name}" around ${sug} or later, or add the drive between them.`
+        : `"${next.act.name}" is open ${hoursLabel(next.act.openHours, wdForFit)} — there isn’t time to reach it before it closes. Move it to another day.`,
+      ...(fitsLater ? { suggestedTime: sug, moveActId: next.act.id, moveActName: next.act.name } : {}),
       impactedActivities: [{
         id:            next.act.id,
         name:          next.act.name,
         time:          next.act.time,
-        suggestedTime: formatEndTime(curr.endMin + leg.min),
+        ...(fitsLater ? { suggestedTime: sug } : {}),
       }],
       dayIndex,
       actIds: [curr.act.id, next.act.id],

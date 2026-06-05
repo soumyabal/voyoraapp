@@ -168,6 +168,11 @@ const toMin = t => { const [h, m] = (t || '0:0').split(':').map(Number); return 
 // before you could realistically get there — the same call the Trip Check rule
 // makes, so the inline cue and the warning always agree.
 function TravelConnector({ from, to }) {
+  // The drive IS the travel — never draw a leg INTO or OUT OF a transport stop.
+  // Otherwise a lighthouse → "Drive home to Buffalo Grove" pair renders the whole
+  // drive as a bogus "341 min to reach the drive" + a false "only 4 min gap". This
+  // matches Trip Check Rule 1b, so the inline cue and the warning agree.
+  if (from.type === 'transport' || to.type === 'transport') return null;
   const leg = travelLeg(from, to);
   if (!leg || leg.min < 3) return null;            // unknown coords or a trivial hop
   const gap   = toMin(to.time) - (toMin(from.time) + estimateDuration(from));

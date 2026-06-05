@@ -1,10 +1,11 @@
 /**
- * PlayTripModal.js — "Play My Trip": a "Trip Wrapped" montage with FREE photos.
+ * PlayTripModal.js — "Play My Trip": a "Trip Wrapped" montage of the user's OWN trip photos.
  *
- * Imagery is FREE + CC-licensed (Wikipedia/Wikimedia — same source as the Discover hero),
- * fetched at render per slide and attributed on screen. NO Google Places imagery (per the
- * legal review). Every slide falls back to a branded gradient card if no free photo resolves,
- * so it's always beautiful, never broken — and identical-safe on any platform.
+ * Imagery is the trip's CACHED place photos (act.photo) — nothing is fetched live, no new API
+ * calls: this just replays photos already saved on the itinerary, the same ones every thumbnail
+ * shows. The current API key is re-stamped onto each URL at render (refreshPhotoKey) so photos
+ * survive key rotation. Every slide falls back to a branded gradient card when it has no cached
+ * photo, so it's always beautiful, never broken.
  *
  * Deck (cover → who → days → fair-split moat → branded close) comes from buildTripFilm (pure);
  * this file plays it: slow Ken-Burns drift, cross-fades, big type, an original music bed.
@@ -14,7 +15,7 @@ import { Modal, View, Text, Image, Animated, Easing, TouchableOpacity, Dimension
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { buildTripFilm } from '../utils/tripFilm';
-import { fetchDestinationImage, WIKI_UA } from '../utils/destinationImage';
+import { refreshPhotoKey } from '../utils/places';
 import { colors } from '../theme';
 import KithovaMark from '../components/ui/KithovaMark';
 import KithovaWordmark from '../components/ui/KithovaWordmark';
@@ -31,9 +32,7 @@ const holdOf = (s) => HOLD[s.type] || 2600;
 export default function PlayTripModal({ visible, trip, onClose }) {
   const slides = useMemo(() => (visible ? buildTripFilm(trip) : []), [visible, trip]);
   const [idx, setIdx] = useState(0);
-  const [photos, setPhotos] = useState({});           // query -> { imageUrl, title, pageUrl } | null
-  const [imgFailed, setImgFailed] = useState(() => new Set());
-  const requested = useRef(new Set());
+  const [imgFailed, setImgFailed] = useState(() => new Set());  // photo URLs that 403'd → gradient
   const fade = useRef(new Animated.Value(0)).current;   // per-slide cross-fade + content rise
   const drift = useRef(new Animated.Value(0)).current;  // slow Ken-Burns on the backdrop
   const timer = useRef(null);
@@ -41,22 +40,8 @@ export default function PlayTripModal({ visible, trip, onClose }) {
 
   useEffect(() => {
     if (visible) setIdx(0);
-    else { requested.current = new Set(); setPhotos({}); setImgFailed(new Set()); }
+    else setImgFailed(new Set());
   }, [visible]);
-
-  // Prefetch a free CC photo for the current + next slide (best-effort; null → gradient).
-  useEffect(() => {
-    if (!visible || !slides.length) return;
-    [slides[idx], slides[idx + 1]].forEach((s) => {
-      const q = s && s.photoQuery;
-      if (q && !requested.current.has(q)) {
-        requested.current.add(q);
-        fetchDestinationImage(q)
-          .then((info) => setPhotos((p) => ({ ...p, [q]: info || null })))
-          .catch(() => setPhotos((p) => ({ ...p, [q]: null })));
-      }
-    });
-  }, [idx, visible, slides]);
 
   // Music bed — loop + gentle fade-in while the film plays, stop on close. Wrapped so any
   // audio hiccup never breaks the film. Plays in silent mode (it's an explicit Play tap).
@@ -107,8 +92,9 @@ export default function PlayTripModal({ visible, trip, onClose }) {
   const panX = drift.interpolate({ inputRange: [0, 1], outputRange: [0, idx % 2 ? -16 : 16] });
   const rise = fade.interpolate({ inputRange: [0, 1], outputRange: [14, 0] });
 
-  const photo = cur.photoQuery ? photos[cur.photoQuery] : null;
-  const showPhoto = !!(photo && photo.imageUrl && !imgFailed.has(photo.imageUrl));
+  // The slide's own cached place photo, re-keyed to the current API key (no fetch). Gradient if none/failed.
+  const photoSrc = cur.photoUrl ? refreshPhotoKey(cur.photoUrl) : null;
+  const showPhoto = !!(photoSrc && !imgFailed.has(photoSrc));
 
   return (
     <Modal visible={visible} animationType="fade" onRequestClose={onClose} statusBarTranslucent>
@@ -119,8 +105,8 @@ export default function PlayTripModal({ visible, trip, onClose }) {
           <Animated.View style={[st.full, { transform: [{ scale }, { translateX: panX }] }]}>
             {showPhoto ? (
               <Image
-                source={{ uri: photo.imageUrl, headers: { 'User-Agent': WIKI_UA } }}
-                onError={() => setImgFailed((s) => new Set(s).add(photo.imageUrl))}
+                source={{ uri: photoSrc }}
+                onError={() => setImgFailed((s) => new Set(s).add(photoSrc))}
                 style={st.full}
                 resizeMode="cover"
               />
@@ -152,9 +138,9 @@ export default function PlayTripModal({ visible, trip, onClose }) {
           {cur.subtitle ? <Text style={st.subtitle}>{cur.subtitle}</Text> : null}
         </Animated.View>
 
-        {/* attribution (CC) — only when a free photo is showing */}
-        {showPhoto && photo.title ? (
-          <Text style={st.credit} pointerEvents="none" numberOfLines={1}>{photo.title} · via Wikipedia</Text>
+        {/* the place name — only when its photo is showing */}
+        {showPhoto && cur.photoName ? (
+          <Text style={st.credit} pointerEvents="none" numberOfLines={1}>{cur.photoName}</Text>
         ) : null}
 
         {/* tap zones: left = back, right = forward (under the controls) */}

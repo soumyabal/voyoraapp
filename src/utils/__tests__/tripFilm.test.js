@@ -1,15 +1,17 @@
 /**
- * tripFilm.test.js — buildTripFilm turns a trip into a PHOTO-FREE "Trip Wrapped" deck:
- * cover → who → days → the fair-split moat → a branded close. No Google imagery (legal),
- * pure/deterministic, state-adaptive (trailer / building / victory).
+ * tripFilm.test.js — buildTripFilm turns a trip into a "Trip Wrapped" deck:
+ * cover → who → days → the fair-split moat → a branded close. Photos come ONLY from the
+ * trip's own cached place photos (act.photo) — no live fetch; gradient fallback per slide.
+ * Pure/deterministic, state-adaptive (trailer / building / victory).
  */
 import { buildTripFilm } from '../tripFilm';
 
-const act = (id, name, type = 'activity') => ({ id, name, type, time: '10:00' });
+const PHOTO = 'https://places.googleapis.com/v1/places/abc/photos/xyz/media?maxWidthPx=640&key=OLD';
+const act = (id, name, type = 'activity', photo = null) => ({ id, name, type, time: '10:00', photo });
 const last = (f) => f[f.length - 1];
 
-describe('buildTripFilm (photo-free Trip Wrapped)', () => {
-  // 2 families, day 1 planned, days 2-3 empty (building mode).
+describe('buildTripFilm (Trip Wrapped, cached photos)', () => {
+  // 2 families, day 1 planned (Temple has a cached photo), days 2-3 empty (building mode).
   const building = {
     name: 'Bali', destination: 'Bali, Indonesia', emoji: '🌴',
     families: [
@@ -17,7 +19,7 @@ describe('buildTripFilm (photo-free Trip Wrapped)', () => {
       { id: 'B', name: 'Gupta', members: [{ id: 'b1' }, { id: 'b2' }] },
     ],
     days: [
-      { label: 'Day 1', date: '2026-07-10', activities: [act('p1', 'Beach Club', 'food'), act('p2', 'Temple')] },
+      { label: 'Day 1', date: '2026-07-10', activities: [act('p1', 'Beach Club', 'food'), act('p2', 'Temple', 'activity', PHOTO)] },
       { label: 'Day 2', date: '2026-07-11', activities: [] },
       { label: 'Day 3', date: '2026-07-12', activities: [] },
     ],
@@ -33,16 +35,18 @@ describe('buildTripFilm (photo-free Trip Wrapped)', () => {
     expect(last(f).subtitle).toMatch(/fair to share/i);
   });
 
-  test('no baked/Google image URLs — every slide has a gradient fallback', () => {
+  test('every slide has a gradient fallback; non-photo beats carry no photoUrl', () => {
     const f = buildTripFilm(building);
-    // The deck carries NO image URLs (no Google imagery). Free CC photos are fetched at
-    // render from a photoQuery; every slide still has a gradient to fall back to.
-    expect(f.some((s) => s.type === 'photo' || s.uri || s.heroUri)).toBe(false);
     f.forEach((s) => expect(Array.isArray(s.grad) && s.grad.length >= 2).toBe(true));
+    // stat / moat / close never carry a photo — only cover + day cards do.
+    f.filter((s) => ['stat', 'moat', 'close'].includes(s.type))
+      .forEach((s) => expect(s.photoUrl == null).toBe(true));
   });
 
-  test('the cover carries a free-photo query for the destination', () => {
-    expect(buildTripFilm(building)[0].photoQuery).toBe('Bali, Indonesia');
+  test("the cover carries the trip's first cached place photo (url + name)", () => {
+    const cover = buildTripFilm(building)[0];
+    expect(cover.photoUrl).toBe(PHOTO);
+    expect(cover.photoName).toBe('Temple');
   });
 
   test('has who + days stats and the fair-split moat (2+ families)', () => {
@@ -54,13 +58,33 @@ describe('buildTripFilm (photo-free Trip Wrapped)', () => {
     expect(moat[0].subtitle).toMatch(/what they owe/);
   });
 
-  test('one day card per planned day (capped at 4), each with a vibe line', () => {
+  test("one day card per planned day (capped at 4), each with a vibe line + that day's cached photo", () => {
     const f = buildTripFilm(building);
     const dayCards = f.filter((s) => s.type === 'day');
     expect(dayCards).toHaveLength(1);            // only Day 1 is planned
     expect(dayCards[0].kicker).toBe('DAY 1');
     expect(typeof dayCards[0].title).toBe('string');
     expect(dayCards[0].title.length).toBeGreaterThan(0);
+    expect(dayCards[0].photoUrl).toBe(PHOTO);
+    expect(dayCards[0].photoName).toBe('Temple');
+  });
+
+  test('a planned day with no cached photo → day card has no photoUrl (gradient)', () => {
+    const noPhoto = {
+      ...building,
+      days: [{ label: 'Day 1', date: '2026-07-10', activities: [act('p1', 'Market', 'food')] }],
+    };
+    const card = buildTripFilm(noPhoto).find((s) => s.type === 'day');
+    expect(card.photoUrl).toBeNull();
+    expect(buildTripFilm(noPhoto)[0].photoUrl).toBeNull();   // and so does the cover
+  });
+
+  test('a cached photo on a transport row is not used (it is not a place)', () => {
+    const flightOnly = {
+      ...building,
+      days: [{ label: 'Day 1', date: '2026-07-10', activities: [act('t1', 'Flight', 'transport', PHOTO)] }],
+    };
+    expect(buildTripFilm(flightOnly)[0].photoUrl).toBeNull();
   });
 
   test('solo trip (1 family) → no moat beat', () => {

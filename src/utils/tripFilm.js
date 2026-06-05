@@ -1,18 +1,22 @@
 /**
- * tripFilm.js — turns a trip into the "Play My Trip" film: a PHOTO-FREE "Trip Wrapped" deck
- * of branded gradient cards (cover → who → days → the fair-split moat → branded close).
+ * tripFilm.js — turns a trip into the "Play My Trip" film: a "Trip Wrapped" deck of branded
+ * gradient cards (cover → who → days → the fair-split moat → branded close), backed by the
+ * trip's OWN cached place photos wherever it has them.
  *
- * Photo-free BY DESIGN: per the legal review, the montage uses NO Google Places imagery —
- * only the trip's own data, colors, emoji, and copy. So there's nothing to license, cache,
- * or attribute, no API cost, and it renders identically on iOS + Android.
+ * Photos come ONLY from what's already saved on the trip's activities (act.photo — the cached
+ * Google Place photo URLs). NO live fetching, no new API calls: this is the user viewing their
+ * own saved trip, the same imagery already shown on every itinerary thumbnail. Any slide with
+ * no cached photo falls back to its gradient card, so the film is always beautiful, never broken.
  *
  * PURE + deterministic (same trip → same film; no Date/no random), so it's snapshot-testable.
- * The renderer (PlayTripModal) just plays whatever this returns.
+ * The renderer (PlayTripModal) re-stamps the current API key onto each photoUrl at display time.
  *
- * Slide shape: { type, grad:[c1,c2], kicker?, emoji?, big?, title?, subtitle?, brand? }
- *   type: 'cover' | 'stat' | 'day' | 'moat' | 'close'
- *   big   = a large hero number/amount (e.g. "3", "$8,460")
- *   brand = true → the close renders the Kithova mark + wordmark lockup
+ * Slide shape: { type, grad:[c1,c2], kicker?, emoji?, big?, title?, subtitle?, brand?,
+ *                photoUrl?, photoName? }
+ *   type      = 'cover' | 'stat' | 'day' | 'moat' | 'close'
+ *   big       = a large hero number/amount (e.g. "3", "$8,460")
+ *   brand     = true → the close renders the Kithova mark + wordmark lockup
+ *   photoUrl  = a cached place-photo URL from the trip; photoName = that place (for the credit)
  */
 import { dayVibe } from './tripCopy';
 import { calcTripItineraryTotal } from './costs';
@@ -30,6 +34,13 @@ const GRADS = {
 const DAY_GRADS = [GRADS.terracotta, GRADS.indigo, GRADS.green, GRADS.amber];
 
 const substantial = (a) => a.status !== 'skipped' && a.type !== 'note';
+
+// The first stop on a day that carries a cached place photo → { url, name } (or null).
+// Transport rows are skipped (a flight/drive photo isn't a "place"); the rest keep day order.
+function dayPhoto(d) {
+  const a = (d.activities || []).find((x) => substantial(x) && x.type !== 'transport' && x.photo);
+  return a ? { url: a.photo, name: a.name || null } : null;
+}
 
 // A day's emoji = its dominant activity type (a little visual variety per chapter).
 function dayEmoji(d) {
@@ -57,14 +68,18 @@ export function buildTripFilm(trip) {
   const isTrailer = plannedDays.length === 0;
   const isVictory = dayN > 0 && plannedDays.length === dayN;
 
+  // The cover leads with the trip's first cached place photo (most representative); gradient if none.
+  const coverPhoto = days.map(dayPhoto).find(Boolean) || null;
+
   const slides = [];
 
-  // ── COVER ── (photoQuery → a free CC destination photo at render; gradient if none)
+  // ── COVER ── (the trip's own first place photo at render; gradient if none)
   slides.push({
     type: 'cover',
     grad: cover,
     emoji: trip.emoji || '🌍',
-    photoQuery: trip.destination || null,
+    photoUrl: coverPhoto?.url || null,
+    photoName: coverPhoto?.name || null,
     title: trip.name || 'Our Trip',
     subtitle: [dayN ? `${dayN} ${dayN === 1 ? 'day' : 'days'}` : null, place || null].filter(Boolean).join('  ·  ') || null,
   });
@@ -91,13 +106,11 @@ export function buildTripFilm(trip) {
       title: `${plannedDays.length} ${plannedDays.length === 1 ? 'day' : 'days'} mapped out`,
       subtitle: stops ? `${stops} ${stops === 1 ? 'stop' : 'stops'} along the way` : (place || null),
     });
-    // ── DAY chapters (capped) ── each a vibe line
+    // ── DAY chapters (capped) ── each a vibe line over that day's own place photo (gradient if none)
     plannedDays.slice(0, 4).forEach((d, k) => {
       const i = days.indexOf(d);
-      // A landmark-y sight on this day → try a free photo of it; restaurants/generic stops
-      // won't resolve and just fall back to the gradient card.
-      const headline = (d.activities || []).find((a) => substantial(a) && a.type === 'activity' && a.name)?.name || null;
-      slides.push({ type: 'day', grad: DAY_GRADS[k % DAY_GRADS.length], kicker: `DAY ${i + 1}`, emoji: dayEmoji(d), photoQuery: headline, title: dayVibe(d, i) });
+      const ph = dayPhoto(d);
+      slides.push({ type: 'day', grad: DAY_GRADS[k % DAY_GRADS.length], kicker: `DAY ${i + 1}`, emoji: dayEmoji(d), photoUrl: ph?.url || null, photoName: ph?.name || null, title: dayVibe(d, i) });
     });
     // ── THE MOAT ── the fair per-family split (only meaningful for 2+ families)
     if (famN >= 2) {

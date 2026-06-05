@@ -2,7 +2,7 @@
  * expenses.test.js — the money path (the moat). Pins the invariants: per-person
  * cost × members, frozen estimatedAmount, per-family split, manual expenses kept.
  */
-import { activityToExpense, rebuildItineraryExpenses } from '../expenses';
+import { activityToExpense, rebuildItineraryExpenses, summariseExpenses } from '../expenses';
 
 const trip = () => ({
   families: [
@@ -70,5 +70,37 @@ describe('rebuildItineraryExpenses', () => {
     const out = rebuildItineraryExpenses(t);
     expect(out).toHaveLength(1);
     expect(out[0].id).toBe('m');
+  });
+});
+
+describe('summariseExpenses', () => {
+  const t = () => ({
+    expenses: [
+      { id: 'i1', source: 'itinerary', amount: 100, excluded: false },
+      { id: 'i2', source: 'itinerary', amount: 50,  excluded: true },   // skipped
+      { id: 'm1', source: 'manual',    amount: 80,  excluded: false },
+      { id: 'm2', source: 'manual',    amount: 20,  excluded: true },   // skipped
+    ],
+  });
+
+  test('splits by source into included/skipped buckets', () => {
+    const s = summariseExpenses(t());
+    expect(s.itinExpenses.map(e => e.id)).toEqual(['i1', 'i2']);
+    expect(s.manualExpenses.map(e => e.id)).toEqual(['m1', 'm2']);
+    expect(s.itinIncluded.map(e => e.id)).toEqual(['i1']);
+    expect(s.itinSkipped.map(e => e.id)).toEqual(['i2']);
+  });
+
+  test('totals omit excluded expenses', () => {
+    const s = summariseExpenses(t());
+    expect(s.itinTotal).toBe(100);          // i1 only (i2 excluded)
+    expect(s.manualTotal).toBe(80);         // m1 only (m2 excluded)
+    expect(s.grandTotal).toBe(180);         // i1 + m1
+  });
+
+  test('handles a trip with no expenses', () => {
+    const s = summariseExpenses({});
+    expect(s.itinExpenses).toEqual([]);
+    expect(s.grandTotal).toBe(0);
   });
 });

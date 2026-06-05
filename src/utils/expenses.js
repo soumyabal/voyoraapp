@@ -35,6 +35,30 @@ export function activityToExpense(act, dayLabel, allMembers, allFamilyIds) {
   };
 }
 
+/**
+ * Presentational rollup for the Splitwise tab: split a trip's expenses into itinerary vs
+ * manual, included vs skipped, and sum the included amounts. PURE — this is display glue, not
+ * the split/settlement math (that lives in costs.js and stays untouched). `amount` is summed
+ * as-is; excluded expenses are omitted from every total.
+ */
+export function summariseExpenses(trip) {
+  const all = trip.expenses || [];
+  const itinExpenses = all.filter(e => e.source === 'itinerary');
+  const manualExpenses = all.filter(e => e.source === 'manual');
+  const itinIncluded = itinExpenses.filter(e => !e.excluded);
+  const itinSkipped = itinExpenses.filter(e => e.excluded);
+  const sum = list => list.reduce((s, e) => s + e.amount, 0);
+  return {
+    itinExpenses,
+    manualExpenses,
+    itinIncluded,
+    itinSkipped,
+    itinTotal: sum(itinIncluded),
+    manualTotal: sum(manualExpenses.filter(e => !e.excluded)),
+    grandTotal: sum(all.filter(e => !e.excluded)),
+  };
+}
+
 /** Rebuild a trip's itinerary expenses from its costed activities. Manual
  *  expenses (source !== 'itinerary') are preserved. */
 export function rebuildItineraryExpenses(t) {

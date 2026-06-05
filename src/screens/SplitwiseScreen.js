@@ -14,6 +14,7 @@ import {
   calcFamilyExpenseTotal, calcMemberExpenseShare,
   calcTripItineraryTotal, calcBalances, calcSettlements,
 } from '../utils/costs';
+import { summariseExpenses } from '../utils/expenses';
 
 // Expense category emoji (stored in exp.category) → Icon name + tint
 const CAT_ICON = { '🏨': 'hotel', '✈️': 'plane', '🍽️': 'food', '🎯': 'activity', '💊': 'medkit-outline', '🚗': 'transport' };
@@ -31,14 +32,7 @@ export default function SplitwiseScreen({ trip }) {
   const [headTipDismissed, setHeadTipDismissed] = useState(false);
 
   const tripMode = trip.splitMode || 'individual';
-  const itinExpenses = trip.expenses.filter(e => e.source === 'itinerary');
-  const manualExpenses = trip.expenses.filter(e => e.source === 'manual');
-
-  const itinIncluded = itinExpenses.filter(e => !e.excluded);
-  const itinSkipped = itinExpenses.filter(e => e.excluded);
-  const itinTotal = itinIncluded.reduce((s, e) => s + e.amount, 0);
-  const manualTotal = manualExpenses.filter(e => !e.excluded).reduce((s, e) => s + e.amount, 0);
-  const grandTotal = trip.expenses.filter(e => !e.excluded).reduce((s, e) => s + e.amount, 0);
+  const { itinExpenses, manualExpenses, itinIncluded, itinSkipped, itinTotal, manualTotal, grandTotal } = summariseExpenses(trip);
 
   const balances = calcBalances(trip);
   const settlements = calcSettlements([...balances]);

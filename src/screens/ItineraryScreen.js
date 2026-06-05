@@ -1750,6 +1750,27 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
   const swipeScrollRef = useRef(null);
   const close = () => swipeScrollRef.current?.scrollTo({ x: 0, animated: true });
 
+  // Swipe actions are PHASE-AWARE: while a trip is still being PLANNED, "Done / Did Not Do"
+  // are meaningless (you can't have done a future stop) — so the swipe leads with Move +
+  // Delete. Once the trip is happening (active) or over (past), the swipe is the status
+  // pad (Done / Did Not Do / Delete). Delete stays the far-right cell in every phase, so
+  // the one shared action never moves under your thumb.
+  const phase    = tripPhase(trip);
+  const planning = phase === 'upcoming' || phase === 'undated';
+  // One Move entry point (consolidates the old day-icon + hidden long-press): choose day or slot.
+  const moveChooser = () => {
+    close();
+    Alert.alert(
+      `Move “${act.name || 'this stop'}”`,
+      'Where to?',
+      [
+        { text: '📅  Another day', onPress: onMoveRequest },
+        { text: '🕒  A different time slot', onPress: onSlotMove },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  };
+
   return (
     <View style={styles.actCardOuter}>
       <ScrollView
@@ -1790,8 +1811,6 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
         <View style={{ flex: 1 }}>
           <TouchableOpacity
             style={styles.actBody}
-            onLongPress={onSlotMove}
-            delayLongPress={400}
             activeOpacity={1}
           >
             {/* Eyebrow — time · duration (transport shows arrival), quiet metadata */}
@@ -1851,7 +1870,7 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
 
             {hasSecondary && !isSkipped && (
               <TouchableOpacity style={styles.cardFoldBtn} onPress={() => setCardExpanded(e => !e)}
-                activeOpacity={0.6} onLongPress={onSlotMove} delayLongPress={400}>
+                activeOpacity={0.6}>
                 <Text style={styles.cardFoldText}>{cardExpanded ? '▴ less' : '▾ details'}</Text>
               </TouchableOpacity>
             )}
@@ -1928,7 +1947,7 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
             <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
               <Icon name="create-outline" size={16} color={colors.subtle} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={onMoveRequest} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
+            <TouchableOpacity onPress={moveChooser} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
               <Icon name="calendar-outline" size={15} color={colors.subtle} />
             </TouchableOpacity>
             {act.time && act.type !== 'note' && act.status !== 'done' && act.status !== 'skipped' && (
@@ -1955,22 +1974,36 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
         </View>
         </View>{/* end actCard */}
 
-        {/* ── Action buttons (revealed when card scrolls left) ── */}
+        {/* ── Action buttons (revealed when card scrolls left) — PHASE-AWARE ── */}
         <View style={styles.actCardActions}>
-          <TouchableOpacity
-            style={[styles.actCardAction, { backgroundColor: '#22c55e' }]}
-            onPress={() => { close(); onMarkDone(); }}
-          >
-            <Icon name="checkmark" size={20} color="#fff" />
-            <Text style={styles.actCardActionLabel}>Done</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actCardAction, { backgroundColor: '#f97316' }]}
-            onPress={() => { close(); onMarkSkipped(); }}
-          >
-            <Icon name="close" size={20} color="#fff" />
-            <Text style={styles.actCardActionLabel}>Did Not Do</Text>
-          </TouchableOpacity>
+          {planning ? (
+            // Planning: Move is the verb you actually use; Done/Did-Not-Do are meaningless.
+            <TouchableOpacity
+              style={[styles.actCardAction, { backgroundColor: '#64748b' }]}
+              onPress={moveChooser}
+            >
+              <Icon name="calendar" size={19} color="#fff" />
+              <Text style={styles.actCardActionLabel}>Move</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={[styles.actCardAction, { backgroundColor: '#22c55e' }]}
+                onPress={() => { close(); onMarkDone(); }}
+              >
+                <Icon name="checkmark" size={20} color="#fff" />
+                <Text style={styles.actCardActionLabel}>Done</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actCardAction, { backgroundColor: '#f97316' }]}
+                onPress={() => { close(); onMarkSkipped(); }}
+              >
+                <Icon name="close" size={20} color="#fff" />
+                <Text style={styles.actCardActionLabel}>Did Not Do</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          {/* Delete — always the far-right cell, in every phase. */}
           <TouchableOpacity
             style={[styles.actCardAction, { backgroundColor: '#ef4444' }]}
             onPress={() => { close(); onDelete(); }}

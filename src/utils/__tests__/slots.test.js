@@ -21,6 +21,16 @@ describe('slot suggested time never lands at midnight', () => {
     expect(s >= '09:00').toBe(true);
   });
 
+  test('a 2nd stop when one already sits AT the slot default does NOT stack at 09:00', () => {
+    // The reported bug: manual entry seeded 09:00 every time, so two fuel stops both
+    // landed at 09:00. The seed now uses getSuggestedTime → the 2nd must move past it.
+    const t = tripWith([{ id: 'fuel', type: 'activity', name: 'Fuel stop', time: '09:00', durationMins: 120 }]);
+    const s = getSuggestedTime(t, 0, 'morning');
+    expect(s).not.toBe('09:00');
+    expect(s > '09:00').toBe(true);
+    expect(s < '12:00').toBe(true); // still a morning time
+  });
+
   test('a FULL morning suggests a morning time, not an afternoon spill', () => {
     const t = tripWith([
       { id: 'a', type: 'activity', name: 'X', time: '09:00', durationMins: 90 },

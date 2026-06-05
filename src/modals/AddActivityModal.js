@@ -410,10 +410,18 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
     } else {
       // seed: { name?, address?, lat?, lng?, tile? } — from the Discover "add
       // manually" bridge (name only) OR a dropped map pin (lat/lng, maybe address).
-      setTile(seed?.tile ? (findTile(seed.tile, null) || TILES[6]) : TILES[6]);
+      const newTile = seed?.tile ? (findTile(seed.tile, null) || TILES[6]) : TILES[6];
+      setTile(newTile);
       setName(seed?.name || '');   // prefilled when opened from the Discover "add manually" bridge
       setNameTouched(!!seed?.name);   // a seeded name is the user's → don't clobber on a type change
-      setTime(defaultTime || '09:00');
+      // SMART time: seed the next OPEN gap in the slot (same helper + duration estimate the
+      // slot picker / "Add at X" pill use), NOT the raw slot default — otherwise two manual
+      // stops both land at the slot's default time (the "two fuel stops both at 09:00" bug).
+      // An empty slot still returns the default (e.g. 09:00), so the first stop is familiar.
+      const newSlot = getSlotKey(defaultTime || '09:00');
+      const seedNeed = estimateDuration({ type: newTile.type, subtype: newTile.subtype, name: seed?.name || '', detail: '' });
+      setTime(getSuggestedTime(trip, currentDay ?? 0, newSlot, seedNeed));
+      setTimeExplicit(false);   // a fresh add is never pre-locked — don't inherit a prior pin
       setArriveTime('');
       setDetail('');
       setCostMode('per_person');
@@ -426,7 +434,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setShowMore(false);
       setDayIdx(currentDay ?? 0);
       setAllDays(false);
-      setSlotKey(getSlotKey(defaultTime || '09:00'));
+      setSlotKey(newSlot);
       setAddress(seed?.address || '');
       const hasGeo = seed?.lat != null && seed?.lng != null;
       setGeo(hasGeo ? { lat: seed.lat, lng: seed.lng } : null);

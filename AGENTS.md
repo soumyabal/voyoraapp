@@ -177,10 +177,12 @@ plannerRules.js       System + user prompt builders for single-LLM legacy path.
 helpers.js            uid(), fmt(), fmtM(), getAllMembers(), effectiveMember(), familyPalette
                       (single source — theme.js no longer defines it), defaultNightsFor()
 costs.js              Split engine: resolveMode → calcBalances → calcSettlements (THE MOAT)
-tripValidator.js      Trip Check rules engine (~18 rules) + estimateDuration, lodgingForNight,
+tripValidator.js      Trip Check rules engine + estimateDuration, lodgingForNight,
                       and the per-day routing anchors dayStartAnchor/dayEndAnchor/dayRouteAnchor.
-                      NOTE: rules are still inline (procedural) — a "rule registry" refactor is
-                      planned (gated by the validateTrip golden snapshot).
+                      Rules are now a REGISTRY: buildDayContext() computes shared per-day
+                      state once, then DAY_RULES (14 day rules) + TRIP_RULES (6 trip rules)
+                      each run as pure (ctx|trip)→warning[] functions. Gated byte-for-byte by
+                      the validateTrip golden snapshot (every rule has a fixture).
 autoArrange.js        scheduleDay() (per-day) + autoArrange() (basket → days). Anchors each day
                       via dayRouteAnchor. "One engine PLACES, the same engine CHECKS."
 geo.js                travelLeg() / haversineKm() — FREE straight-line distance + time estimate.
@@ -212,10 +214,13 @@ src/data/sampleData.js Seed trips/travelers/groups for first launch
 > Authoritative summary of what's shipped beyond the original Phase-1 doc above.
 
 **Tooling & quality**
-- **Tests:** jest + jest-expo. 88 tests across `src/utils/__tests__` (pure utils) AND
-  `src/store/__tests__` (store/money-path characterization). Two golden nets gate refactors:
-  `store.test.js` (createTrip/addActivity/the moat/settlement + a **persisted-shape guard**) and
-  `tripValidator.snapshot.test.js` (full validateTrip output). Run: `npm test`.
+- **Tests:** jest + jest-expo. ~298 tests across `src/utils/__tests__` (pure utils) AND
+  `src/store/__tests__` (store/money-path characterization). Golden nets gate refactors:
+  `store.test.js` (createTrip/addActivity/the moat/settlement + a **persisted-shape guard**),
+  `storeActions.test.js` (the money-cascade actions: update/delete/skip/move/arrange/plan),
+  `splitEngine.regression.test.js` + `splitDelete.regression.test.js` (the split engine — every
+  mode, a 500-trip property fuzz, delete-flow balance), and `tripValidator.snapshot.test.js`
+  (FULL validateTrip output — every rule has a fixture, locks the rule registry). Run: `npm test`.
 - **Lint/format:** `npm run lint` (eslint 9 flat, eslint-config-expo) / `npm run format` (prettier).
   Non-blocking baseline (~420 findings) to clean incrementally.
 - **Stability:** ErrorBoundary in `App.js`; AsyncStorage is **versioned + migrated** (no data wipe

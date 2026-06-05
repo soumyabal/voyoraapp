@@ -598,9 +598,12 @@ export default function HomeScreen({ navigation }) {
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
       >
         <View style={styles.heroNav}>
-          <View style={styles.logoRow}>
-            <KithovaMark size={20} hub={colors.white} />
-            <KithovaWordmark variant="onDark" size={22} />
+          <View>
+            <View style={styles.logoRow}>
+              <KithovaMark size={20} hub={colors.white} />
+              <KithovaWordmark variant="onDark" size={22} />
+            </View>
+            <Text style={styles.brandTagline}>Travel together, split it fair.</Text>
           </View>
           {/* Accounts are a freemium feature (RELEASE_FLAGS.accounts) — hidden in the
               free/local TestFlight build so there's no non-functional Sign In UI. */}
@@ -787,6 +790,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  brandTagline: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.55)', letterSpacing: 0.2, marginTop: 3 },
   creditPill: {
     backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: radius.full,
     paddingHorizontal: 12, paddingVertical: 6,

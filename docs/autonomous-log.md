@@ -66,6 +66,10 @@ diff only intended files. Target: ItineraryScreen.js (3022 lines) + DiscoverModa
   PRICE_TO_COST, isVegFriendly, photoUrl) → utils/discoverPlaces.js + 11 tests (incl. a regression
   lock on the Great-Wolf-Lodge "lodging beats food" classification). Screen imports back mapPlace +
   metersBetween, drops the now-unused compactHours import. −49 lines; 413 tests green (de4b982).
+- 2026-06-05 — extracted summariseExpenses (Splitwise display rollup: itinerary/manual,
+  included/skipped, included-only totals) → utils/expenses.js + 3 tests. Presentational glue only —
+  the split/settlement money math (costs.js) untouched. SplitwiseScreen −8 lines; 416 tests green
+  (a854463). EXTRACTION QUEUE EXHAUSTED — next run is the Play My Trip multi-photo feature.
 
 ## 2026-06-04 — test-user bug fixes (user driving)
 - 2026-06-04 — Bug1: 24/7 places (bridge/lighthouse) no longer show "Closed" — Google's no-close period was recorded Sunday-only; compactHours now expands 24/7 to all 7 days + handles cross-midnight; store v4→v5 migration repairs existing trips. ✓ device-verified (19b84aa)

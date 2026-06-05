@@ -1,115 +1,132 @@
 /**
  * LoadingScreen.js — the branded launch screen.
  *
- * A code-drawn Kithova logo (terracotta gradient "K" badge + wordmark + tagline) on a
- * warm cream field, with a polished entrance: the badge springs in, the name rises under
- * it, and three dots pulse while the app gets ready. Shows for HOLD_MS, then calls onDone.
+ * An animated "kith" constellation: family-colored dots orbit a warm hub (your people,
+ * together — the brand idea, and deliberately NOT a letter-in-a-rounded-square so it
+ * doesn't read like a generic travel-app badge). The cluster blooms in and keeps orbiting
+ * + pulsing the whole time it's up, with cycling microcopy beneath, so a load of any
+ * length stays interesting. Reveals the app after HOLD_MS (or whenever the parent is ready).
  *
- * All theme-token driven (no hardcoded brand colors) so it travels with the design system
- * — and the "K" badge is intentionally app-icon-shaped so it can seed the real icon later.
- * Swap in a designer's logo image here whenever one exists.
+ * Theme-token driven; no image asset, no new deps. Swap in a designer's logo here later.
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing } from '../theme';
 
-const HOLD_MS = 1900; // how long the splash stays up before revealing the app
+const HOLD_MS = 2000;                 // minimum brand moment before revealing the app
+const DOT_COLORS = [colors.accent, colors.smart, colors.success, colors.warn, colors.accentDark];
+const N = DOT_COLORS.length;
+const FIELD = 132;                    // constellation container (px)
+const ORBIT = 40;                     // orbit radius
+const DOT = 18;                       // dot diameter
+const CENTER = 12;                    // hub diameter
+
+const PHRASES = [
+  'Gathering your crew…',
+  'Plotting the days…',
+  'Splitting it fair…',
+  'Packing the snacks…',
+];
 
 export default function LoadingScreen({ onDone }) {
-  const badgeScale = useRef(new Animated.Value(0.6)).current;
-  const badgeOp    = useRef(new Animated.Value(0)).current;
-  const textOp     = useRef(new Animated.Value(0)).current;
-  const textRise   = useRef(new Animated.Value(14)).current;
-  const dots       = [useRef(new Animated.Value(0)).current,
-                      useRef(new Animated.Value(0)).current,
-                      useRef(new Animated.Value(0)).current];
+  const enter    = useRef(new Animated.Value(0)).current;  // cluster bloom (scale + opacity)
+  const spin     = useRef(new Animated.Value(0)).current;  // continuous orbit
+  const textOp   = useRef(new Animated.Value(0)).current;  // wordmark fade
+  const textRise = useRef(new Animated.Value(12)).current; // wordmark rise
+  const copyOp   = useRef(new Animated.Value(0)).current;  // microcopy crossfade
+  const pulses   = useRef(DOT_COLORS.map(() => new Animated.Value(0))).current;
+  const [phrase, setPhrase] = useState(0);
 
   useEffect(() => {
-    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch { /* haptics optional */ }
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch { /* optional */ }
 
-    // Entrance: badge springs + fades in, then the wordmark rises under it.
-    Animated.sequence([
-      Animated.parallel([
-        Animated.spring(badgeScale, { toValue: 1, friction: 6, tension: 80, useNativeDriver: true }),
-        Animated.timing(badgeOp, { toValue: 1, duration: 380, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+    // Entrance: cluster blooms, wordmark rises, copy fades in.
+    Animated.parallel([
+      Animated.spring(enter, { toValue: 1, friction: 6, tension: 70, useNativeDriver: true }),
+      Animated.sequence([
+        Animated.delay(240),
+        Animated.parallel([
+          Animated.timing(textOp, { toValue: 1, duration: 420, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(textRise, { toValue: 0, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        ]),
       ]),
-      Animated.parallel([
-        Animated.timing(textOp, { toValue: 1, duration: 420, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.timing(textRise, { toValue: 0, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      ]),
+      Animated.timing(copyOp, { toValue: 1, duration: 360, delay: 460, useNativeDriver: true }),
     ]).start();
 
-    // Looping, staggered pulse for the three loader dots.
-    const pulse = (v, delay) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(v, { toValue: 1, duration: 440, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-          Animated.timing(v, { toValue: 0, duration: 440, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        ])
-      );
-    const loops = dots.map((v, i) => pulse(v, i * 160));
-    loops.forEach((l) => l.start());
+    // Continuous orbit + staggered pulse — keeps the screen alive for any load length.
+    const orbit = Animated.loop(
+      Animated.timing(spin, { toValue: 1, duration: 9000, easing: Easing.linear, useNativeDriver: true })
+    );
+    orbit.start();
+    const pulseLoops = pulses.map((v, i) =>
+      Animated.loop(Animated.sequence([
+        Animated.delay(i * 130),
+        Animated.timing(v, { toValue: 1, duration: 620, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(v, { toValue: 0, duration: 620, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]))
+    );
+    pulseLoops.forEach((l) => l.start());
+
+    // Cycle the microcopy with a quick crossfade.
+    const interval = setInterval(() => {
+      Animated.timing(copyOp, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+        setPhrase((p) => (p + 1) % PHRASES.length);
+        Animated.timing(copyOp, { toValue: 1, duration: 320, useNativeDriver: true }).start();
+      });
+    }, 1500);
 
     const t = setTimeout(() => { if (onDone) onDone(); }, HOLD_MS);
-    return () => { clearTimeout(t); loops.forEach((l) => l.stop()); };
+    return () => {
+      clearTimeout(t);
+      clearInterval(interval);
+      orbit.stop();
+      pulseLoops.forEach((l) => l.stop());
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const dotStyle = (v) => ({
-    opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.25, 1] }),
-    transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.15] }) }],
-  });
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const bloom = enter.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] });
 
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />
 
-      <Animated.View style={{ opacity: badgeOp, transform: [{ scale: badgeScale }] }}>
-        <LinearGradient
-          colors={[colors.accent, colors.accentDark]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.badge}
-        >
-          <Text style={styles.badgeLetter}>K</Text>
-        </LinearGradient>
+      <Animated.View style={[styles.field, { opacity: enter, transform: [{ scale: bloom }, { rotate }] }]}>
+        {DOT_COLORS.map((c, i) => {
+          const angle = (i / N) * 2 * Math.PI;
+          const x = ORBIT * Math.cos(angle);
+          const y = ORBIT * Math.sin(angle);
+          const scale = pulses[i].interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.25] });
+          return (
+            <Animated.View
+              key={i}
+              style={[
+                styles.dot,
+                { backgroundColor: c, left: FIELD / 2 - DOT / 2 + x, top: FIELD / 2 - DOT / 2 + y, transform: [{ scale }] },
+              ]}
+            />
+          );
+        })}
+        <View style={[styles.dot, styles.hub, { left: FIELD / 2 - CENTER / 2, top: FIELD / 2 - CENTER / 2 }]} />
       </Animated.View>
 
       <Animated.View style={[styles.textWrap, { opacity: textOp, transform: [{ translateY: textRise }] }]}>
         <Text style={styles.wordmark}>Kithova</Text>
-        <Text style={styles.tagline}>everyone you travel with</Text>
       </Animated.View>
 
-      <View style={styles.dots}>
-        {dots.map((v, i) => (
-          <Animated.View key={i} style={[styles.dot, dotStyle(v)]} />
-        ))}
-      </View>
+      <Animated.Text style={[styles.copy, { opacity: copyOp }]}>{PHRASES[phrase]}</Animated.Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
-  badge: {
-    width: 104,
-    height: 104,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.accentDark,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 22,
-    elevation: 12,
-  },
-  badgeLetter: { color: colors.white, fontSize: 54, fontWeight: '900', letterSpacing: -1, marginTop: -2 },
+  field: { width: FIELD, height: FIELD },
+  dot: { position: 'absolute', width: DOT, height: DOT, borderRadius: DOT / 2 },
+  hub: { width: CENTER, height: CENTER, borderRadius: CENTER / 2, backgroundColor: colors.ink, opacity: 0.85 },
   textWrap: { alignItems: 'center' },
-  wordmark: { marginTop: spacing.xxl, fontSize: 34, fontWeight: '900', letterSpacing: -0.5, color: colors.ink },
-  tagline: { marginTop: spacing.xs, fontSize: 14, color: colors.subtle, letterSpacing: 0.2 },
-  dots: { flexDirection: 'row', position: 'absolute', bottom: 64, gap: 8 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent },
+  wordmark: { marginTop: spacing.xl, fontSize: 34, fontWeight: '900', letterSpacing: -0.5, color: colors.ink },
+  copy: { marginTop: spacing.sm, fontSize: 14, color: colors.subtle, letterSpacing: 0.2 },
 });

@@ -19,10 +19,20 @@ import { BOOKING_AFFILIATE } from '../config';
 
 const isStay = (p) => p?.activityType === 'stay' || p?.type === 'stay';
 
+// Itinerary stays are often phrased as actions ("Check-in: The Layar Villa",
+// "Checkout & …") rather than bare hotel names. That prefix pollutes the Booking
+// search and makes it bounce to the homepage instead of the property — so strip a
+// leading lodging verb before building the query. Discover-added hotels (clean
+// names) are unaffected.
+const cleanStayName = (raw) =>
+  (raw || '')
+    .replace(/^\s*(check[\s-]?in|check[\s-]?out|checkin|checkout|stay(?:ing)?(?:\s+at)?|lodging|hotel|accommodation)\s*[:\-–]\s*/i, '')
+    .trim();
+
 export function bookingUrl(place, cfg = BOOKING_AFFILIATE) {
   if (!isStay(place)) return null;
 
-  const name = (place.name || '').trim();
+  const name = cleanStayName(place.name);
   const city = (place.city || '').trim();
   // Pinpoint the hotel by name + locality; degrade gracefully when fields are missing.
   let query = '';

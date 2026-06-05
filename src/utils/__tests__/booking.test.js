@@ -26,6 +26,16 @@ test('works on a stored activity (type:stay) too, and degrades without a city', 
   expect(bookingUrl({ type: 'stay' })).toBeNull(); // nothing searchable
 });
 
+test('strips itinerary "Check-in:" / lodging prefixes so the search hits the property', () => {
+  const check = (name) => decodeURIComponent(bookingUrl({ type: 'stay', name, city: 'Seminyak' }));
+  expect(check('Check-in: The Layar Villa')).toContain('The Layar Villa, Seminyak');
+  expect(check('Checkout: The Layar Villa')).toContain('The Layar Villa, Seminyak');
+  expect(check('Hotel - Loews Hollywood')).toContain('Loews Hollywood, Seminyak');
+  expect(check('Staying at Marina Bay Sands')).toContain('Marina Bay Sands, Seminyak');
+  // A clean Discover-added name is left untouched.
+  expect(check('The Ritz')).toContain('The Ritz, Seminyak');
+});
+
 test('encodes special characters', () => {
   const u = bookingUrl({ activityType: 'stay', name: 'B&B Café', city: 'São Paulo' }, { aid: null });
   expect(u).toContain(encodeURIComponent('B&B Café, São Paulo'));

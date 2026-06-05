@@ -810,6 +810,45 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               </View>
             )}
 
+            {/* ── Destination (transport) ── where this leg ARRIVES (an Airbnb, hotel,
+                   trailhead…). Geocoded so the day's routing knows where the drive ends
+                   and the next stop's travel leg starts. Above the fold — it's essential
+                   for a transport leg, not an optional detail. */}
+            {tile.type === 'transport' && tile.subtype !== 'pitstop' && (
+              <>
+                <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>
+                  DESTINATION <Text style={s.optional}>(where this leg arrives — Airbnb, hotel, etc.)</Text>
+                </Text>
+                <View style={s.addrRow}>
+                  <TextInput
+                    style={s.addrInput}
+                    value={address}
+                    onChangeText={t => { setAddress(t); setGeo(null); setGeoStatus('idle'); }}
+                    placeholder="e.g. an Airbnb address, or 123 River Rd…"
+                    placeholderTextColor={colors.muted}
+                    returnKeyType="search"
+                    onSubmitEditing={locate}
+                  />
+                  <TouchableOpacity
+                    style={[s.addrFind, geoStatus === 'ok' && s.addrFindOk]}
+                    onPress={locate}
+                    disabled={geoStatus === 'loading' || !address.trim()}
+                    activeOpacity={0.85}
+                  >
+                    {geoStatus === 'loading'
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={s.addrFindText}>{geoStatus === 'ok' ? '✓ Located' : 'Find'}</Text>}
+                  </TouchableOpacity>
+                </View>
+                {geoStatus === 'ok' && (
+                  <Text style={s.addrOk}>📍 Pinned — the next stop’s drive starts from here.</Text>
+                )}
+                {geoStatus === 'fail' && (
+                  <Text style={s.addrFail}>Couldn&apos;t find that address — try a fuller one (street, city).</Text>
+                )}
+              </>
+            )}
+
             {/* ── Time ── EDIT mode has no WHEN slot picker, so the time control
                    stays above the fold here (Add mode sets it via the slot, and
                    keeps the fine-tune under "+ Details"). */}

@@ -30,7 +30,7 @@ describe('buildTripFilm (photo-free Trip Wrapped)', () => {
     expect(f[0].emoji).toBe('🌴');
     expect(last(f).type).toBe('close');
     expect(last(f).brand).toBe(true);
-    expect(last(f).subtitle).toMatch(/split it fair/i);
+    expect(last(f).subtitle).toMatch(/shared memories/i);
   });
 
   test('uses NO photos / Google imagery — every slide is a gradient card', () => {

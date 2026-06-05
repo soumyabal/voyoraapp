@@ -5,79 +5,23 @@ import AddActivityModal from '../modals/AddActivityModal';
 import DiscoverModal from '../modals/DiscoverModal';
 import SetOriginModal from '../modals/SetOriginModal';
 import PlayTripModal from '../modals/PlayTripModal';
-import { APP_NAME } from '../config';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
 import { fmt, fmtM, getActivityIcon, uid, tripPhase, defaultDayFor, daysBetweenISO, todayISO, nowNextOf } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost, calcFamilyBalances } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
-import { googleMapsDayUrl, googleMapsDayShareUrl } from '../utils/mapsRoute';
+import { googleMapsDayUrl } from '../utils/mapsRoute';
 import { scheduleDay, planDay, returnJourneyDraft, suggestDayForVenue } from '../utils/autoArrange';
 import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, hoursLabel, weeklyHoursLabel, dayIntervals } from '../utils/hours';
 import { refreshPhotoKey } from '../utils/places';
 import { getSuggestedTime, minToTime, getSlotKey, timeToMin } from '../utils/slots';
 import { getDietaryWarning } from '../utils/dietary';
+import { generateDayShareText } from '../utils/dayShare';
 import { bookingUrl } from '../utils/booking';
 import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
-
-// ─── WhatsApp day share text ──────────────────────────────────────
-const SLOT_RANGES = [
-  { key: 'morning',   label: '🌅 Morning',   before: 720  },
-  { key: 'afternoon', label: '☀️ Afternoon',  before: 1020 },
-  { key: 'evening',   label: '🌆 Evening',    before: 1260 },
-  { key: 'night',     label: '🌙 Night',      before: 1440 },
-];
-
-function generateDayShareText(trip, day, dayIndex) {
-  if (!day) return '';
-  const oneLine = (s) => String(s).replace(/\s+/g, ' ').trim();
-  const acts = [...(day.activities || [])]
-    .filter(a => a.status !== 'skipped')
-    .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
-
-  const toMin = t => { const [h, m] = (t || '09:00').split(':').map(Number); return h * 60 + m; };
-  const getSlot = t => {
-    const m = toMin(t);
-    return SLOT_RANGES.find(s => m < s.before)?.key ?? 'night';
-  };
-
-  const bySlot = {};
-  acts.forEach(a => {
-    const sk = getSlot(a.time);
-    if (!bySlot[sk]) bySlot[sk] = [];
-    bySlot[sk].push(a);
-  });
-
-  const dayCost = acts.reduce((s, a) => s + (a.costPerPerson || 0), 0);
-
-  let text = `*${trip.name}* — ${day.label} (${fmt(day.date)})\n📍 ${trip.destination}\n\n`;
-
-  SLOT_RANGES.forEach(({ key, label }) => {
-    if (!bySlot[key]?.length) return;
-    text += `${label}\n`;
-    bySlot[key].forEach(a => {
-      const icon = a.type === 'food' ? '🍽️' : a.type === 'transport' ? '🚗' : a.type === 'stay' ? '🏨' : '🎯';
-      const cost = a.costPerPerson > 0 ? ` (~$${a.costPerPerson}/p)` : '';
-      text += `  ${a.time}  ${icon} ${a.name}${cost}\n`;
-      // Address as plain text (where you'll be); single-lined so it never breaks
-      // the slot layout. The tappable route is the one link at the bottom.
-      if (a.address) text += `         📍 ${oneLine(a.address)}\n`;
-    });
-    text += '\n';
-  });
-
-  if (dayCost > 0) text += `💰 Day estimate: ${fmtM(dayCost)}/person\n`;
-  // One tappable, chat-safe link that opens the WHOLE day's route in Maps
-  // (path-style URL — survives chat link-detectors). On its own line, no
-  // trailing punctuation, so it stays one tap target. Omitted if <2 located stops.
-  const routeUrl = dayIndex != null ? googleMapsDayShareUrl(trip, dayIndex) : null;
-  if (routeUrl) text += `\n🗺️ Open today's route in Maps:\n${routeUrl}\n`;
-  text += `\n_Shared via ${APP_NAME}_`;
-  return text;
-}
 
 const SCREEN_W       = Dimensions.get('window').width;
 const CARD_ACTIONS_W = 216;                        // 3 × 72px action buttons

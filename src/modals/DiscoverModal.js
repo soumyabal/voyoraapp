@@ -32,7 +32,6 @@ const LAYERS = [
   { key: 'eat',  type: 'food',     icon: 'food',     label: 'Eat',  tint: '#e17055', query: 'best restaurants' },
   { key: 'stay', type: 'stay',     icon: 'hotel',    label: 'Stay', tint: colors.smart, query: 'highly rated hotels and resorts' },
 ];
-const TYPE_TO_LAYER = { activity: 'see', food: 'eat', stay: 'stay' };
 
 const FILTER_OPTS = [
   { key: 'vegetarian',  label: '\u{1F966} Veg',       bias: 'vegetarian friendly' },
@@ -90,8 +89,11 @@ const PRICE_TO_COST = {
   PRICE_LEVEL_EXPENSIVE:75,PRICE_LEVEL_VERY_EXPENSIVE:150,
 };
 function inferActivityType(types = []) {
-  if (types.some(t => ['restaurant','food','meal_takeaway','bakery','cafe'].includes(t))) return 'food';
-  if (types.some(t => ['lodging','hotel','resort_hotel','motel'].includes(t))) return 'stay';
+  // Lodging WINS over food: a resort/hotel almost always also lists 'restaurant'/'food'
+  // for its in-house dining (Great Wolf Lodge's types include resort_hotel AND restaurant
+  // AND food). Checking food first mis-filed it as a restaurant, so the Stay layer hid it.
+  if (types.some(t => ['lodging','hotel','resort_hotel','motel','guest_house','bed_and_breakfast','campground','rv_park'].includes(t))) return 'stay';
+  if (types.some(t => ['restaurant','food','meal_takeaway','bakery','cafe','coffee_shop','bar'].includes(t))) return 'food';
   return 'activity';
 }
 
@@ -517,7 +519,11 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   // pipeline; surfacing it here was hiding places testers wanted to see.)
   const results = React.useMemo(() => {
     const base = searchText.trim()
-      ? textResults.filter(p => layers[TYPE_TO_LAYER[p.activityType]] !== false)
+      // A TYPED search is literal — show every match for what the user asked for. Do NOT
+      // filter by the See/Eat/Stay layer: a multi-purpose place (Great Wolf Lodge is a
+      // resort AND restaurant AND waterpark) was being hidden whenever its one inferred
+      // layer happened to be the toggle that was off. Layers only narrow BROWSE.
+      ? textResults
       : (() => {
           const seen = new Set();
           return LAYERS.filter(l => layers[l.key])
@@ -912,7 +918,9 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
           )}
 
           {/* Map layers — independent See / Eat / Stay toggles. Each carries its
-              type colour (= the map-pin legend); turn on any mix. */}
+              type colour (= the map-pin legend); turn on any mix. They narrow BROWSE
+              only, so they're hidden during a typed search (which is always literal). */}
+          {!searchText.trim() && (
           <View style={s.focusBar}>
             {LAYERS.map(L => {
               const on = layers[L.key];
@@ -926,8 +934,9 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
               );
             })}
           </View>
+          )}
 
-          {layers.eat && (
+          {!searchText.trim() && layers.eat && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
               {FILTER_OPTS.map(f => {
                 const on = activeFilters.includes(f.key);

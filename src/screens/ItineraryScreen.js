@@ -127,7 +127,15 @@ const DAY_PILL = {
   fix:   { bg: '#fdf3e2', fg: '#b45309', icon: 'warning-outline' },          // a genuine conflict
   check: { bg: '#fdf3e2', fg: '#b45309', icon: 'information-circle-outline' },// real, worth a look
   tip:   { bg: '#eef1f4', fg: '#5b6470', icon: 'bulb-outline' },             // soft heuristic heads-up
-  ok:    { bg: '#e9f7f0', fg: '#0e9f6e', icon: 'checkmark-circle' },         // all good
+};
+
+// Day-pill health dot — calm by default. A dot appears ONLY when a day needs attention:
+// red for a provable conflict, amber for a data-backed warning. Soft 'info' tips earn NO
+// dot (they live inside the day) so amber stays meaningful and the row never green-soups.
+const HEALTH_DOT = {
+  conflict: colors.danger,
+  check:    colors.warn,
+  // tip / clean / empty → no dot (calm)
 };
 
 // A day slot ↔ the meal you'd eat at the hotel in it (in-room dining / hotel
@@ -343,25 +351,43 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
           <Text style={ch.miniDayAmt} numberOfLines={1}>{itinTotal > 0 ? fmtM(itinTotal) : '—'}</Text>
         </View>
 
-        {/* Trip health — flag ONLY a real conflict (amber + count). When all's well we
-            DON'T show a green ✓ here: it just duplicated the inline "Looks well-paced"
-            tip + the green day-status pill below (owner flagged the redundant green). */}
+        {/* Trip Check — always here so the planner sees how the trip's looking + can open the
+            full checker. Calm by default: a thin green ✓ when all's well (an outline, not a
+            green block), neutral while still building, amber with a count when there's
+            something to look at. The single deliberate trip-health signal; the day pills stay
+            calm and only dot a day that needs attention. */}
         {!!onCheckTrip && (() => {
           const ignored = trip.ignoredWarnings || [];
-          const conflicts = validateTrip(trip)
-            .filter(w => w.severity === 'error' && !ignored.includes(`${w.type}:${w.dayIndex ?? 'trip'}`))
-            .length;
-          if (conflicts === 0) return null;   // no green/neutral chip — only flag conflicts
+          const all = validateTrip(trip).filter(w => !ignored.includes(`${w.type}:${w.dayIndex ?? 'trip'}`));
+          const conflicts = all.filter(w => w.severity === 'error').length;
+          const checks    = all.filter(w => w.severity === 'warning').length;
+          const isPlanned = d => (d.activities || []).some(a => a.status !== 'skipped' && a.type !== 'note');
+          const allPlanned = trip.days.length > 0 && trip.days.every(isPlanned);
+
+          let v, label;
+          if (conflicts > 0) {
+            v = { icon: 'warning-outline', text: `${conflicts}`, bg: colors.warn, fg: '#fff' };
+            label = `Trip check: ${conflicts} to fix`;
+          } else if (checks > 0) {
+            v = { icon: 'information-circle-outline', text: `${checks}`, bg: 'rgba(224,154,55,0.22)', fg: '#f0b25e' };
+            label = `Trip check: ${checks} to look at`;
+          } else if (!allPlanned) {
+            v = { icon: 'more', text: '', bg: 'rgba(255,255,255,0.12)', fg: 'rgba(255,255,255,0.85)' };
+            label = 'Trip check: still building';
+          } else {
+            v = { icon: 'checkmark-circle', text: '', bg: 'transparent', fg: colors.success, border: colors.success };
+            label = 'Trip check: all clear';
+          }
           return (
             <TouchableOpacity
-              style={[ch.checkChip, { backgroundColor: colors.warn }]}
+              style={[ch.checkChip, { backgroundColor: v.bg, borderColor: v.border, borderWidth: v.border ? 1.5 : 0 }]}
               onPress={onCheckTrip}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel={`Trip check: ${conflicts} thing${conflicts > 1 ? 's' : ''} to fix`}
+              accessibilityLabel={label}
             >
-              <Icon name="warning-outline" size={13} color="#fff" />
-              <Text style={ch.checkChipText}>{conflicts}</Text>
+              <Icon name={v.icon} size={13} color={v.fg} />
+              {!!v.text && <Text style={[ch.checkChipText, { color: v.fg }]}>{v.text}</Text>}
             </TouchableOpacity>
           );
         })()}
@@ -565,14 +591,31 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   // attributed in-app cache — never embedded into shared exports. (git history
   // has the original backfill if we revisit.)
 
-  // Trip Check warnings for THIS day — surfaced inline so "arrange → see what's
-  // still off" is one glance. Memoised so validateTrip doesn't run every render.
-  const dayWarnings = React.useMemo(() => {
+  // Trip Check, computed ONCE: warnings grouped per day + each day's health level (drives
+  // the calm day-pill dots — a pill only gets a dot when a day needs attention).
+  const { healthByDay, warningsByDay } = React.useMemo(() => {
     const ignored = trip.ignoredWarnings || [];
-    return validateTrip(trip)
-      .filter(w => w.dayIndex === currentDay && !ignored.includes(`${w.type}:${w.dayIndex ?? 'trip'}`))
-      .sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity]);
-  }, [trip, currentDay]);
+    const all = validateTrip(trip).filter(w => !ignored.includes(`${w.type}:${w.dayIndex ?? 'trip'}`));
+    const byDay = {};
+    all.forEach(w => { if (w.dayIndex != null) (byDay[w.dayIndex] ||= []).push(w); });
+    const health = {};
+    trip.days.forEach((d, i) => {
+      const ws = byDay[i] || [];
+      const acts = (d.activities || []).filter(a => a.status !== 'skipped');
+      if (acts.length === 0)                            health[i] = 'empty';
+      else if (ws.some(w => w.severity === 'error'))    health[i] = 'conflict';
+      else if (ws.some(w => w.severity === 'warning'))  health[i] = 'check';
+      else if (ws.some(w => w.severity === 'info'))     health[i] = 'tip';
+      else                                              health[i] = 'clean';
+    });
+    return { healthByDay: health, warningsByDay: byDay };
+  }, [trip]);
+
+  // This day's warnings (re-sliced cheaply when the day changes; no extra validateTrip call).
+  const dayWarnings = React.useMemo(
+    () => (warningsByDay[currentDay] || []).slice().sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity]),
+    [warningsByDay, currentDay]
+  );
 
   const handlePush = () => { pushItineraryToSplitwise(trip.id); switchTab('splitwise'); };
 
@@ -962,12 +1005,14 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             const dc = calcDayCostForTrip(d, trip);
             const isToday = i === todayIdx;
             const isPast  = phase === 'active' && i < todayIdx;
+            const healthDot = HEALTH_DOT[healthByDay[i]];   // undefined for clean/empty/tip → calm
             return (
               <TouchableOpacity
                 key={d.date}
                 style={[styles.dayBtn, i === currentDay && styles.dayBtnActive, isPast && styles.dayBtnPast]}
                 onPress={() => setCurrentDay(i)}
               >
+                {healthDot && <View style={[styles.dayHealthDot, { backgroundColor: healthDot }]} />}
                 <Text style={[styles.dayBtnLabel, i === currentDay && styles.dayBtnLabelActive]}>{d.label}</Text>
                 <Text style={[styles.dayBtnDate, i === currentDay && { color: colors.primary }]}>{fmt(d.date)}</Text>
                 {dc > 0 && <Text style={styles.dayCost}>{fmtM(dc)}</Text>}
@@ -1130,6 +1175,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           const nErr  = dayWarnings.filter(w => w.severity === 'error').length;
           const nWarn = dayWarnings.filter(w => w.severity === 'warning').length;
           const nTip  = dayWarnings.filter(w => w.severity === 'info').length;
+          if (!nErr && !nWarn && !nTip) return null;   // clean day → calm; no green "well-paced" pill
           const tipWord = n => `${n} tip${n !== 1 ? 's' : ''}`;
           let tone, label;
           if (nErr > 0) {
@@ -1137,24 +1183,21 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             tone = 'fix';  label = `${nErr} to fix${rest ? ` · ${tipWord(rest)}` : ''}`;
           } else if (nWarn > 0) {
             tone = 'check'; label = `${nWarn} to check${nTip ? ` · ${tipWord(nTip)}` : ''}`;
-          } else if (nTip > 0) {
-            tone = 'tip';  label = `${tipWord(nTip)} for this day`;
           } else {
-            tone = 'ok';   label = 'Looks well-paced';
+            tone = 'tip';  label = `${tipWord(nTip)} for this day`;
           }
           const pal = DAY_PILL[tone];
           return (
             <TouchableOpacity
               style={[styles.dayPill, { backgroundColor: pal.bg }]}
               onPress={onCheckTrip}
-              activeOpacity={tone === 'ok' ? 1 : 0.8}
-              disabled={tone === 'ok'}
-              accessibilityRole={tone === 'ok' ? 'text' : 'button'}
-              accessibilityLabel={`This day: ${label}.${tone === 'ok' ? '' : ' Tap to review.'}`}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`This day: ${label}. Tap to review.`}
             >
               <Icon name={pal.icon} size={14} color={pal.fg} />
               <Text style={[styles.dayPillText, { color: pal.fg }]} numberOfLines={1}>{label}</Text>
-              {tone !== 'ok' && <Icon name="forward" size={13} color={pal.fg} />}
+              <Icon name="forward" size={13} color={pal.fg} />
             </TouchableOpacity>
           );
         })()}
@@ -2411,6 +2454,7 @@ const styles = StyleSheet.create({
   tallyChip: { fontSize: 12, fontWeight: '800', overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4, borderRadius: radius.full },
   dayBtnPast: { opacity: 0.45 },
   todayDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#15803d', marginTop: 3 },
+  dayHealthDot: { position: 'absolute', top: 5, right: 5, width: 7, height: 7, borderRadius: 4 },
   dayNav: { marginTop: spacing.xl },
   dayBtn: {
     paddingHorizontal: spacing.lg,
@@ -2426,7 +2470,7 @@ const styles = StyleSheet.create({
   dayBtnLabel: { ...typography.caption, color: colors.muted, fontWeight: '700', textTransform: 'uppercase' },
   dayBtnLabelActive: { color: colors.primary },
   dayBtnDate: { ...typography.caption, color: colors.muted, fontSize: 10, marginTop: 1 },
-  dayCost: { ...typography.caption, color: colors.green, fontWeight: '700', fontSize: 10, marginTop: 1 },
+  dayCost: { ...typography.caption, color: colors.muted, fontWeight: '700', fontSize: 10, marginTop: 1 },
 
   // ── Day header ───────────────────────────────────────────────────
   dayHeader: {

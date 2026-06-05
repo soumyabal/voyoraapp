@@ -1,18 +1,20 @@
 /**
- * PlayTripModal.js — "Play My Trip": a photo-free "Trip Wrapped" montage.
+ * PlayTripModal.js — "Play My Trip": a "Trip Wrapped" montage with FREE photos.
  *
- * Per the legal review, the montage uses NO Google Places imagery. It's a directed deck of
- * branded gradient cards (cover → who → days → the fair-split moat → branded close) with big
- * type, a slow Ken-Burns drift on each gradient, cross-fades, and an ORIGINAL music bed.
- * Zero external imagery → no licensing/caching risk, no API cost, identical on iOS + Android.
+ * Imagery is FREE + CC-licensed (Wikipedia/Wikimedia — same source as the Discover hero),
+ * fetched at render per slide and attributed on screen. NO Google Places imagery (per the
+ * legal review). Every slide falls back to a branded gradient card if no free photo resolves,
+ * so it's always beautiful, never broken — and identical-safe on any platform.
  *
- * Built from buildTripFilm(trip) (pure/deterministic); this file is just the player.
+ * Deck (cover → who → days → fair-split moat → branded close) comes from buildTripFilm (pure);
+ * this file plays it: slow Ken-Burns drift, cross-fades, big type, an original music bed.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, View, Text, Animated, Easing, TouchableOpacity, Dimensions, StyleSheet } from 'react-native';
+import { Modal, View, Text, Image, Animated, Easing, TouchableOpacity, Dimensions, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { buildTripFilm } from '../utils/tripFilm';
+import { fetchDestinationImage, WIKI_UA } from '../utils/destinationImage';
 import { colors } from '../theme';
 import KithovaMark from '../components/ui/KithovaMark';
 import KithovaWordmark from '../components/ui/KithovaWordmark';
@@ -22,19 +24,39 @@ import KithovaWordmark from '../components/ui/KithovaWordmark';
 const BED = require('../../assets/playtrip-bed.wav');
 
 const { width: W, height: H } = Dimensions.get('window');
-const HOLD = { cover: 3000, stat: 2500, day: 2700, moat: 3000, close: 3400 };
+const HOLD = { cover: 3200, stat: 2500, day: 2800, moat: 3000, close: 3400 };
 const FADE = 650;
 const holdOf = (s) => HOLD[s.type] || 2600;
 
 export default function PlayTripModal({ visible, trip, onClose }) {
   const slides = useMemo(() => (visible ? buildTripFilm(trip) : []), [visible, trip]);
   const [idx, setIdx] = useState(0);
+  const [photos, setPhotos] = useState({});           // query -> { imageUrl, title, pageUrl } | null
+  const [imgFailed, setImgFailed] = useState(() => new Set());
+  const requested = useRef(new Set());
   const fade = useRef(new Animated.Value(0)).current;   // per-slide cross-fade + content rise
-  const drift = useRef(new Animated.Value(0)).current;  // slow Ken-Burns on the gradient
+  const drift = useRef(new Animated.Value(0)).current;  // slow Ken-Burns on the backdrop
   const timer = useRef(null);
   const player = useAudioPlayer(BED);
 
-  useEffect(() => { if (visible) setIdx(0); }, [visible]);
+  useEffect(() => {
+    if (visible) setIdx(0);
+    else { requested.current = new Set(); setPhotos({}); setImgFailed(new Set()); }
+  }, [visible]);
+
+  // Prefetch a free CC photo for the current + next slide (best-effort; null → gradient).
+  useEffect(() => {
+    if (!visible || !slides.length) return;
+    [slides[idx], slides[idx + 1]].forEach((s) => {
+      const q = s && s.photoQuery;
+      if (q && !requested.current.has(q)) {
+        requested.current.add(q);
+        fetchDestinationImage(q)
+          .then((info) => setPhotos((p) => ({ ...p, [q]: info || null })))
+          .catch(() => setPhotos((p) => ({ ...p, [q]: null })));
+      }
+    });
+  }, [idx, visible, slides]);
 
   // Music bed — loop + gentle fade-in while the film plays, stop on close. Wrapped so any
   // audio hiccup never breaks the film. Plays in silent mode (it's an explicit Play tap).
@@ -70,7 +92,6 @@ export default function PlayTripModal({ visible, trip, onClose }) {
     if (idx < slides.length - 1) {
       timer.current = setTimeout(() => setIdx((i) => Math.min(slides.length - 1, i + 1)), hold);
     } else {
-      // closing card — hold a beat, fade the music out, then dismiss into a moment of silence
       timer.current = setTimeout(() => {
         try { player.volume = 0; player.pause(); } catch { /* ignore */ }
         timer.current = setTimeout(() => { if (onClose) onClose(); }, 450);
@@ -86,17 +107,32 @@ export default function PlayTripModal({ visible, trip, onClose }) {
   const panX = drift.interpolate({ inputRange: [0, 1], outputRange: [0, idx % 2 ? -16 : 16] });
   const rise = fade.interpolate({ inputRange: [0, 1], outputRange: [14, 0] });
 
+  const photo = cur.photoQuery ? photos[cur.photoQuery] : null;
+  const showPhoto = !!(photo && photo.imageUrl && !imgFailed.has(photo.imageUrl));
+
   return (
     <Modal visible={visible} animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={st.root}>
-        {/* gradient card with a slow drift, cross-faded per slide */}
+        {/* backdrop: a free CC photo if one resolved, else the branded gradient — with a slow
+            drift, cross-faded per slide */}
         <Animated.View style={[st.full, { opacity: fade }]}>
           <Animated.View style={[st.full, { transform: [{ scale }, { translateX: panX }] }]}>
-            <LinearGradient colors={grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={st.full} />
+            {showPhoto ? (
+              <Image
+                source={{ uri: photo.imageUrl, headers: { 'User-Agent': WIKI_UA } }}
+                onError={() => setImgFailed((s) => new Set(s).add(photo.imageUrl))}
+                style={st.full}
+                resizeMode="cover"
+              />
+            ) : (
+              <LinearGradient colors={grad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={st.full} />
+            )}
           </Animated.View>
-          {/* vignette top+bottom for text legibility */}
+          {/* scrim — stronger over a photo so the text stays legible */}
           <LinearGradient
-            colors={['rgba(0,0,0,0.20)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.34)']}
+            colors={showPhoto
+              ? ['rgba(0,0,0,0.40)', 'rgba(0,0,0,0.12)', 'rgba(0,0,0,0.70)']
+              : ['rgba(0,0,0,0.20)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.34)']}
             locations={[0, 0.5, 1]} style={st.full} pointerEvents="none"
           />
         </Animated.View>
@@ -110,11 +146,16 @@ export default function PlayTripModal({ visible, trip, onClose }) {
               <KithovaWordmark variant="onDark" size={32} />
             </View>
           ) : null}
-          {cur.emoji ? <Text style={st.emoji}>{cur.emoji}</Text> : null}
+          {cur.emoji && !showPhoto ? <Text style={st.emoji}>{cur.emoji}</Text> : null}
           {cur.big ? <Text style={st.big}>{cur.big}</Text> : null}
           {cur.title ? <Text style={st.title}>{cur.title}</Text> : null}
           {cur.subtitle ? <Text style={st.subtitle}>{cur.subtitle}</Text> : null}
         </Animated.View>
+
+        {/* attribution (CC) — only when a free photo is showing */}
+        {showPhoto && photo.title ? (
+          <Text style={st.credit} pointerEvents="none" numberOfLines={1}>{photo.title} · via Wikipedia</Text>
+        ) : null}
 
         {/* tap zones: left = back, right = forward (under the controls) */}
         <TouchableOpacity style={st.tapL} activeOpacity={1} onPress={() => setIdx((i) => Math.max(0, i - 1))} />
@@ -136,12 +177,13 @@ const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#15110d' },
   full: { position: 'absolute', top: 0, left: 0, width: W, height: H },
   content: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36 },
-  kicker: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '800', letterSpacing: 3, marginBottom: 18 },
+  kicker: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '800', letterSpacing: 3, marginBottom: 18 },
   lockup: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 22 },
   emoji: { fontSize: 72, marginBottom: 16 },
-  big: { color: '#fff', fontSize: 88, fontWeight: '900', letterSpacing: -1.5, marginBottom: 4, textShadowColor: 'rgba(0,0,0,0.22)', textShadowRadius: 18 },
-  title: { color: '#fff', fontSize: 30, fontWeight: '800', letterSpacing: 0.2, textAlign: 'center', lineHeight: 38, textShadowColor: 'rgba(0,0,0,0.3)', textShadowRadius: 14 },
-  subtitle: { color: 'rgba(255,255,255,0.9)', fontSize: 16, fontWeight: '600', letterSpacing: 0.3, textAlign: 'center', marginTop: 12 },
+  big: { color: '#fff', fontSize: 88, fontWeight: '900', letterSpacing: -1.5, marginBottom: 4, textShadowColor: 'rgba(0,0,0,0.3)', textShadowRadius: 18 },
+  title: { color: '#fff', fontSize: 30, fontWeight: '800', letterSpacing: 0.2, textAlign: 'center', lineHeight: 38, textShadowColor: 'rgba(0,0,0,0.4)', textShadowRadius: 14 },
+  subtitle: { color: 'rgba(255,255,255,0.92)', fontSize: 16, fontWeight: '600', letterSpacing: 0.3, textAlign: 'center', marginTop: 12, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 10 },
+  credit: { position: 'absolute', bottom: 18, left: 28, right: 28, color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '600', textAlign: 'center' },
   tapL: { position: 'absolute', left: 0, top: 0, width: W * 0.35, height: H },
   tapR: { position: 'absolute', right: 0, top: 0, width: W * 0.45, height: H },
   progress: { position: 'absolute', top: 54, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 6 },

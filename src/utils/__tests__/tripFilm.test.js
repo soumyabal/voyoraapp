@@ -33,10 +33,16 @@ describe('buildTripFilm (photo-free Trip Wrapped)', () => {
     expect(last(f).subtitle).toMatch(/shared memories/i);
   });
 
-  test('uses NO photos / Google imagery — every slide is a gradient card', () => {
+  test('no baked/Google image URLs — every slide has a gradient fallback', () => {
     const f = buildTripFilm(building);
+    // The deck carries NO image URLs (no Google imagery). Free CC photos are fetched at
+    // render from a photoQuery; every slide still has a gradient to fall back to.
     expect(f.some((s) => s.type === 'photo' || s.uri || s.heroUri)).toBe(false);
     f.forEach((s) => expect(Array.isArray(s.grad) && s.grad.length >= 2).toBe(true));
+  });
+
+  test('the cover carries a free-photo query for the destination', () => {
+    expect(buildTripFilm(building)[0].photoQuery).toBe('Bali, Indonesia');
   });
 
   test('has who + days stats and the fair-split moat (2+ families)', () => {

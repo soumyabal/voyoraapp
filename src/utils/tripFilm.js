@@ -59,11 +59,12 @@ export function buildTripFilm(trip) {
 
   const slides = [];
 
-  // ── COVER ──
+  // ── COVER ── (photoQuery → a free CC destination photo at render; gradient if none)
   slides.push({
     type: 'cover',
     grad: cover,
     emoji: trip.emoji || '🌍',
+    photoQuery: trip.destination || null,
     title: trip.name || 'Our Trip',
     subtitle: [dayN ? `${dayN} ${dayN === 1 ? 'day' : 'days'}` : null, place || null].filter(Boolean).join('  ·  ') || null,
   });
@@ -93,7 +94,10 @@ export function buildTripFilm(trip) {
     // ── DAY chapters (capped) ── each a vibe line
     plannedDays.slice(0, 4).forEach((d, k) => {
       const i = days.indexOf(d);
-      slides.push({ type: 'day', grad: DAY_GRADS[k % DAY_GRADS.length], kicker: `DAY ${i + 1}`, emoji: dayEmoji(d), title: dayVibe(d, i) });
+      // A landmark-y sight on this day → try a free photo of it; restaurants/generic stops
+      // won't resolve and just fall back to the gradient card.
+      const headline = (d.activities || []).find((a) => substantial(a) && a.type === 'activity' && a.name)?.name || null;
+      slides.push({ type: 'day', grad: DAY_GRADS[k % DAY_GRADS.length], kicker: `DAY ${i + 1}`, emoji: dayEmoji(d), photoQuery: headline, title: dayVibe(d, i) });
     });
     // ── THE MOAT ── the fair per-family split (only meaningful for 2+ families)
     if (famN >= 2) {

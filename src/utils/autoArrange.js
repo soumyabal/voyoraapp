@@ -812,3 +812,61 @@ export function planDay(activities, opts = {}) {
     },
   };
 }
+
+/**
+ * suggestDayForVenue — PURE, read-only. Given a venue the planner couldn't fit today,
+ * find the best OTHER day in the trip whose opening hours (for that day's weekday) have
+ * a free block big enough for the visit. Used to offer a confident one-tap "Move to Day N".
+ *
+ *   returns { best: dayIndex | null, candidates: [{ dayIndex, gap, unknownHours, sameCity }] }
+ *
+ * A day is only a candidate when a `need`-sized OPEN-HOURS gap genuinely exists (so the
+ * suggestion is never "less bad" — it really fits). Closed-that-weekday days are skipped;
+ * unknown-hours days are eligible but rank last. Ranking: known hours → same city →
+ * most breathing room → earliest day. best=null ⇒ no day fits (caller shows the picker /
+ * "check its hours"), never a wrong suggestion.
+ */
+function maxFreeGap(occ, lo, hi) {
+  let cursor = lo, best = 0;
+  for (const [s, e] of occ.slice().sort((a, b) => a[0] - b[0])) {
+    if (e <= lo || s >= hi) continue;
+    best = Math.max(best, Math.min(s, hi) - cursor);
+    cursor = Math.max(cursor, e);
+    if (cursor >= hi) break;
+  }
+  return Math.max(best, hi - cursor);
+}
+
+export function suggestDayForVenue(trip, venue, opts = {}) {
+  const exclude = opts.excludeDayIndex;
+  const need = Math.max(BUFFER_MIN, estimateDuration(venue));
+  const days = trip?.days || [];
+  const candidates = [];
+  for (let i = 0; i < days.length; i += 1) {
+    if (i === exclude) continue;
+    const d = days[i];
+    const wd = weekdayOf(d.date);
+    const ivs = dayIntervals(venue.openHours, wd);   // null=unknown · []=closed that weekday
+    if (ivs && !ivs.length) continue;                // closed that day → skip
+    const occ = (d.activities || [])
+      .filter((a) => a.time && a.status !== 'skipped' && a.type !== 'note')
+      .map((a) => { const s = timeToMin(a.time); return [s, s + Math.max(BUFFER_MIN, estimateDuration(a))]; });
+    let gap = 0;
+    if (!ivs) {
+      gap = maxFreeGap(occ, DAY_START_MIN, DAY_END_MIN);
+    } else {
+      for (const { o, c } of ivs) {
+        gap = Math.max(gap, maxFreeGap(occ, Math.max(o, DAY_START_MIN), Math.min(c, DAY_END_MIN)));
+      }
+    }
+    if (gap < need) continue;                        // no room big enough → not a candidate
+    const sameCity = !!venue.city && (d.activities || []).some((a) => a.city === venue.city);
+    candidates.push({ dayIndex: i, gap, unknownHours: !ivs, sameCity });
+  }
+  candidates.sort((a, b) =>
+    (Number(a.unknownHours) - Number(b.unknownHours)) ||
+    (Number(b.sameCity) - Number(a.sameCity)) ||
+    (b.gap - a.gap) ||
+    (a.dayIndex - b.dayIndex));
+  return { best: candidates.length ? candidates[0].dayIndex : null, candidates };
+}

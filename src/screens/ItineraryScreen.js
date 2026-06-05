@@ -13,7 +13,7 @@ import { fmt, fmtM, getActivityIcon, uid, tripPhase, defaultDayFor, daysBetweenI
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost, calcFamilyBalances } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
-import { scheduleDay, planDay, returnJourneyDraft } from '../utils/autoArrange';
+import { scheduleDay, planDay, returnJourneyDraft, suggestDayForVenue } from '../utils/autoArrange';
 import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, hoursLabel, weeklyHoursLabel, dayIntervals } from '../utils/hours';
 import { getSuggestedTime, minToTime } from '../utils/slots';
@@ -613,6 +613,16 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   // (manual is one tap away via the header button / the Discover "add manually" bridge).
   const openAddInSlot  = (time) => { setDiscoverNear(null); setDiscoverSlot(getSlotKey(time)); setDefaultSlotTime(time); setShowDiscover(true); };
 
+  // Move an UNSCHEDULED (didn't-fit-its-hours) stop to another day, landing it at an
+  // in-hours time there so it arrives scheduled — not dropped into that day's tray too.
+  const moveUnfitTo = (act, dayIdx) => {
+    moveActivity(trip.id, currentDay, dayIdx, act.id);
+    const need    = estimateDuration(act);
+    const openMin = (dayIntervals(act.openHours, weekdayOf(trip.days[dayIdx]?.date)) || [])[0]?.o;
+    const slotKey = getSlotKey(openMin != null ? minToTime(openMin) : '10:00');
+    updateActivity(trip.id, act.id, { time: getSuggestedTime(trip, dayIdx, slotKey, need, act.openHours) });
+  };
+
   // ── "How's tonight handled?" — resolve a hotel-less night politely ──────────
   const openNightPlan = (dayIdx) => setNightPlanDay(dayIdx);
   const closeNightPlan = () => {
@@ -753,9 +763,15 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     const shown = changeRows.slice(0, 6).map(fmtRow).join('\n');
     const more  = changeRows.length > 6 ? `\n…and ${changeRows.length - 6} more` : '';
 
-    // LOUD, separate "won't fit today — move it" block (the owner's ask).
+    // LOUD, separate "won't fit today — move it" block (the owner's ask), naming a day
+    // that genuinely has room when we're confident, else leaving it to the picker.
     const noFitBlock = noFit.length
-      ? `\n\n🗓️  Won’t fit today — move to another day:\n${noFit.slice(0, 5).map(u => `•  ${u.name}${u.open ? ` (open ${u.open})` : ''}`).join('\n')}${noFit.length > 5 ? `\n…and ${noFit.length - 5} more` : ''}`
+      ? `\n\n🗓️  Won’t fit today — move to another day:\n${noFit.slice(0, 5).map(u => {
+          const venue = r.scheduled.find(a => a.id === u.actId);
+          const best = venue ? suggestDayForVenue(trip, venue, { excludeDayIndex: currentDay }).best : null;
+          const where = best != null ? ` → ${trip.days[best]?.label || `Day ${best + 1}`} has room` : '';
+          return `•  ${u.name}${u.open ? ` (open ${u.open})` : ''}${where}`;
+        }).join('\n')}${noFit.length > 5 ? `\n…and ${noFit.length - 5} more` : ''}`
       : '';
 
     const residual = [];
@@ -1210,20 +1226,31 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
               <Text style={styles.noFitSub}>
                 This day is too packed to fit {unfit.length === 1 ? 'it' : 'them'} during open hours — move to another day.
               </Text>
-              {unfit.map(a => (
-                <View key={a.id} style={styles.noFitRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.noFitName} numberOfLines={1}>{a.name}</Text>
-                    {!!a.openHours && (
-                      <Text style={styles.noFitHours}>Open {hoursLabel(a.openHours, weekdayOf(day.date))}</Text>
+              {unfit.map(a => {
+                // Confident one-tap target: a day whose open hours genuinely have room.
+                const best = suggestDayForVenue(trip, a, { excludeDayIndex: currentDay }).best;
+                return (
+                  <View key={a.id} style={styles.noFitRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.noFitName} numberOfLines={1}>{a.name}</Text>
+                      {!!a.openHours && (
+                        <Text style={styles.noFitHours}>Open {hoursLabel(a.openHours, weekdayOf(day.date))}</Text>
+                      )}
+                    </View>
+                    {best != null ? (
+                      <TouchableOpacity style={styles.noFitMoveBtn} onPress={() => moveUnfitTo(a, best)} activeOpacity={0.85}>
+                        <Icon name="calendar" size={13} color="#fff" />
+                        <Text style={styles.noFitMoveText}>Move to {trip.days[best]?.label || `Day ${best + 1}`}</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity style={styles.noFitMoveBtn} onPress={() => setMovingAct(a)} activeOpacity={0.85}>
+                        <Icon name="calendar" size={13} color="#fff" />
+                        <Text style={styles.noFitMoveText}>Move to a day</Text>
+                      </TouchableOpacity>
                     )}
                   </View>
-                  <TouchableOpacity style={styles.noFitMoveBtn} onPress={() => setMovingAct(a)} activeOpacity={0.85}>
-                    <Icon name="calendar" size={13} color="#fff" />
-                    <Text style={styles.noFitMoveText}>Move to a day</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
+                );
+              })}
             </View>
           );
         })()}
@@ -1652,18 +1679,10 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                     style={[styles.dayPickerRow, isCurrent && styles.dayPickerRowCurrent]}
                     onPress={() => {
                       if (!isCurrent) {
-                        const wasUnscheduled = !movingAct.time;
-                        moveActivity(trip.id, currentDay, i, movingAct.id);
-                        // An unscheduled (didn't-fit) stop gets a real, in-hours time on its
-                        // new day so it lands scheduled — not dropped into that day's tray too.
-                        if (wasUnscheduled) {
-                          const need   = estimateDuration(movingAct);
-                          const openMin = (dayIntervals(movingAct.openHours, weekdayOf(d.date)) || [])[0]?.o;
-                          const slotKey = getSlotKey(openMin != null ? minToTime(openMin) : '10:00');
-                          updateActivity(trip.id, movingAct.id, {
-                            time: getSuggestedTime(trip, i, slotKey, need, movingAct.openHours),
-                          });
-                        }
+                        // An unscheduled (didn't-fit) stop lands at an in-hours time on its
+                        // new day; a normal timed stop just changes days (keeps its time).
+                        if (!movingAct.time) moveUnfitTo(movingAct, i);
+                        else moveActivity(trip.id, currentDay, i, movingAct.id);
                         setMovingAct(null);
                       }
                     }}

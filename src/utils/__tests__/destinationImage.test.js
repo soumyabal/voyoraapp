@@ -26,7 +26,7 @@ test('returns image + title + page url (thumbnail used as-is)', async () => {
   );
   // a descriptive User-Agent is sent — Wikimedia 403s the default okhttp UA
   const headers = global.fetch.mock.calls[0][1].headers;
-  expect(headers['User-Agent']).toMatch(/Voyara/);
+  expect(headers['User-Agent']).toMatch(/Kithova/);
 });
 
 test('caches per city — a second call does not re-fetch', async () => {

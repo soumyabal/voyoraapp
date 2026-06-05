@@ -17,7 +17,7 @@
  */
 
 const cache = new Map(); // normalized city -> { imageUrl, title, pageUrl } | null
-export const WIKI_UA = 'Voyara/1.0 (multi-family trip planner)';
+export const WIKI_UA = 'Kithova/1.0 (multi-family trip planner)';
 
 // "San Diego, California, USA" → "San Diego" (match the search/city-tag convention)
 const cityOf = (s) => (s || '').split(',')[0].trim();

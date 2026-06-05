@@ -17,6 +17,7 @@ import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slot
 import { weekdayOf, hoursLabel, weeklyHoursLabel, compactHours } from '../utils/hours';
 import { qualityScore } from '../utils/placeScore';
 import { reverseGeocode } from '../utils/places';
+import { bookingUrl } from '../utils/booking';
 import { WebView } from 'react-native-webview';
 import Icon from '../components/ui/Icon';
 
@@ -190,17 +191,25 @@ async function cachedPlaces(q, bias, pages = 1) {
   return p;
 }
 
-function PlaceCard({ place, onToggle, added, wd, seen, onOpenWeb }) {
+function PlaceCard({ place, onToggle, added, wd, seen, onOpenWeb, onOpenBooking }) {
   // HOURS OF OPERATION, not a today/live status: open on this day → that day's hours;
   // closed this day → the weekly hours so you see WHEN it's open (not a bare "Closed").
   const day = hoursLabel(place.openHours, wd);
   const hrs = day && day !== 'Closed' ? day : weeklyHoursLabel(place.openHours);
   const dim = seen && !added;   // looked at on the web → fade so it's easy to skip
+  const Thumb = place.photo
+    ? <Image source={{uri:place.photo}} style={[card.thumb, dim && card.seenDim]} />
+    : <View style={[card.thumb, card.thumbPh, dim && card.seenDim]}><Icon name={TYPE_ICON[place.activityType]||'activity'} size={20} color={TYPE_TINT[place.activityType]||colors.subtle} /></View>;
   return (
     <View style={card.wrap}>
-      {place.photo
-        ? <Image source={{uri:place.photo}} style={[card.thumb, dim && card.seenDim]} />
-        : <View style={[card.thumb, card.thumbPh, dim && card.seenDim]}><Icon name={TYPE_ICON[place.activityType]||'activity'} size={20} color={TYPE_TINT[place.activityType]||colors.subtle} /></View>}
+      {/* Tap the IMAGE → the venue's own website (the "Visit website" text link is gone).
+          The ↗ badge signals the image is a link; it greys to ✓ once you've looked. */}
+      {place.url ? (
+        <TouchableOpacity activeOpacity={0.85} onPress={() => (onOpenWeb ? onOpenWeb(place) : Linking.openURL(place.url))}>
+          {Thumb}
+          <View style={card.thumbLinkBadge}><Icon name={seen ? 'checkmark' : 'open-outline'} size={10} color="#fff" /></View>
+        </TouchableOpacity>
+      ) : Thumb}
       <View style={[card.body, dim && card.seenDim]}>
         <View style={card.nameRow}>
           <Text style={card.name} numberOfLines={2}>{place.name}</Text>
@@ -217,10 +226,12 @@ function PlaceCard({ place, onToggle, added, wd, seen, onOpenWeb }) {
           {place.wheelchairOk && <Text style={card.badge}>{'♿'}</Text>}
         </View>
         {!!place.address && <Text style={card.address} numberOfLines={1}>{'\u{1F4CD}'} {place.address}</Text>}
-        {!!place.url && (
-          <TouchableOpacity style={card.linkRow} onPress={() => (onOpenWeb ? onOpenWeb(place) : Linking.openURL(place.url))} hitSlop={{top:6,bottom:6,left:6,right:6}}>
-            <Icon name={seen ? 'checkmark-circle' : 'open-outline'} size={12} color={seen ? colors.subtle : colors.accent} />
-            <Text style={[card.linkText, seen && {color:colors.subtle}]}>{place.activityType==='stay' ? (seen?'Rooms seen ↗':'Book rooms ↗') : (seen?'Seen ↗':'Visit website ↗')}</Text>
+        {/* Hotels get an explicit Book button → Booking.com (the revenue action). See/Eat
+            have no link row — the image opens their site. */}
+        {place.activityType === 'stay' && (
+          <TouchableOpacity style={card.bookBtn} onPress={() => onOpenBooking && onOpenBooking(place)} hitSlop={{top:6,bottom:6,left:6,right:6}} activeOpacity={0.8}>
+            <Icon name="bed-outline" size={12} color={colors.accentDeep || colors.accent} />
+            <Text style={card.bookText}>Book ↗</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -237,7 +248,7 @@ function PlaceCard({ place, onToggle, added, wd, seen, onOpenWeb }) {
 // ─── Photo card for the map carousel (mindtrip-style) ────────────────
 // Tapping the card focuses the map on the place; the check circle toggles the
 // basket (separate touch targets so they don't fight).
-function PlaceMapCard({ place, checked, selected, onToggle, onFocus, onOpenWeb, seen, wd }) {
+function PlaceMapCard({ place, checked, selected, onToggle, onFocus, onOpenWeb, onOpenBooking, seen, wd }) {
   const day = hoursLabel(place.openHours, wd);
   const hrs = day && day !== 'Closed' ? day : weeklyHoursLabel(place.openHours);
   const dim = seen && !checked;
@@ -247,11 +258,27 @@ function PlaceMapCard({ place, checked, selected, onToggle, onFocus, onOpenWeb, 
         {place.photo
           ? <Image source={{ uri: place.photo }} style={[mc.photo, dim && mc.seenDim]} />
           : <View style={[mc.photo, mc.photoPh, dim && mc.seenDim]}><Icon name={TYPE_ICON[place.activityType]||'activity'} size={26} color={TYPE_TINT[place.activityType]||colors.subtle} /></View>}
-        {/* Open the place's site (hotel rooms, menus, tickets) — marks it "seen" */}
-        {!!place.url && (
+        {/* Overlay actions. Hotels get TWO: a globe → the venue's own site, and a bed →
+            Booking.com (the revenue action, warm-tinted). Everything else: one globe → site. */}
+        {place.activityType === 'stay' ? (
+          <View style={mc.webRow}>
+            {!!place.url && (
+              <TouchableOpacity style={[mc.web, mc.webInRow]} onPress={() => onOpenWeb && onOpenWeb(place)}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} activeOpacity={0.8}
+                accessibilityLabel={`${place.name} website`}>
+                <Icon name="open-outline" size={14} color="#fff" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[mc.web, mc.webInRow, mc.webBook]} onPress={() => onOpenBooking && onOpenBooking(place)}
+              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} activeOpacity={0.8}
+              accessibilityLabel={`Book ${place.name} on Booking.com`}>
+              <Icon name="bed-outline" size={14} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ) : !!place.url && (
           <TouchableOpacity style={mc.web} onPress={() => onOpenWeb && onOpenWeb(place)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.8}>
-            <Icon name={place.activityType === 'stay' ? 'hotel' : 'open-outline'} size={14} color="#fff" />
+            <Icon name="open-outline" size={14} color="#fff" />
           </TouchableOpacity>
         )}
         <TouchableOpacity style={[mc.check, checked && mc.checkOn]} onPress={() => onToggle(place)}
@@ -828,6 +855,15 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     markPlaceSeen(trip.id, place.name);   // persisted per trip
   };
 
+  // Open Booking.com for a hotel (the affiliate revenue action). Falls back to the
+  // venue's own site if we can't build a booking query. Marks "seen" like openWeb.
+  const openBooking = place => {
+    const url = bookingUrl(place);
+    if (!url) { openWeb(place); return; }
+    Linking.openURL(url).catch(() => {});
+    markPlaceSeen(trip.id, place.name);
+  };
+
   // Un-grey everything you've looked at — start the browse fresh.
   const resetSeen = () => {
     const n = seenNames.size;
@@ -1021,7 +1057,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
                   getItemLayout={(_,i)=>({length:198,offset:198*i+spacing.md,index:i})}
                   onScrollToIndexFailed={()=>{}}
                   renderItem={({item}) => (
-                    <PlaceMapCard place={item} checked={addedNames.has(item.name)} seen={seenNames.has(item.name)} selected={selectedName===item.name} onToggle={toggleAdd} onFocus={handleCarouselFocus} onOpenWeb={openWeb} wd={dayWd}/>
+                    <PlaceMapCard place={item} checked={addedNames.has(item.name)} seen={seenNames.has(item.name)} selected={selectedName===item.name} onToggle={toggleAdd} onFocus={handleCarouselFocus} onOpenWeb={openWeb} onOpenBooking={openBooking} wd={dayWd}/>
                   )}
                 />
               )}
@@ -1051,7 +1087,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <FlatList data={results} keyExtractor={(item,i)=>`${item.name}-${i}`}
               contentContainerStyle={s.list} showsVerticalScrollIndicator={false}
               renderItem={({item}) => (
-                <PlaceCard place={item} onToggle={toggleAdd} added={addedNames.has(item.name)} seen={seenNames.has(item.name)} onOpenWeb={openWeb} wd={dayWd}/>
+                <PlaceCard place={item} onToggle={toggleAdd} added={addedNames.has(item.name)} seen={seenNames.has(item.name)} onOpenWeb={openWeb} onOpenBooking={openBooking} wd={dayWd}/>
               )}
             />
           )}
@@ -1325,6 +1361,11 @@ const card = StyleSheet.create({
   thumbPh:{alignItems:'center',justifyContent:'center'},
   linkRow:{flexDirection:'row',alignItems:'center',gap:4,marginTop:4},
   linkText:{fontSize:12,fontWeight:'800',color:colors.accent},
+  // ↗ badge on the list thumbnail — signals the image opens the venue's website.
+  thumbLinkBadge:{position:'absolute',top:3,left:3,width:18,height:18,borderRadius:9,backgroundColor:'rgba(0,0,0,0.55)',alignItems:'center',justifyContent:'center'},
+  // "Book ↗" pill (hotels only) → Booking.com — the revenue action.
+  bookBtn:{flexDirection:'row',alignItems:'center',gap:4,alignSelf:'flex-start',marginTop:5,paddingHorizontal:10,paddingVertical:4,borderRadius:radius.full,backgroundColor:colors.accentSoft || '#fff1e6'},
+  bookText:{fontSize:12,fontWeight:'800',color:colors.accentDeep || colors.accent},
   wrapSel:{borderColor:colors.smart,backgroundColor:colors.smartSoft},
   body:{flex:1,gap:4},
   nameRow:{flexDirection:'row',alignItems:'flex-start',gap:6},
@@ -1416,6 +1457,10 @@ const mc = StyleSheet.create({
   check:{position:'absolute',top:8,right:8,width:30,height:30,borderRadius:15,backgroundColor:'rgba(255,255,255,0.95)',alignItems:'center',justifyContent:'center',...shadow.sm},
   checkOn:{backgroundColor:colors.accent},
   web:{position:'absolute',top:8,left:8,width:30,height:30,borderRadius:15,backgroundColor:'rgba(0,0,0,0.55)',alignItems:'center',justifyContent:'center'},
+  // Hotel carousel: globe + bed sit side-by-side (the bed = Booking.com, warm-tinted).
+  webRow:{position:'absolute',top:8,left:8,flexDirection:'row',gap:6},
+  webInRow:{position:'relative',top:0,left:0},
+  webBook:{backgroundColor:colors.accent},
   body:{padding:spacing.sm,gap:3},
   name:{...typography.smallBold,color:colors.ink,fontSize:13},
   meta:{flexDirection:'row',alignItems:'center',gap:4},

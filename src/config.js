@@ -51,5 +51,14 @@ export const FREE_AI_REVIEW_USES  = 3;   // AI chat / trip review sessions
 export const PRO_MONTHLY_PRICE = '$4.99';
 export const PRO_ANNUAL_PRICE  = '$39.99'; // ~$3.33/month
 
+// ─── Booking deep-links (affiliate revenue) ──────────────────────────────────
+// "Book" on a hotel card opens a Booking.com SEARCH for that specific hotel. Drop the
+// owner's real Booking Affiliate Partner ID into `aid` to attribute commissions; with
+// aid:null the link still works (an unattributed public search). ⚠️ The affiliate
+// ACCOUNT + program approval is the owner's to set up (join.booking.com), and the
+// "we may earn a commission" disclosure must be added to the app's terms before going
+// live — this is only the link wiring.
+export const BOOKING_AFFILIATE = { provider: 'booking', aid: null };
+
 // Feature gates (flip to true to simulate Pro locally)
 export const BYPASS_SUBSCRIPTION = false;

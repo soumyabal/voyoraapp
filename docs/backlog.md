@@ -5,6 +5,20 @@
 
 ---
 
+## Add-a-stop flow (from the June 2026 entry-point review)
+
+- [ ] **Smarter default SLOT for the header "Manual" button.** It always opens to
+      Morning (defaultTime 09:00). The smart-time fix (`11e2210`) stops stops from
+      stacking *within* a slot, but on a busy day Manual still suggests later-and-later
+      Morning times then clamps near noon. Consider opening to the first slot with room,
+      or to the current slot during an ACTIVE trip ("now"). Panel deferred it as a
+      separate feature (needs live-trip detection). — `ItineraryScreen.js` (`openAdd`)
+- [ ] **Consider · per-slot "+" as a chooser.** Make the per-slot "+ Add here" open a
+      tiny menu [🔍 Search a place / ✎ Add manually] (both slot-scoped); could retire the
+      header "Manual" button. Deferred from the "+ Add vs Discover" review. — `ItineraryScreen.js`
+- [ ] **Consider · two bottom-right FABs.** Discover + Check-Trip both float bottom-right;
+      revisit whether both need to be persistent (best decided with usage data). — `ItineraryScreen.js`
+
 ## Itinerary card — design polish (from the June 2026 planner + UX review)
 
 The card was redesigned to the 56px-leading-thumbnail layout (committed `7cd8f33`).
@@ -20,9 +34,10 @@ Both reviewers flagged these *follow-ups* that were NOT done in that pass:
       minimum the design system mandates. — `ItineraryScreen.js`
 - [ ] **P2 · Accessibility labels.** Add `accessibilityLabel`s so VoiceOver reads
       "Courtyard Cafe, food, 12:30, $35 per person, rated 4.8." — `ItineraryScreen.js`
-- [ ] **Consider · Promote "closed".** When a stop is scheduled while closed, pull
-      the red `🔴 Closed` cue out of the pill row to first position — a closed-venue
-      day is a day-breaker, not a footnote (planner note). — `ItineraryScreen.js`
+- [x] ~~**Consider · Promote "closed".**~~ OBSOLETE (`25b4b54`): the red `🔴 Closed`
+      live-status cue was REMOVED on owner request — cards now show hours of operation
+      (that day's hours, or the weekly summary when closed that day); scheduling-while-
+      closed is surfaced by Trip Check, not the card. — `ItineraryScreen.js`
 - [ ] **Consider · Density toggle.** Optional compact/comfortable card density (pure
       style swap) for photo-lovers vs. planners. Default = compact. — `ItineraryScreen.js`
 

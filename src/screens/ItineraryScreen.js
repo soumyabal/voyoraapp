@@ -1257,7 +1257,9 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                     onPress={() => toggleSlot(slot.key)}
                     activeOpacity={0.7}
                   >
-                    {/* Row 1: emoji · label · [+ Add pill] · chevron */}
+                    {/* Row 1: emoji · label · [+ Add here pill] · chevron.
+                        "here" = this slot — distinguishes it from the global "Discover"
+                        FAB (which adds to the day with no slot), since both open Discover. */}
                     <View style={styles.slotHeaderRow}>
                       <Icon name={slot.icon} size={17} color={slot.tint} style={{ marginRight: spacing.xs }} />
                       <Text style={styles.slotLabel}>{slot.label}</Text>
@@ -1267,7 +1269,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                           onPress={() => openAddInSlot(slot.defaultTime)}
                           hitSlop={{ top: 10, bottom: 10, left: 8, right: 4 }}
                         >
-                          <Text style={styles.slotAddBtnText}>+ Add</Text>
+                          <Text style={styles.slotAddBtnText}>+ Add here</Text>
                         </TouchableOpacity>
                       )}
                     </View>

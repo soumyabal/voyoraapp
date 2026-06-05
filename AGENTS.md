@@ -405,6 +405,14 @@ Each family gets Expense[] with participatingFamilies: [thisFamily.id]
 
 ## Working Conventions
 
+**Change-safety discipline (how to make changes here — read first):**
+- **The test suite is the regression gate. Nothing ships that breaks it.** Run `npm test` before *and* after a change; all tests + golden snapshots MUST stay green. The golden snapshots (`store.test.js` shape guard, `tripValidator.snapshot.test.js`, the split-engine regressions) exist to catch *unintended* behavior change — trust them.
+- **Never `jest -u` to silence a red snapshot.** Regenerate a snapshot ONLY when the diff is the change you intended *and you've read it line by line*. A snapshot diff you didn't expect is a bug you just found, not noise to clear.
+- One coherent change at a time; keep each **small and revertible** (a clean commit you could `git revert`).
+- **Prefer engine/util/config work that's fully unit-testable.** For any UI change, build it but treat it as **unverified until checked on the device** — say so explicitly; do not claim a UI change works without the device.
+- **Behavior-neutral means behavior-neutral.** A "cleanup" must be provably so — verify, don't assume. Don't delete functions, handlers, or state that may be intended scaffolding under the guise of removing dead code; when unsure, leave it.
+- **When a change is ambiguous, risky, or irreversible — stop and flag it** rather than guess. Honor the confidentiality/secrets guardrails at the top of this file on every change (never commit `src/config.js`, never move a key into a tracked file, push only to `origin`).
+
 **Theme:** Always `import { colors, spacing, ... } from '../theme'`. Never hardcode hex or px.
 
 **Keyboard in modals:** Use `KeyboardAvoidingView` with `behavior={Platform.OS === 'ios' ? 'padding' : 'height'}` wrapping messages + input. Do NOT use `useKeyboardOffset` for chat/input UIs.

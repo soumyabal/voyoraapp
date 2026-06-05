@@ -22,12 +22,14 @@ import TripCard from '../components/TripCard';
 import NewTripModal from '../modals/NewTripModal';
 import AuthModal from '../modals/AuthModal';
 import AddProfileModal from '../modals/AddProfileModal';
-import { colors, spacing, radius, typography, shadow } from '../theme';
-import { APP_NAME, RELEASE_FLAGS } from '../config';
+import { colors, spacing, radius, typography, shadow, gradients } from '../theme';
+import { RELEASE_FLAGS } from '../config';
 import { avatarColor, getAllMembers, fmt } from '../utils/helpers';
 import InfoBanner from '../components/ui/InfoBanner';
 import Icon from '../components/ui/Icon';
 import PressableScale from '../components/ui/PressableScale';
+import KithovaWordmark from '../components/ui/KithovaWordmark';
+import KithovaMark from '../components/ui/KithovaMark';
 import { select } from '../utils/feedback';
 
 const PACE_LABELS = { relaxed: '🐢 Relaxed', moderate: '🚶 Moderate', packed: '🏃 Packed' };
@@ -591,12 +593,15 @@ export default function HomeScreen({ navigation }) {
 
       {/* Shared hero header */}
       <LinearGradient
-        colors={['#1a1714', '#3d2c1e', '#e86c3a']}
+        colors={gradients.hero}
         style={[styles.hero, { paddingTop: insets.top + 16 }, activeTab === 'trips' && hasTrips && styles.heroCompact]}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
       >
         <View style={styles.heroNav}>
-          <Text style={styles.logo}>{APP_NAME}</Text>
+          <View style={styles.logoRow}>
+            <KithovaMark size={20} hub={colors.white} />
+            <KithovaWordmark variant="onDark" size={22} />
+          </View>
           {/* Accounts are a freemium feature (RELEASE_FLAGS.accounts) — hidden in the
               free/local TestFlight build so there's no non-functional Sign In UI. */}
           {RELEASE_FLAGS.accounts && (
@@ -781,7 +786,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     marginBottom: spacing.xl,
   },
-  logo: { fontSize: 22, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
+  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   creditPill: {
     backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: radius.full,
     paddingHorizontal: 12, paddingVertical: 6,

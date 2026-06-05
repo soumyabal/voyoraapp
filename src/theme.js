@@ -116,3 +116,12 @@ export const activityIcons = {
   activity: '🎯',
   note: '📝',
 };
+
+// ── Brand (single source of truth — used by KithovaWordmark / KithovaMark, splash, header) ──
+// The dark hero gradient (was hardcoded in HomeScreen): ink → coffee → terracotta.
+export const gradients = {
+  hero: ['#1a1714', '#3d2c1e', '#e86c3a'],
+};
+// The "kith" constellation — family-colored dots. One palette for the splash animation
+// and the static logomark, so the mark is consistent everywhere.
+export const markColors = [colors.accent, colors.smart, colors.success, colors.warn, colors.accentDark];

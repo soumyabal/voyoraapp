@@ -16,10 +16,11 @@
  * trip complete" INSIDE the app — this launch version is deliberately one-shot + restrained.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
+import { View, StyleSheet, Animated, Easing } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing } from '../theme';
+import KithovaWordmark from './ui/KithovaWordmark';
 
 const HOLD_MS = 2000;                 // minimum brand moment before revealing the app
 const DOT_COLORS = [colors.accent, colors.smart, colors.success, colors.warn, colors.accentDark];
@@ -29,11 +30,6 @@ const ORBIT = 40;                     // orbit radius
 const DOT = 18;                       // dot diameter
 const CENTER = 12;                    // hub diameter
 const CONFETTI = 14;                  // one-shot burst particle count
-
-// Wordmark gradient: a terracotta→indigo arc landing on green (brand anchors + smooth
-// bridges), NOT a rainbow. Indigo lands on the round "o". Static (never animated).
-const RAMP = [colors.accent, '#d65f33', '#bf6b6f', '#9a66b0', colors.smart, '#3f8a8e', colors.success];
-const WORD = 'Kithova';
 
 const PHRASES = [
   'Gathering your crew…',
@@ -172,11 +168,7 @@ export default function LoadingScreen({ onDone }) {
       </View>
 
       <Animated.View style={[styles.textWrap, { opacity: textOp, transform: [{ translateY: textRise }] }]}>
-        <Text style={styles.wordmark} allowFontScaling={false}>
-          {WORD.split('').map((ch, i) => (
-            <Text key={i} style={{ color: RAMP[i] }}>{ch}</Text>
-          ))}
-        </Text>
+        <KithovaWordmark variant="onLight" size={34} style={styles.wordmark} />
       </Animated.View>
 
       <Animated.Text style={[styles.copy, { opacity: copyOp }]}>{PHRASES[phrase]}</Animated.Text>

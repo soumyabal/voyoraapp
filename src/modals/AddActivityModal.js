@@ -381,6 +381,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
 
   // Secondary fields (Details, Notes, Reminder) collapsed by default
   const [showMore, setShowMore]   = useState(false);
+  const [misc, setMisc]           = useState(false);   // "Quick stop" — ad-hoc activity, user sets a short duration
 
   // Seed fields on open
   useEffect(() => {
@@ -398,6 +399,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setMemo(editActivity.memo || '');
       setReminder(editActivity.reminder || '');
       setDurationMins(editActivity.durationMins > 0 ? editActivity.durationMins : 0);
+      setMisc(editActivity.subtype === 'misc');
       setMeal(editActivity.meal || null);
       setNights(editActivity.nights > 0 ? editActivity.nights : 1);
       setCheckInTime(editActivity.checkInTime || DEFAULT_CHECK_IN);
@@ -427,6 +429,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setCostMode('per_person');
       setCostInput('');
       setDurationMins(0);
+      setMisc(false);
       setMeal(null);
       setNights(defaultNightsFor(trip, currentDay ?? 0));   // cover the rest of the trip by default
       setMemo('');
@@ -497,7 +500,8 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
 
   // ── Duration ───────────────────────────────────────────────────────────────
   // Auto-estimate based on current name + type — shown in picker as "Auto (Xh)"
-  const autoEstimateMins  = estimateDuration({ type: tile.type, subtype: tile.subtype, name, detail });
+  const effSubtype        = misc && tile.type === 'activity' ? 'misc' : tile.subtype;
+  const autoEstimateMins  = estimateDuration({ type: tile.type, subtype: effSubtype, name, detail });
   const autoEstimateLabel = formatDuration(autoEstimateMins);
   // How much room this activity needs — drives smart placement + Full detection.
   const needMins = durationMins > 0 ? durationMins : autoEstimateMins;
@@ -511,7 +515,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
     const finalName = name.trim() || (place ? `${tile.label} · ${place}` : `${tile.label} · ${time}`);
     const base = {
       type:         tile.type,
-      subtype:      tile.subtype || null,
+      subtype:      effSubtype || null,
       name:         finalName,
       arriveTime:   tile.type === 'transport' && tile.subtype !== 'pitstop' && arriveTime ? arriveTime : null,
       durationMins: durationMins > 0 ? durationMins : null,
@@ -624,11 +628,50 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               style={s.nameInput}
               value={name}
               onChangeText={v => { setName(v); setNameTouched(true); }}
-              placeholder={tile.type === 'transport' ? `e.g. ${tile.label} to Paris` : tile.type === 'stay' ? 'e.g. Marriott Downtown' : tile.type === 'food' ? 'e.g. Breakfast at hotel' : 'e.g. Visit Eiffel Tower'}
+              placeholder={misc ? 'e.g. Fuel stop · Meet Sam · Pharmacy' : tile.type === 'transport' ? `e.g. ${tile.label} to Paris` : tile.type === 'stay' ? 'e.g. Marriott Downtown' : tile.type === 'food' ? 'e.g. Breakfast at hotel' : 'e.g. Visit Eiffel Tower'}
               placeholderTextColor={colors.muted}
               selectTextOnFocus
               returnKeyType="next"
             />
+
+            {/* ── "Quick stop" — ad-hoc activity (fuel, rest, errand, meet-up). Only on the
+                   Activity type. Checking it makes the stop SHORT (15 min by default, editable)
+                   instead of the usual 2h estimate, so it stops generating false overlap tips. */}
+            {tile.type === 'activity' && (
+              <View style={s.quickStopBox}>
+                <TouchableOpacity
+                  style={s.quickStopRow}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    const next = !misc;
+                    setMisc(next);
+                    // Pre-fill a short default the user can still change up (e.g. a few hours
+                    // for "meet a friend"). Unchecking returns to the normal auto-estimate.
+                    setDurationMins(next ? 15 : 0);
+                  }}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: misc }}
+                >
+                  <View style={[s.quickStopCheck, misc && s.quickStopCheckOn]}>
+                    {misc && <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>✓</Text>}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.quickStopLabel}>Quick stop — I’ll set how long</Text>
+                    <Text style={s.quickStopHint}>
+                      {misc
+                        ? 'Set the time below — starts at 15 min, change it for longer (e.g. meeting a friend).'
+                        : 'For a fuel stop, errand, or meet-up. Won’t get the usual 2-hour estimate.'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                {misc && (
+                  <View style={{ marginTop: spacing.md }}>
+                    <Text style={s.sectionLabel}>HOW LONG <Text style={s.optional}>(starts at 15 min — tap to change)</Text></Text>
+                    <DurationPickerInput value={durationMins} onChange={setDurationMins} autoLabel={formatDuration(autoEstimateMins)} />
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* ── Nights (stay only) — sets which nights this hotel covers, so each
                    day knows where you sleep + where the next day's route starts ── */}
@@ -934,17 +977,20 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                   </View>
                 )}
 
-                {/* Duration — auto-estimates by type; override here if needed */}
-                <View style={[s.inlineRow, { marginTop: spacing.lg }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.sectionLabel}>DURATION</Text>
-                    <DurationPickerInput
-                      value={durationMins}
-                      onChange={setDurationMins}
-                      autoLabel={autoEstimateLabel}
-                    />
+                {/* Duration — auto-estimates by type; override here if needed. (A Quick stop
+                    shows its duration above the fold, so don't duplicate it here.) */}
+                {!misc && (
+                  <View style={[s.inlineRow, { marginTop: spacing.lg }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.sectionLabel}>DURATION</Text>
+                      <DurationPickerInput
+                        value={durationMins}
+                        onChange={setDurationMins}
+                        autoLabel={autoEstimateLabel}
+                      />
+                    </View>
                   </View>
-                </View>
+                )}
 
                 {/* Details */}
                 <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>DETAILS <Text style={s.optional}>(optional)</Text></Text>
@@ -1100,6 +1146,13 @@ const s = StyleSheet.create({
     color: colors.text,
     ...shadow.sm,
   },
+  // "Quick stop" (misc) checkbox
+  quickStopBox: { marginTop: spacing.md, backgroundColor: '#f8fafc', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md },
+  quickStopRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  quickStopCheck: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: colors.muted, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  quickStopCheckOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  quickStopLabel: { fontSize: 14, fontWeight: '700', color: colors.text },
+  quickStopHint: { fontSize: 12, color: colors.subtle, marginTop: 2 },
 
   // Address → geocode row
   addrRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'stretch' },

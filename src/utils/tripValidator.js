@@ -73,6 +73,12 @@ export function estimateDuration(activity) {
   // Manual override always wins — covers long-haul flights, multi-day treks, etc.
   if (activity.durationMins > 0) return activity.durationMins;
 
+  // "Quick stop" (fuel, rest, errand, meet-up) — an ad-hoc activity the user sizes
+  // themselves; SHORT by default so it never inflates to the 2h sightseeing estimate
+  // (the "Fuel = 2h → overlaps dinner" bug). subtype='misc' on a normal type='activity'.
+  // Placed before any keyword logic so a name like "Fuel" can't balloon it.
+  if (activity.subtype === 'misc') return 15;
+
   const name   = (activity.name   || '').toLowerCase();
   const detail = (activity.detail || '').toLowerCase();
   const text   = `${name} ${detail}`;
@@ -378,11 +384,17 @@ function validateDay(day, dayIndex, families = []) {
     return startMin + estimateDuration(act) > ivs[ivs.length - 1].c;
   };
 
+  // A SHORT "Quick stop" (misc — fuel/rest/errand, ≤45 min) carries an honest, user-set
+  // duration, so a few minutes of overlap with a meal is noise → exempt from estimate-based
+  // overlap/travel tips. A LONGER misc (e.g. a 90 min+ meet-up) still flags a real collision.
+  const isQuietMisc = (a) => a.subtype === 'misc' && estimateDuration(a) <= 45;
+
   // ── Rule 1: Schedule overlaps ─────────────────────────────────────
   for (let i = 0; i < timeline.length - 1; i++) {
     const curr = timeline[i];
     const next = timeline[i + 1];
-    if (curr.duration > 0 && curr.endMin > next.startMin) {
+    if (curr.duration > 0 && curr.endMin > next.startMin &&
+        !isQuietMisc(curr.act) && !isQuietMisc(next.act)) {
       const overlapMin = curr.endMin - next.startMin;
       const sug = formatEndTime(curr.endMin);
       const fitsLater = !wouldCloseBefore(next.act, curr.endMin); // moving later still within hours?
@@ -421,6 +433,7 @@ function validateDay(day, dayIndex, families = []) {
     const next = timeline[i + 1];
     if (curr.duration <= 0) continue;
     if (curr.act.type === 'transport' || next.act.type === 'transport') continue; // the drive IS the travel
+    if (isQuietMisc(curr.act) || isQuietMisc(next.act)) continue; // a quick fuel/rest stop isn't a travel-time problem
     const leg = travelLeg(curr.act, next.act);
     if (!leg || leg.min < 10) continue;            // unknown coords, or a trivial hop
     const gap = next.startMin - curr.endMin;       // free minutes between end and next start

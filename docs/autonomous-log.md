@@ -37,6 +37,9 @@ Each increment: jest green + count stable, snapshots byte-identical (never -u), 
 diff only intended files. Target: ItineraryScreen.js (3022 lines) + DiscoverModal/SplitwiseScreen.
 - 2026-06-05 — compile safety net: a babel-transform test over every screen + modal, so a
   syntax/JSX break in a file jest never imports now turns a test red. 330→355 tests.
+- 2026-06-05 — ItineraryScreen dedup: removed the local getSlotKey + toMin (byte-identical to
+  slots.js getSlotKey/timeToMin → import those instead) and the dead SEV_CHIP palette. ~16 lines
+  off the monolith; behavior-identical; 355 tests green (no new lint).
 
 ## 2026-06-04 — test-user bug fixes (user driving)
 - 2026-06-04 — Bug1: 24/7 places (bridge/lighthouse) no longer show "Closed" — Google's no-close period was recorded Sunday-only; compactHours now expands 24/7 to all 7 days + handles cross-midnight; store v4→v5 migration repairs existing trips. ✓ device-verified (19b84aa)

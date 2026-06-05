@@ -17,7 +17,7 @@ import { scheduleDay, planDay, returnJourneyDraft, suggestDayForVenue } from '..
 import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, hoursLabel, weeklyHoursLabel, dayIntervals } from '../utils/hours';
 import { refreshPhotoKey } from '../utils/places';
-import { getSuggestedTime, minToTime } from '../utils/slots';
+import { getSuggestedTime, minToTime, getSlotKey, timeToMin } from '../utils/slots';
 import { bookingUrl } from '../utils/booking';
 import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
@@ -106,13 +106,8 @@ const DAY_SLOTS = [
 
 // Activity type → Icon name (see components/ui/Icon)
 const ACT_ICON = { transport: 'transport', stay: 'hotel', food: 'food', activity: 'activity', note: 'note' };
-// Trip Check severity → sort rank + inline chip palette (errors first).
+// Trip Check severity → sort rank (errors first).
 const SEV_RANK = { error: 0, warning: 1, info: 2 };
-const SEV_CHIP = {
-  error:   { backgroundColor: '#fef2f2', color: '#dc2626' },
-  warning: { backgroundColor: '#fffbeb', color: '#b45309' },
-  info:    { backgroundColor: '#f0ede8', color: '#6b6259' },
-};
 
 // One calm per-day summary pill (replaces the wall of red chips). Tone is set by
 // the worst severity present; the icon SHAPE + the words carry severity (not just
@@ -167,18 +162,6 @@ const NIGHT_PLAN_META = {
   heading_home:     { emoji: '🏡', icon: 'location',  label: 'Home tonight',                      a11y: 'heading home' },
 };
 
-function getSlotKey(timeStr) {
-  if (!timeStr) return 'morning';
-  const [h, m] = timeStr.split(':').map(Number);
-  const mins = (h || 0) * 60 + (m || 0);
-  if (mins < 720)  return 'morning';
-  if (mins < 1020) return 'afternoon';
-  if (mins < 1260) return 'evening';
-  return 'night';
-}
-
-const toMin = t => { const [h, m] = (t || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
-
 // ── Travel leg between two consecutive stops ──────────────────────
 // The intuitive distance cue: a little "🚗 12 min · 5.0 km" connector between
 // cards (Wanderlog/Google-Trips style). Turns RED when the next stop starts
@@ -192,7 +175,7 @@ function TravelConnector({ from, to }) {
   if (from.type === 'transport' || to.type === 'transport') return null;
   const leg = travelLeg(from, to);
   if (!leg || leg.min < 3) return null;            // unknown coords or a trivial hop
-  const gap   = toMin(to.time) - (toMin(from.time) + estimateDuration(from));
+  const gap   = timeToMin(to.time) - (timeToMin(from.time) + estimateDuration(from));
   const tight = leg.min >= 10 && gap < leg.min;    // not enough time to travel (close OR overlapping)
   const gapNote = !tight ? '' : gap < 0 ? ' — overlaps' : ` — only ${gap} min gap`;
   return (
@@ -1317,7 +1300,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                 // couldn't fit them in their open hours) go in the "Doesn't fit" tray below.
                 acts: [...day.activities]
                   .filter(a => a.time && getSlotKey(a.time) === slot.key)
-                  .sort((a, b) => toMin(a.time) - toMin(b.time)),
+                  .sort((a, b) => timeToMin(a.time) - timeToMin(b.time)),
               }));
               const lastFilledIdx = slotActsMap.reduce((best, { acts }, i) => acts.length > 0 ? i : best, -1);
               return slotActsMap.map(({ slot, acts }, slotIdx) => {

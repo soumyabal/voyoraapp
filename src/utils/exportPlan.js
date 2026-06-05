@@ -10,6 +10,7 @@
 
 import { Alert } from 'react-native';
 import { getAllMembers, fmt, fmtM } from './helpers';
+import { googleMapsDayShareUrl, googleMapsPlaceUrl } from './mapsRoute';
 import { APP_NAME } from '../config';
 
 // ─── Activity type metadata ───────────────────────────────────────────────────
@@ -332,6 +333,13 @@ function escHtml(str) {
 
 function buildDayHTML(trip, day, dayIndex) {
   const dayCost = (day.activities || []).reduce((s, a) => s + (a.costPerPerson || 0), 0);
+  const oneLine = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+  // Real tappable links work in a PDF: each address opens THAT place, and one
+  // link opens the whole day's route. (Plain-text share can't do per-address taps.)
+  const placeHref = (a) =>
+    googleMapsPlaceUrl(a.lat, a.lng)
+    || (a.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(oneLine(a.address))}` : null);
+  const routeUrl = googleMapsDayShareUrl(trip, dayIndex);
 
   const css = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -351,7 +359,10 @@ function buildDayHTML(trip, day, dayIndex) {
     .act-body  { flex: 1; }
     .act-name  { font-weight: 600; font-size: 13px; color: #1a1a2e; }
     .act-detail{ font-size: 11px; color: #6b7280; margin-top: 1px; }
+    .act-addr  { font-size: 10px; color: #9ca3af; margin-top: 2px; }
+    .act-addr a { color: #6366f1; text-decoration: none; }
     .act-cost  { font-size: 12px; font-weight: 700; color: #374151; white-space: nowrap; flex-shrink: 0; }
+    .route-link { display: inline-block; margin: 0 0 14px; font-size: 12px; font-weight: 700; color: #6366f1; text-decoration: none; background: #ede9fe; padding: 6px 14px; border-radius: 20px; }
     .summary   { background: #f3f4f6; border-radius: 8px; padding: 12px 16px; margin-top: 16px; display: flex; justify-content: space-between; align-items: center; }
     .sum-label { font-size: 10px; color: #6b7280; font-weight: 700; text-transform: uppercase; }
     .sum-val   { font-size: 18px; font-weight: 800; color: #1a1a2e; }
@@ -389,6 +400,7 @@ function buildDayHTML(trip, day, dayIndex) {
             <div class="act-body">
               <div class="act-name">${icon} ${escHtml(act.name)}</div>
               ${act.detail ? `<div class="act-detail">${escHtml(act.detail)}</div>` : ''}
+              ${act.address ? `<div class="act-addr">📍 ${placeHref(act) ? `<a href="${placeHref(act)}">${escHtml(oneLine(act.address))}</a>` : escHtml(oneLine(act.address))}</div>` : ''}
             </div>
             ${act.costPerPerson > 0 ? `<div class="act-cost">$${act.costPerPerson}/p</div>` : ''}
           </div>`;
@@ -420,6 +432,7 @@ function buildDayHTML(trip, day, dayIndex) {
   <div class="brand">${APP_NAME} · ${escHtml(trip.name)}</div>
   <div class="day-title">${escHtml(day.label)}</div>
   <div class="day-meta">📅 ${fmt(day.date)} · 📍 ${escHtml(trip.destination)}</div>
+  ${routeUrl ? `<a class="route-link" href="${routeUrl}">🗺️ Open this day's route in Google Maps</a>` : ''}
   <div class="families">${familiesHTML}</div>
   <div class="divider"></div>
   ${activitiesHTML || '<p style="color:#9ca3af;font-size:12px;">No activities planned.</p>'}
@@ -446,7 +459,7 @@ function buildDayHTML(trip, day, dayIndex) {
  * Compact single-day PDF: families + dietary, activities by slot, day cost summary.
  * Triggered from the ⓘ detail sheet in ItineraryScreen.
  */
-export async function exportDayAsPDF(trip, day) {
+export async function exportDayAsPDF(trip, day, dayIndex) {
   if (!trip || !day) return;
 
   try {
@@ -463,7 +476,7 @@ export async function exportDayAsPDF(trip, day) {
       return;
     }
 
-    const html = buildDayHTML(trip, day);
+    const html = buildDayHTML(trip, day, dayIndex);
     const { uri } = await Print.printToFileAsync({ html, base64: false });
 
     const canShare = await Sharing.isAvailableAsync();

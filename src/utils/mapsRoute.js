@@ -65,3 +65,23 @@ export function googleMapsDayUrl(trip, dayIndex) {
   if (mid) url += `&waypoints=${encodeURIComponent(mid)}`;
   return url;
 }
+
+/**
+ * PATH-STYLE day-route URL — for SHARED TEXT and PDF (not in-app Linking).
+ * `https://www.google.com/maps/dir/lat,lng/lat,lng/...` has no query string, so
+ * chat link-detectors (SMS / email / some chat apps) can't truncate it at a `|`
+ * or `&` the way they do the `?api=1&waypoints=…` form — it stays one tappable
+ * link. Coords trimmed to 5 dp (~1 m, shorter). null when < 2 distinct points.
+ */
+export function googleMapsDayShareUrl(trip, dayIndex) {
+  const pts = dayRoutePoints(trip, dayIndex);
+  if (pts.length < 2) return null;
+  const seg = (p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`;
+  return `https://www.google.com/maps/dir/${pts.map(seg).join('/')}`;
+}
+
+/** A single-place Google Maps link (for PDF address hyperlinks). null w/o coords. */
+export function googleMapsPlaceUrl(lat, lng) {
+  if (lat == null || lng == null) return null;
+  return `https://www.google.com/maps/search/?api=1&query=${lat.toFixed(5)},${lng.toFixed(5)}`;
+}

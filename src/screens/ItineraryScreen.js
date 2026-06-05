@@ -12,7 +12,7 @@ import Snackbar from '../components/ui/Snackbar';
 import { fmt, fmtM, getActivityIcon, uid, tripPhase, defaultDayFor, daysBetweenISO, todayISO, nowNextOf } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost, calcFamilyBalances } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
-import { googleMapsDayUrl } from '../utils/mapsRoute';
+import { googleMapsDayUrl, googleMapsDayShareUrl } from '../utils/mapsRoute';
 import { scheduleDay, planDay, returnJourneyDraft, suggestDayForVenue } from '../utils/autoArrange';
 import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, hoursLabel, weeklyHoursLabel, dayIntervals } from '../utils/hours';
@@ -44,8 +44,9 @@ const SLOT_RANGES = [
   { key: 'night',     label: '🌙 Night',      before: 1440 },
 ];
 
-function generateDayShareText(trip, day) {
+function generateDayShareText(trip, day, dayIndex) {
   if (!day) return '';
+  const oneLine = (s) => String(s).replace(/\s+/g, ' ').trim();
   const acts = [...(day.activities || [])]
     .filter(a => a.status !== 'skipped')
     .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
@@ -74,11 +75,19 @@ function generateDayShareText(trip, day) {
       const icon = a.type === 'food' ? '🍽️' : a.type === 'transport' ? '🚗' : a.type === 'stay' ? '🏨' : '🎯';
       const cost = a.costPerPerson > 0 ? ` (~$${a.costPerPerson}/p)` : '';
       text += `  ${a.time}  ${icon} ${a.name}${cost}\n`;
+      // Address as plain text (where you'll be); single-lined so it never breaks
+      // the slot layout. The tappable route is the one link at the bottom.
+      if (a.address) text += `         📍 ${oneLine(a.address)}\n`;
     });
     text += '\n';
   });
 
   if (dayCost > 0) text += `💰 Day estimate: ${fmtM(dayCost)}/person\n`;
+  // One tappable, chat-safe link that opens the WHOLE day's route in Maps
+  // (path-style URL — survives chat link-detectors). On its own line, no
+  // trailing punctuation, so it stays one tap target. Omitted if <2 located stops.
+  const routeUrl = dayIndex != null ? googleMapsDayShareUrl(trip, dayIndex) : null;
+  if (routeUrl) text += `\n🗺️ Open today's route in Maps:\n${routeUrl}\n`;
   text += `\n_Shared via ${APP_NAME}_`;
   return text;
 }
@@ -319,7 +328,7 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
 
   const handleShare = async () => {
     try {
-      const text = generateDayShareText(trip, day);
+      const text = generateDayShareText(trip, day, currentDay);
       await Share.share({ message: text });
     } catch (e) {
       console.warn('[share]', e);
@@ -472,7 +481,7 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
             {/* Export day as PDF */}
             <TouchableOpacity
               style={ch.exportDayBtn}
-              onPress={() => { setShowDetail(false); exportDayAsPDF(trip, day); }}
+              onPress={() => { setShowDetail(false); exportDayAsPDF(trip, day, currentDay); }}
               activeOpacity={0.8}
             >
               <Text style={ch.exportDayBtnText}>📄 Export Day as PDF</Text>

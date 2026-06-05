@@ -49,3 +49,6 @@ src/config.js
 # generated native folders
 /ios
 /android
+
+# Claude Code session/loop artifacts
+.claude/scheduled_tasks.lock

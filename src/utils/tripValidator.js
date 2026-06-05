@@ -785,24 +785,17 @@ function formatEndTime(totalMin) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-// ─── Trip-level validation ────────────────────────────────────────
+// ─── Trip-level rules ─────────────────────────────────────────────
+// Each trip rule is a pure function (trip) → warning[]. validateTrip runs the
+// per-day rules then this ordered registry. (Day rules live in DAY_RULES above.)
 
-/**
- * Main entry point. Validates every day in the trip and adds
- * trip-level rules. Returns an array of warning objects.
- */
-export function validateTrip(trip) {
+// ── Trip rule: first stop scheduled before you could realistically ARRIVE ─────────
+// The "359 km at 08:00" case — a day's first stop is set earlier than you could reach it
+// from where the day STARTS (home on Day 1, last night's hotel otherwise). Soft tip only:
+// we're estimating a DRIVE, so if they fly it's wrong → never an error. On a multi-day
+// arrival day with no lodging, the hint folds in a "add a hotel check-in" nudge.
+function ruleFirstStopUnreachable(trip) {
   const warnings = [];
-
-  trip.days.forEach((day, i) => {
-    warnings.push(...validateDay(day, i, trip.families || []));
-  });
-
-  // ── Trip rule: first stop scheduled before you could realistically ARRIVE ─────────
-  // The "359 km at 08:00" case — a day's first stop is set earlier than you could reach it
-  // from where the day STARTS (home on Day 1, last night's hotel otherwise). Soft tip only:
-  // we're estimating a DRIVE, so if they fly it's wrong → never an error. On a multi-day
-  // arrival day with no lodging, the hint folds in a "add a hotel check-in" nudge.
   const DEPART = 8 * 60; // earliest realistic departure from the day's start anchor
   trip.days.forEach((day, i) => {
     const acts = (day.activities || [])
@@ -839,8 +832,12 @@ export function validateTrip(trip) {
       dayIndex: i,
     });
   });
+  return warnings;
+}
 
-  // ── Trip rule: empty or near-empty days ──────────────────────────
+// ── Trip rule: empty or near-empty days ──────────────────────────
+function ruleEmptyDays(trip) {
+  const warnings = [];
   const isLongTrip = trip.days.length >= 7;
 
   trip.days.forEach((day, i) => {
@@ -872,16 +869,18 @@ export function validateTrip(trip) {
       });
     }
   });
+  return warnings;
+}
 
-  // ── Trip rule: nights without a place to sleep ───────────────────
-  // Every night needs lodging EXCEPT the last day (you head home) or an overnight
-  // journey (lodgingForNight returns {overnightTransit}, so it's not null → not
-  // flagged). This fires even when the trip has NO stay at all — a multi-day trip
-  // with zero lodging is the MOST important case to flag, not the one to stay silent
-  // on. Home-base trips opt out via trip.homeBase; empty days are already covered by
-  // empty_day, so we skip them here to avoid double-warning.
-  const hasAnyStay = trip.days.some(d =>
-    d.activities.some(a => a.type === 'stay' && a.status !== 'skipped'));
+// ── Trip rule: nights without a place to sleep ───────────────────
+// Every night needs lodging EXCEPT the last day (you head home) or an overnight
+// journey (lodgingForNight returns {overnightTransit}, so it's not null → not
+// flagged). This fires even when the trip has NO stay at all — a multi-day trip
+// with zero lodging is the MOST important case to flag, not the one to stay silent
+// on. Home-base trips opt out via trip.homeBase; empty days are already covered by
+// empty_day, so we skip them here to avoid double-warning.
+function ruleUnbookedNights(trip) {
+  const warnings = [];
   if (!trip.homeBase && trip.days.length >= 2) {
     for (let i = 0; i < trip.days.length - 1; i++) {   // every night but the last day
       const day = trip.days[i];
@@ -899,11 +898,15 @@ export function validateTrip(trip) {
       }
     }
   }
+  return warnings;
+}
 
-  // ── Trip rule: check out by the hotel's time on the departure morning ─────
-  // The morning you leave a hotel (checkInDay + nights lands on today), a calm
-  // reminder to be packed and out by check-out. Soft 'info' only, once per stay, and
-  // only on a day you're actually planning (has activities) — never an alarm.
+// ── Trip rule: check out by the hotel's time on the departure morning ─────
+// The morning you leave a hotel (checkInDay + nights lands on today), a calm
+// reminder to be packed and out by check-out. Soft 'info' only, once per stay, and
+// only on a day you're actually planning (has activities) — never an alarm.
+function ruleCheckOutBy(trip) {
+  const warnings = [];
   trip.days.forEach((day, i) => {
     if (day.activities.filter(a => a.status !== 'skipped').length === 0) return;
     for (let j = i - 1; j >= 0; j--) {   // most recent stay before today decides
@@ -923,8 +926,14 @@ export function validateTrip(trip) {
       break;
     }
   });
+  return warnings;
+}
 
-  // ── Trip rule: last day has no check-out / way home ──────────────
+// ── Trip rule: last day has no check-out / way home ──────────────
+function ruleLastDayCheckout(trip) {
+  const warnings = [];
+  const hasAnyStay = trip.days.some(d =>
+    d.activities.some(a => a.type === 'stay' && a.status !== 'skipped'));
   const lastIdx = trip.days.length - 1;
   if (hasAnyStay && lastIdx >= 1) {
     const lastDay     = trip.days[lastIdx];
@@ -942,9 +951,13 @@ export function validateTrip(trip) {
       });
     }
   }
+  return warnings;
+}
 
-  // ── Trip rule: long journey days ─────────────────────────────────
-  // Transport activities >= 6h with other activities on the same day.
+// ── Trip rule: long journey days ─────────────────────────────────
+// Transport activities >= 6h with other activities on the same day.
+function ruleLongJourney(trip) {
+  const warnings = [];
   // Each other activity gets a per-activity "Move to Day N" suggestion.
   trip.days.forEach((day, i) => {
     const nonSkipped = day.activities.filter(a => a.status !== 'skipped');
@@ -990,7 +1003,32 @@ export function validateTrip(trip) {
       });
     });
   });
+  return warnings;
+}
 
+// ─── Main entry point ──────────────────────────────────────────────
+// Ordered registry of trip-level rules. validateTrip runs the per-day rules
+// (DAY_RULES) for each day, THEN these in this exact order — the warning array
+// order is load-bearing (the snapshot pins it).
+const TRIP_RULES = [
+  ruleFirstStopUnreachable,
+  ruleEmptyDays,
+  ruleUnbookedNights,
+  ruleCheckOutBy,
+  ruleLastDayCheckout,
+  ruleLongJourney,
+];
+
+/**
+ * Validates every day in the trip, then runs the trip-level rule registry.
+ * Returns an array of warning objects.
+ */
+export function validateTrip(trip) {
+  const warnings = [];
+  trip.days.forEach((day, i) => {
+    warnings.push(...validateDay(day, i, trip.families || []));
+  });
+  TRIP_RULES.forEach(rule => warnings.push(...rule(trip)));
   return warnings;
 }
 

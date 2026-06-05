@@ -511,9 +511,9 @@ function tripStatus(trip) {
 }
 
 const VALUE_PROPS = [
-  { icon: 'calendar', tint: colors.accent, title: 'Day-by-day itineraries', sub: 'Smart time slots, conflict checks, and a Discover search for every city.' },
-  { icon: 'wallet',   tint: colors.smart,  title: 'Per-family expense split', sub: 'Hotels by rooms, transit by family size — fairly, automatically.' },
-  { icon: 'accessible', tint: colors.success, title: 'Accessibility built-in', sub: 'Plan around wheelchair, dietary and pace needs per traveler.' },
+  { icon: 'calendar', tint: colors.accent,  title: 'Easy to plan',  sub: 'Day-by-day itineraries, smart time slots, and a Discover search for every city.' },
+  { icon: 'plane',    tint: colors.success, title: 'Fun to travel', sub: 'Everyone along for the ride — accessibility, dietary and pace needs handled per traveler.' },
+  { icon: 'wallet',   tint: colors.smart,   title: 'Fair to share', sub: 'Costs split per family — hotels by rooms, transit by size — fairly, automatically.' },
 ];
 
 // ─── Next-trip spotlight card ─────────────────────────────────────

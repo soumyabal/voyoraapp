@@ -11,6 +11,7 @@
 import { Alert } from 'react-native';
 import { getAllMembers, fmt, fmtM } from './helpers';
 import { googleMapsDayShareUrl } from './mapsRoute';
+import { coverTagline, countdownLine, dayVibe, closingNote } from './tripCopy';
 import { APP_NAME } from '../config';
 
 // ─── Activity type metadata ───────────────────────────────────────────────────
@@ -33,51 +34,8 @@ const ACT_ICONS = {
 
 const CAT_ICONS = { '🏨': '🏨', '✈️': '✈️', '🍽️': '🍽️', '🎯': '🎯' };
 
-// ─── Motivating copy (rule-derived — no AI, no API) ───────────────────────────
-
-/** Whole days until the trip starts (null if no date). Negative = already begun. */
-function daysUntil(dateStr) {
-  if (!dateStr) return null;
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const start = new Date(dateStr + 'T00:00:00');
-  return Math.round((start - today) / 86400000);
-}
-
-/** A warm countdown line for the cover. */
-function countdownLine(trip) {
-  const n = daysUntil(trip.startDate);
-  if (n == null) return '';
-  if (n > 1)  return `in ${n} days`;
-  if (n === 1) return 'tomorrow!';
-  if (n === 0) return 'today — have the best time';
-  return 'the adventure is underway';
-}
-
-/** Cover tagline, built from real trip facts (family-trip tone, not hype). */
-function coverTagline(trip) {
-  const days  = trip.days?.length || 0;
-  const fams  = trip.families?.length || 0;
-  const place = (trip.destination || '').split(',')[0].trim();
-  const dLabel = `${days} day${days !== 1 ? 's' : ''}`;
-  if (fams >= 2 && place) return `${dLabel}, ${fams} families, one ${place} adventure.`;
-  if (place)              return `${dLabel} in ${place}. Let’s go.`;
-  return 'The plan’s done. Now the fun part — going.';
-}
-
-/** A one-line vibe for a day, from its activity mix. Deterministic. */
-function dayVibe(day) {
-  const acts = (day.activities || []).filter(a => a.status !== 'skipped');
-  if (!acts.length) return 'An open day — leave room to wander, or add one thing you’d hate to miss.';
-  const transport = acts.filter(a => a.type === 'transport').length;
-  const food      = acts.filter(a => a.type === 'food').length;
-  const activity  = acts.filter(a => a.type === 'activity').length;
-  const hasStay   = acts.some(a => a.type === 'stay');
-  if (hasStay && transport) return 'Arrival day — land, settle in, and let it start slow. 🌅';
-  if (transport && acts.length <= 2) return 'A travel day — snacks packed, playlist ready. 🚗';
-  if (activity >= 4 || acts.length >= 6) return 'A full one today — pace yourselves and soak it in.';
-  if (food >= 2 && activity <= 1) return 'A day to eat your way around. 🍽️';
-  return 'A good mix today — a little to see, a little to savour.';
-}
+// Motivational copy (coverTagline / countdownLine / dayVibe / closingNote) is
+// original + varied + deterministic — see ./tripCopy (no AI, no API, no IP risk).
 
 // ─── HTML builder ─────────────────────────────────────────────────────────────
 
@@ -213,7 +171,7 @@ export function buildHTML(trip, travelers = []) {
           ${day.date ? `<span class="day-date">${fmt(day.date)}</span>` : ''}
           ${dayCost > 0 ? `<span class="day-cost">${fmtM(dayCost)}/person</span>` : ''}
         </div>
-        <div class="day-vibe">${escHtml(dayVibe(day))}</div>
+        <div class="day-vibe">${escHtml(dayVibe(day, i))}</div>
         ${activitiesHTML}
       </div>`;
   }).join('');
@@ -358,7 +316,7 @@ export function buildHTML(trip, travelers = []) {
   <!-- Expenses -->
   ${expensesHTML}
 
-  <div class="closing">Made for your crew with ${APP_NAME}. Now go make the stories. ✨</div>
+  <div class="closing">${escHtml(closingNote(trip))}</div>
 
   <!-- Footer -->
   <div class="footer">
@@ -495,7 +453,7 @@ export function buildDayHTML(trip, day, dayIndex) {
     <div class="cover-brand">${APP_NAME} · ${escHtml(trip.name)}</div>
     <div class="day-title">${escHtml(day.label)}</div>
     <div class="day-meta">📅 ${fmt(day.date)} · 📍 ${escHtml(trip.destination)}</div>
-    <div class="cover-tag">${escHtml(dayVibe(day))}</div>
+    <div class="cover-tag">${escHtml(dayVibe(day, dayIndex || 0))}</div>
   </div>
   <div class="pad">
   ${routeUrl ? `<div class="route-box"><div class="route-label">🗺️ Open this day's route in Google Maps</div><a class="route-url" href="${routeUrl}">${escHtml(routeUrl)}</a></div>` : ''}
@@ -511,7 +469,7 @@ export function buildDayHTML(trip, day, dayIndex) {
       <div class="sum-label">${(day.activities || []).length} activities</div>
     </div>
   </div>
-  <div class="footer">Generated ${now} · ${APP_NAME} multi-family travel planner · Now go make the stories ✨</div>
+  <div class="footer">${escHtml(closingNote(trip))} · Generated ${now}</div>
   </div>
 </div>
 </body>

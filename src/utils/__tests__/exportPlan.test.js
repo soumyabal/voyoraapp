@@ -40,7 +40,8 @@ describe('buildHTML (full-trip PDF)', () => {
     expect(html).toContain('🏖️');
     expect(html).toContain('Coast Trip');
     expect(html).toContain('✦');                      // countdown pill marker
-    expect(html).toContain('one San Diego adventure'); // tagline from coverTagline
+    expect(html).toContain('class="cover-tag"');       // a (varied) tagline renders
+    expect(html).toContain('San Diego');               // place-aware tagline includes the city
     expect(html).toContain('background-image:linear-gradient'); // gradient hero (solid fallback too)
   });
 
@@ -51,7 +52,7 @@ describe('buildHTML (full-trip PDF)', () => {
 
   test('per-day vibe line + closing note', () => {
     expect(html).toContain('class="day-vibe"');
-    expect(html).toContain('go make the stories');
+    expect(html).toMatch(/class="closing">[^<]*✨/);   // a (varied) closing note
   });
 
   test('print-color-adjust set (so the hero/table colors survive PDF)', () => {

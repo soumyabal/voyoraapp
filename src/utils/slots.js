@@ -6,6 +6,7 @@
  * the app finds the best open time in that slot for the chosen day.
  */
 import { estimateDuration } from './tripValidator';
+import { weekdayOf, dayIntervals } from './hours';
 
 // `range` = the PLACEMENT window for suggested times (when a stop is added to a
 // slot). Morning starts at 09:00 (540), NOT 00:00 — a leading-gap fill used to
@@ -104,21 +105,58 @@ export function getSlotCount(trip, dayIndex, slotKey) {
 }
 
 /**
- * A suggested time that ALWAYS returns a value (never blocks): the first open
- * gap if one fits, otherwise just after the last activity in the slot. Any
- * resulting tightness/overlap is surfaced later by the Trip Checker.
+ * If `openHours` are known for the trip-day's weekday, nudge a candidate start time
+ * so the visit actually happens while the venue is OPEN (start within an open
+ * interval, with room to finish before close). Prevents "added a 10–5 place at
+ * 6:34 PM". Prefers the open interval nearest the requested time, so a place open
+ * 10–5 added to the Evening slot lands at the latest it still fits (e.g. 16:00),
+ * not 18:00. Venue closed all day / hours unknown → leaves the time unchanged
+ * (the closed_venue Trip Check owns that case).
  */
-export function getSuggestedTime(trip, dayIndex, slotKey, needMins = 0) {
-  const gap = getSmartTime(trip, dayIndex, slotKey, needMins);
-  if (gap) return gap;
+function clampToOpenHours(candMin, trip, dayIndex, need, openHours) {
+  if (!openHours) return candMin;
+  const wd  = weekdayOf(trip?.days?.[dayIndex]?.date);
+  const ivs = dayIntervals(openHours, wd);          // null = unknown · [] = closed that day
+  if (!ivs || !ivs.length) return candMin;
+  // Already inside an open interval with room to finish before close → keep it.
+  if (ivs.some(h => candMin >= h.o && candMin + need <= h.c)) return candMin;
+  // Otherwise snap to the open interval that can host the visit and sits closest to
+  // the requested time, clamped so the visit ends by close.
+  let best = null;
+  for (const h of ivs) {
+    if (h.c - h.o < need) continue;                 // interval too short to host the visit
+    const start = Math.min(Math.max(h.o, candMin), h.c - need);
+    const dist  = Math.abs(start - candMin);
+    if (!best || dist < best.dist) best = { start, dist };
+  }
+  return best ? best.start : candMin;
+}
+
+/**
+ * A suggested time that ALWAYS returns a value (never blocks): the first open
+ * gap if one fits, otherwise just after the last activity in the slot — then
+ * nudged into the venue's opening hours when those are known (so we never auto-
+ * schedule a place after it closes). Any residual tightness/overlap is surfaced
+ * later by the Trip Checker.
+ */
+export function getSuggestedTime(trip, dayIndex, slotKey, needMins = 0, openHours = null) {
   const slot = SLOTS.find(s => s.key === slotKey);
-  const intervals = slotIntervals(trip, dayIndex, slotKey);
-  if (!slot) return '09:00';
-  if (!intervals.length) return slot.defaultTime;
-  const [lo, hi] = slot.range;
   const need = Math.max(BUFFER_MIN, needMins || DEFAULT_NEED_MIN);
-  const lastEnd = Math.max(...intervals.map(iv => iv[1]));
-  // Slot is full → suggest just after the last stop, but CLAMP inside the slot so a
-  // full Morning doesn't suggest an afternoon time. Any tightness is the Trip Check's job.
-  return minToTime(Math.max(lo, Math.min(lastEnd + BUFFER_MIN, hi - need)));
+  // 1) Slot-based candidate (unchanged behaviour).
+  let cand;
+  const gap = getSmartTime(trip, dayIndex, slotKey, needMins);
+  if (gap) cand = timeToMin(gap);
+  else if (!slot) return '09:00';
+  else {
+    const intervals = slotIntervals(trip, dayIndex, slotKey);
+    if (!intervals.length) cand = timeToMin(slot.defaultTime);
+    else {
+      const [lo, hi] = slot.range;
+      const lastEnd = Math.max(...intervals.map(iv => iv[1]));
+      // Slot full → just after the last stop, CLAMPED inside the slot.
+      cand = Math.max(lo, Math.min(lastEnd + BUFFER_MIN, hi - need));
+    }
+  }
+  // 2) Respect the place's real opening hours when we know them.
+  return minToTime(clampToOpenHours(cand, trip, dayIndex, need, openHours));
 }

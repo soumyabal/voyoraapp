@@ -785,7 +785,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
   const handleConfirmAdd = () => {
     if (!pendingPlace) return;
-    const smartTime = getSuggestedTime(trip, pickerDay, pickerSlot);
+    const smartTime = getSuggestedTime(trip, pickerDay, pickerSlot, 0, pendingPlace.openHours);
     const isStay    = pendingPlace.activityType === 'stay';
 
     // Hotel: capture the nightly rate the user found while booking. Store the
@@ -847,7 +847,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     // Opened from a per-slot "+ Add" → drop it in THAT slot; otherwise the least-full one.
     const slot = defaultSlot || [...SLOTS].sort((a, b) => getSlotCount(trip, day, a.key) - getSlotCount(trip, day, b.key))[0]?.key || 'morning';
     addActivity(trip.id, day, {
-      id: uid(), type: place.activityType, time: getSuggestedTime(trip, day, slot),
+      id: uid(), type: place.activityType, time: getSuggestedTime(trip, day, slot, 0, place.openHours),
       name: place.name, detail: '',
       costPerPerson: place.costPerPerson || 0, costMode: 'per_person', costAmount: place.costPerPerson || 0,
       address: place.address || '', url: place.url || '',
@@ -1095,7 +1095,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
                       style={[sp.slotPill, isActive&&sp.slotPillActive]}
                       onPress={() => setPickerSlot(slot.key)} activeOpacity={0.7}
                       accessibilityRole="button" accessibilityState={{ selected: isActive }}
-                      accessibilityLabel={`${slot.label}, suggested ${getSuggestedTime(trip, pickerDay, slot.key)}, ${count===0?'open':`${count} planned`}`}>
+                      accessibilityLabel={`${slot.label}, suggested ${getSuggestedTime(trip, pickerDay, slot.key, 0, pendingPlace?.openHours)}, ${count===0?'open':`${count} planned`}`}>
                       <Text style={sp.slotPillEmoji}>{slot.emoji}</Text>
                       <Text style={[sp.slotPillLabel, isActive&&{color:colors.primary,fontWeight:'800'}]} numberOfLines={1}>{slot.label}</Text>
                       {!isActive && <View style={[sp.slotDot, { backgroundColor: dotColor }]} />}
@@ -1106,7 +1106,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
               {(() => {
                 const lbl = SLOTS.find(sl => sl.key === pickerSlot)?.label || '';
                 const c = getSlotCount(trip, pickerDay, pickerSlot);
-                return <Text style={sp.slotPillMeta}>{lbl} · Add at {getSuggestedTime(trip, pickerDay, pickerSlot)} · {c===0?'Open':`${c} act${c!==1?'s':''}`}</Text>;
+                return <Text style={sp.slotPillMeta}>{lbl} · Add at {getSuggestedTime(trip, pickerDay, pickerSlot, 0, pendingPlace?.openHours)} · {c===0?'Open':`${c} act${c!==1?'s':''}`}</Text>;
               })()}
 
               {pendingPlace?.activityType === 'stay' && (
@@ -1131,7 +1131,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
               )}
 
               {(() => {
-                const smart = getSuggestedTime(trip, pickerDay, pickerSlot);
+                const smart = getSuggestedTime(trip, pickerDay, pickerSlot, 0, pendingPlace?.openHours);
                 const day   = trip.days[pickerDay];
                 const slot  = SLOTS.find(s => s.key===pickerSlot);
                 return (

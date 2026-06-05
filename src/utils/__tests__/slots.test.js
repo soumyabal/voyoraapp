@@ -41,6 +41,38 @@ describe('slot suggested time never lands at midnight', () => {
   });
 });
 
+describe('getSuggestedTime respects the place opening hours', () => {
+  // 2026-06-12 is a Friday (weekday 5).
+  const HOURS_10_5 = [{ d: 5, o: 10 * 60, c: 17 * 60 }]; // Fri 10 AM–5 PM
+
+  test('a place that closes at 5 is NOT suggested for the evening — snapped into hours (the bug)', () => {
+    // Evening slot would suggest 18:00; a 10–5 venue must land while it is open.
+    const t = getSuggestedTime(tripWith([]), 0, 'evening', 0, HOURS_10_5);
+    expect(t <= '16:00').toBe(true); // 60-min visit still ends by 17:00
+    expect(t >= '10:00').toBe(true);
+  });
+
+  test('an afternoon slot for a 10–5 place stays in the afternoon (already open)', () => {
+    const t = getSuggestedTime(tripWith([]), 0, 'afternoon', 0, HOURS_10_5);
+    expect(t >= '12:00' && t <= '16:00').toBe(true);
+  });
+
+  test('a morning-only venue requested in the afternoon snaps back into the morning window', () => {
+    const MORNING_ONLY = [{ d: 5, o: 8 * 60, c: 11 * 60 }]; // Fri 8–11
+    const t = getSuggestedTime(tripWith([]), 0, 'afternoon', 0, MORNING_ONLY);
+    expect(t >= '08:00' && t <= '10:00').toBe(true);
+  });
+
+  test('no openHours → unchanged slot behaviour', () => {
+    expect(getSuggestedTime(tripWith([]), 0, 'evening')).toBe('18:00');
+  });
+
+  test('closed that weekday → leaves the slot suggestion (closed_venue Trip Check owns it)', () => {
+    const MON_ONLY = [{ d: 1, o: 10 * 60, c: 17 * 60 }]; // open Mondays only; trip day is Friday
+    expect(getSuggestedTime(tripWith([]), 0, 'evening', 0, MON_ONLY)).toBe('18:00');
+  });
+});
+
 describe('scheduleDay never places a daytime activity before the day starts', () => {
   test('a stop stuck at 00:00 is re-timed to >= 09:00', () => {
     const out = scheduleDay(

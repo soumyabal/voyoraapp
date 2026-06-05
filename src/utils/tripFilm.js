@@ -52,6 +52,21 @@ function dayEmoji(d) {
   return activityIcons[top] || '📍';
 }
 
+// The four original music beds (see scripts/gen-music.js), in a fixed order.
+export const SOUNDTRACKS = ['warm', 'wonder', 'dream', 'play'];
+
+/**
+ * Pick a soundtrack for a trip — deterministic, so each trip keeps its own "theme song" every
+ * time you play it (a stable hash of the trip id/name over SOUNDTRACKS). Pure + testable; the
+ * renderer maps the returned id → a bundled .wav.
+ */
+export function pickSoundtrack(trip) {
+  const key = String(trip?.id || trip?.name || '');
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return SOUNDTRACKS[h % SOUNDTRACKS.length];
+}
+
 export function buildTripFilm(trip) {
   if (!trip) return [];
   const days = trip.days || [];

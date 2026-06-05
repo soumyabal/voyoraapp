@@ -14,15 +14,21 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, View, Text, Image, Animated, Easing, TouchableOpacity, Dimensions, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
-import { buildTripFilm } from '../utils/tripFilm';
+import { buildTripFilm, pickSoundtrack } from '../utils/tripFilm';
 import { refreshPhotoKey } from '../utils/places';
 import { colors } from '../theme';
 import KithovaMark from '../components/ui/KithovaMark';
 import KithovaWordmark from '../components/ui/KithovaWordmark';
 
-// The music bed is ORIGINAL — synthesized from scratch by scripts/gen-music.js (no sample,
-// no third-party track), so there is nothing to license or infringe. In-app only.
-const BED = require('../../assets/playtrip-bed.wav');
+// The music beds are ORIGINAL — synthesized from scratch by scripts/gen-music.js (no sample,
+// no third-party track), so there is nothing to license or infringe. In-app only. Each trip
+// gets one deterministically (pickSoundtrack) so it keeps its own "theme song".
+const TRACKS = {
+  warm:   require('../../assets/playtrip-bed.wav'),
+  wonder: require('../../assets/playtrip-wonder.wav'),
+  dream:  require('../../assets/playtrip-dream.wav'),
+  play:   require('../../assets/playtrip-play.wav'),
+};
 
 const { width: W, height: H } = Dimensions.get('window');
 const HOLD = { cover: 3200, stat: 2500, day: 2800, moat: 3000, close: 3400 };
@@ -36,7 +42,7 @@ export default function PlayTripModal({ visible, trip, onClose }) {
   const fade = useRef(new Animated.Value(0)).current;   // per-slide cross-fade + content rise
   const drift = useRef(new Animated.Value(0)).current;  // slow Ken-Burns on the backdrop
   const timer = useRef(null);
-  const player = useAudioPlayer(BED);
+  const player = useAudioPlayer(TRACKS[pickSoundtrack(trip)] || TRACKS.warm);
 
   useEffect(() => {
     if (visible) setIdx(0);

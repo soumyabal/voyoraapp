@@ -4,7 +4,7 @@
  * trip's own cached place photos (act.photo) — no live fetch; gradient fallback per slide.
  * Pure/deterministic, state-adaptive (trailer / building / victory).
  */
-import { buildTripFilm } from '../tripFilm';
+import { buildTripFilm, pickSoundtrack, SOUNDTRACKS } from '../tripFilm';
 
 const PHOTO = 'https://places.googleapis.com/v1/places/abc/photos/xyz/media?maxWidthPx=640&key=OLD';
 const act = (id, name, type = 'activity', photo = null) => ({ id, name, type, time: '10:00', photo });
@@ -116,5 +116,29 @@ describe('buildTripFilm (Trip Wrapped, cached photos)', () => {
 
   test('pure + deterministic — same trip, same film (no Date/random)', () => {
     expect(buildTripFilm(building)).toEqual(buildTripFilm(building));
+  });
+});
+
+describe('pickSoundtrack', () => {
+  test('always returns one of the known beds', () => {
+    for (let i = 0; i < 50; i++) {
+      expect(SOUNDTRACKS).toContain(pickSoundtrack({ id: `trip-${i}` }));
+    }
+  });
+
+  test('deterministic — same trip → same theme every time', () => {
+    const t = { id: 'bali-2026' };
+    expect(pickSoundtrack(t)).toBe(pickSoundtrack(t));
+  });
+
+  test('falls back to id, then name, then a stable default for an empty trip', () => {
+    expect(SOUNDTRACKS).toContain(pickSoundtrack({ name: 'Rome' }));
+    expect(SOUNDTRACKS).toContain(pickSoundtrack({}));
+    expect(pickSoundtrack({})).toBe(pickSoundtrack({}));
+  });
+
+  test('spreads trips across more than one theme (not all the same)', () => {
+    const got = new Set(Array.from({ length: 40 }, (_, i) => pickSoundtrack({ id: `t${i}` })));
+    expect(got.size).toBeGreaterThan(1);
   });
 });

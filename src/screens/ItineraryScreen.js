@@ -10,7 +10,7 @@ import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
 import { fmt, fmtM, getActivityIcon, uid, tripPhase, defaultDayFor, daysBetweenISO, todayISO, nowNextOf } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost, calcFamilyBalances } from '../utils/costs';
-import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
+import { summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
 import { scheduleDay, planDay, returnJourneyDraft, suggestDayForVenue } from '../utils/autoArrange';
 import { travelLeg, formatKm } from '../utils/geo';
@@ -20,6 +20,7 @@ import { getSuggestedTime, minToTime, getSlotKey, timeToMin } from '../utils/slo
 import { getDietaryWarning } from '../utils/dietary';
 import { generateDayShareText } from '../utils/dayShare';
 import { computeTripHealth } from '../utils/tripHealth';
+import { tripCheckStatus } from '../utils/tripCheckStatus';
 import { bookingUrl } from '../utils/booking';
 import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
@@ -273,21 +274,16 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
             something to look at. The single deliberate trip-health signal; the day pills stay
             calm and only dot a day that needs attention. */}
         {!!onCheckTrip && (() => {
-          const ignored = trip.ignoredWarnings || [];
-          const all = validateTrip(trip).filter(w => !ignored.includes(`${w.type}:${w.dayIndex ?? 'trip'}`));
-          const conflicts = all.filter(w => w.severity === 'error').length;
-          const checks    = all.filter(w => w.severity === 'warning').length;
-          const isPlanned = d => (d.activities || []).some(a => a.status !== 'skipped' && a.type !== 'note');
-          const allPlanned = trip.days.length > 0 && trip.days.every(isPlanned);
+          const { conflicts, checks, state } = tripCheckStatus(trip);
 
           let v, label;
-          if (conflicts > 0) {
+          if (state === 'fix') {
             v = { icon: 'warning-outline', text: `${conflicts}`, bg: colors.warn, fg: '#fff' };
             label = `Trip check: ${conflicts} to fix`;
-          } else if (checks > 0) {
+          } else if (state === 'look') {
             v = { icon: 'information-circle-outline', text: `${checks}`, bg: 'rgba(224,154,55,0.22)', fg: '#f0b25e' };
             label = `Trip check: ${checks} to look at`;
-          } else if (!allPlanned) {
+          } else if (state === 'building') {
             v = { icon: 'more', text: '', bg: 'rgba(255,255,255,0.12)', fg: 'rgba(255,255,255,0.85)' };
             label = 'Trip check: still building';
           } else {

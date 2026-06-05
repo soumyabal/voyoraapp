@@ -338,20 +338,13 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
     <>
       {/* ── Sticky bar ── */}
       <View style={ch.stickyBar}>
-        {/* Trip total */}
-        <View>
-          <Text style={ch.miniTripLabel}>TRIP TOTAL</Text>
-          <Text style={ch.miniTripAmt}>{itinTotal > 0 ? fmtM(itinTotal) : '—'}</Text>
-        </View>
-
-        <View style={ch.miniSep} />
-
-        {/* Active day */}
-        <View style={{ flex: 1 }}>
-          <Text style={ch.miniTripLabel}>{day?.label?.toUpperCase() || 'DAY'}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-            <Text style={ch.miniDayAmt}>{dayCost > 0 ? fmtM(dayCost) : '—'}</Text>
-            {dayCost > 0 && <Text style={ch.miniPP}>{fmtM(dayPP)}/p</Text>}
+        {/* Active day — the Plan tab's context. (Trip total is a roll-up; it lives in
+            the ⓘ "Trip Overview" sheet, so the bar isn't crowded into overlaps.) */}
+        <View style={ch.miniDayBlock}>
+          <Text style={ch.miniTripLabel} numberOfLines={1}>{day?.label?.toUpperCase() || 'DAY'}</Text>
+          <View style={ch.miniDayRow}>
+            <Text style={ch.miniDayAmt} numberOfLines={1}>{dayCost > 0 ? fmtM(dayCost) : '—'}</Text>
+            {dayCost > 0 && <Text style={ch.miniPP} numberOfLines={1}>{fmtM(dayPP)}/p</Text>}
           </View>
         </View>
 
@@ -2108,27 +2101,31 @@ const ch = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
-  miniTripAmt: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#fff',
-    letterSpacing: -0.5,
+  // The active-day block is the row's only flex child. minWidth:0 lets it shrink
+  // BELOW its content (RN/Yoga default minWidth is 'auto') so a crowded bar squeezes
+  // it instead of letting the cost text paint past its box onto the check chip.
+  miniDayBlock: {
+    flex: 1,
+    minWidth: 0,
   },
-  miniSep: {
-    width: 1,
-    height: 32,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+  miniDayRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+    minWidth: 0,
   },
   miniDayAmt: {
     fontSize: 20,
     fontWeight: '800',
     color: '#fff',
     letterSpacing: -0.5,
+    flexShrink: 1,   // the big amount ellipsizes first if space is tight…
   },
   miniPP: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.green,
+    flexShrink: 0,   // …keep "$XX/p" (the moat) intact
   },
   checkChip: {
     flexDirection: 'row', alignItems: 'center', gap: 3,

@@ -46,6 +46,10 @@ diff only intended files. Target: ItineraryScreen.js (3022 lines) + DiscoverModa
 - 2026-06-05 — extracted generateDayShareText (+ SLOT_RANGES + its slot helpers) → utils/dayShare.js
   with 8 unit tests (was 0 coverage on the WhatsApp/Share text). Dropped now-orphaned imports
   (googleMapsDayShareUrl, APP_NAME) from the screen. ItineraryScreen 3022→2936 lines; 371 tests green.
+- 2026-06-05 — extracted computeTripHealth (per-day Trip-Check health for the day pills) →
+  utils/tripHealth.js with 7 unit tests (validateTrip mocked for deterministic severities; logic
+  had 0 coverage). useMemo body collapsed to a one-line call. ItineraryScreen 2936→2921; 378 tests.
+  Session so far: 3022→2921 lines (−101), 5 new tested utils, 330→378 tests, all green.
 
 ## 2026-06-04 — test-user bug fixes (user driving)
 - 2026-06-04 — Bug1: 24/7 places (bridge/lighthouse) no longer show "Closed" — Google's no-close period was recorded Sunday-only; compactHours now expands 24/7 to all 7 days + handles cross-midnight; store v4→v5 migration repairs existing trips. ✓ device-verified (19b84aa)

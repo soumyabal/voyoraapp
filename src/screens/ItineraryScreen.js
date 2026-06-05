@@ -18,23 +18,10 @@ import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, hoursLabel, weeklyHoursLabel, dayIntervals } from '../utils/hours';
 import { refreshPhotoKey } from '../utils/places';
 import { getSuggestedTime, minToTime, getSlotKey, timeToMin } from '../utils/slots';
+import { getDietaryWarning } from '../utils/dietary';
 import { bookingUrl } from '../utils/booking';
 import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
-
-// ─── Dietary warning helper ───────────────────────────────────────
-const MEAT_WARN_RE = /\b(beef|pork|lamb|chicken|mutton|fish|prawn|shrimp|seafood|lobster|crab|sashimi|sushi|steak|burger|bbq|barbecue|bacon|ham|meat|non.?veg)\b/i;
-const ALCO_WARN_RE = /\b(beer|wine|cocktail|whisky|whiskey|vodka|rum|gin|spirits|alcohol|brewery|pub|bar|tavern|champagne|prosecco|sake)\b/i;
-
-function getDietaryWarning(act, families = []) {
-  if (act.type !== 'food') return null;
-  const text     = `${act.name} ${act.detail || ''}`;
-  const vegFams  = families.filter(f => (f.dietary || []).some(d => d === 'vegetarian' || d === 'vegan'));
-  const alcoFams = families.filter(f => (f.dietary || []).includes('no-alcohol'));
-  if (vegFams.length > 0 && MEAT_WARN_RE.test(text)) return '⚠️ May contain meat';
-  if (alcoFams.length > 0 && ALCO_WARN_RE.test(text)) return '⚠️ Alcohol';
-  return null;
-}
 
 // ─── WhatsApp day share text ──────────────────────────────────────
 const SLOT_RANGES = [

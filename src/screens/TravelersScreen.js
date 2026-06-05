@@ -8,10 +8,10 @@
  * Secondary:      "New Group" → AddFamilyModal (manual entry)
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, Modal, TextInput, KeyboardAvoidingView, Platform,
+  Alert, Modal, TextInput, KeyboardAvoidingView, Platform, Dimensions,
 } from 'react-native';
 import useStore from '../store';
 import AddTravelerModal from '../modals/AddTravelerModal';
@@ -139,6 +139,94 @@ const WAKE_OPTS = [
   { value: 'late',    label: '🦉 Late',     hint: 'After 9am' },
 ];
 
+// ── Member row: swipe LEFT to reveal actions (replaces the ⋯ action sheet) ──
+// Same gesture model as the itinerary cards: a horizontal ScrollView whose content
+// is [row | action tray]. The card clips the tray (familyCard overflow:hidden) so
+// it's only seen on swipe. Width is measured via onLayout so it fits whatever the
+// family card's inner width is, with a Dimensions fallback to avoid a first-paint flash.
+const MEMBER_ACTION_W = 78;
+
+function MemberRow({ member, idx, isLast, eff, overridden, onMakeHead, onEdit, onRemove }) {
+  const isHead = idx === 0;
+  const scrollRef = useRef(null);
+  const [rowW, setRowW] = useState(Dimensions.get('window').width - 50);
+  const close = () => scrollRef.current?.scrollTo({ x: 0, animated: true });
+
+  const actions = [
+    ...(!isHead ? [{ key: 'head', label: 'Head', icon: 'star', bg: '#ca8a04', onPress: onMakeHead }] : []),
+    { key: 'edit',   label: 'Edit',   icon: 'create-outline', bg: colors.primary, onPress: onEdit },
+    { key: 'remove', label: 'Remove', icon: 'trash-outline',  bg: colors.danger,  onPress: onRemove },
+  ];
+  const actionsW = actions.length * MEMBER_ACTION_W;
+
+  return (
+    <View style={[styles.memberRowOuter, isLast && styles.memberRowOuterLast]}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        bounces={false}
+        snapToOffsets={[0, actionsW]}
+        decelerationRate="fast"
+        scrollEventThrottle={32}
+        onLayout={e => setRowW(e.nativeEvent.layout.width)}
+        contentContainerStyle={{ flexDirection: 'row' }}
+      >
+        <View style={[styles.memberRow, { width: rowW }]}>
+          <View style={[styles.avatar, { backgroundColor: avatarColor(member.name) }]}>
+            <Text style={styles.avatarText}>{member.name[0]}</Text>
+          </View>
+
+          <View style={styles.memberInfo}>
+            <View style={styles.memberNameRow}>
+              <Text style={styles.memberName}>{member.name}</Text>
+              {isHead && (
+                <View style={styles.headBadge}>
+                  <Icon name="star" size={9} color="#713f12" />
+                  <Text style={styles.headBadgeText}>head</Text>
+                </View>
+              )}
+              {overridden && (
+                <View style={styles.overrideBadge}>
+                  <Text style={styles.overrideBadgeText}>trip override</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.memberMeta}>Age {member.age}</Text>
+            {eff.needs.length > 0 && (
+              <View style={styles.needsRow}>
+                {eff.needs.map(need => (
+                  <View key={need} style={styles.needTag}>
+                    <Text style={styles.needText}>{need}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <Text style={styles.swipeHint}>‹ swipe</Text>
+        </View>
+
+        <View style={[styles.memberActions, { width: actionsW }]}>
+          {actions.map(a => (
+            <TouchableOpacity
+              key={a.key}
+              style={[styles.memberActionCell, { backgroundColor: a.bg, width: MEMBER_ACTION_W }]}
+              onPress={() => { close(); a.onPress(); }}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={`${a.label} ${member.name}`}
+            >
+              <Icon name={a.icon} size={18} color="#fff" />
+              <Text style={styles.memberActionLabel}>{a.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
 // ── Main screen ───────────────────────────────────────────────────
 export default function TravelersScreen({ trip, onUpdatePlan }) {
   const { travelers, deleteTraveler, setMemberOverride, updateFamily, deleteFamily, setFamilyHead } = useStore();
@@ -147,6 +235,7 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
   const [showAddTraveler, setShowAddTraveler] = useState(false);
   const [showAddFamily, setShowAddFamily]     = useState(false);
   const [collapsed, setCollapsed]             = useState({});
+  const [profileOpen, setProfileOpen]         = useState({});
   const [editFamily, setEditFamily]           = useState(null);
   const [editMember, setEditMember]           = useState(null);
   const [addTravelerFamId, setAddTravelerFamId] = useState(null);
@@ -154,6 +243,21 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
 
   const toggleCollapse = (famId) =>
     setCollapsed(prev => ({ ...prev, [famId]: !prev[famId] }));
+
+  const toggleProfile = (famId) =>
+    setProfileOpen(prev => ({ ...prev, [famId]: !prev[famId] }));
+
+  // Short hint of what's set, shown on the collapsed "Dietary & wake time" toggle.
+  const profileSummary = (fam) => {
+    const parts = [];
+    const d = (fam.dietary || []).length;
+    if (d) parts.push(`${d} dietary`);
+    if (fam.wakeTime && fam.wakeTime !== 'regular') {
+      const w = WAKE_OPTS.find(o => o.value === fam.wakeTime);
+      if (w) parts.push(w.label);
+    }
+    return parts.join(' · ');
+  };
 
   const markChanged = () => setTravelersChanged(true);
 
@@ -181,33 +285,6 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
           text: 'Remove', style: 'destructive',
           onPress: () => { deleteTraveler(trip.id, fam.id, member.id); markChanged(); },
         },
-      ],
-    );
-  };
-
-  const openMemberActions = (fam, member, idx) => {
-    const isHead = idx === 0;
-    Alert.alert(
-      member.name,
-      fam.name,
-      [
-        ...(!isHead ? [{
-          text: '👑 Make Family Head',
-          onPress: () => setFamilyHead(trip.id, fam.id, member.id),
-        }] : []),
-        {
-          text: '✏️ Edit',
-          onPress: () => setEditMember({
-            famId: fam.id, memberId: member.id,
-            name: member.name, age: member.age, needs: member.needs || [],
-          }),
-        },
-        {
-          text: '🗑️ Remove',
-          style: 'destructive',
-          onPress: () => confirmDeleteMember(fam, member),
-        },
-        { text: 'Cancel', style: 'cancel' },
       ],
     );
   };
@@ -324,8 +401,24 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
                   </View>
                 </TouchableOpacity>
 
-                {/* Dietary + wake time (always visible, collapsed in compact row) */}
+                {/* Dietary + wake time — minimized under a "More" toggle. We don't
+                    filter Google Places by profile (Discover shows everything; the
+                    planner does the filtering), so these are opt-in prefs, not a
+                    front-and-centre roster field. Collapsed by default. */}
                 {!isCollapsed && (
+                  <TouchableOpacity
+                    style={styles.profileToggle}
+                    onPress={() => toggleProfile(fam.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="restaurant-outline" size={13} color={colors.subtle} />
+                    <Text style={styles.profileToggleText} numberOfLines={1}>
+                      Dietary &amp; wake time{profileSummary(fam) ? ` · ${profileSummary(fam)}` : ''}
+                    </Text>
+                    <Icon name={profileOpen[fam.id] ? 'chevron-up' : 'chevron-down'} size={14} color={colors.subtle} />
+                  </TouchableOpacity>
+                )}
+                {!isCollapsed && profileOpen[fam.id] && (
                   <View style={styles.familyProfile}>
                     <Text style={styles.familyProfileLabel}>Dietary</Text>
                     <View style={styles.familyProfileChips}>
@@ -383,51 +476,22 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
                         </TouchableOpacity>
                       </View>
                     )}
-                    {fam.members.map((member, idx) => {
-                      const eff = effectiveMember(member, travelers);
-                      const overridden = hasOverride(member);
-                      return (
-                        <TouchableOpacity
-                          key={member.id}
-                          style={[styles.memberRow, idx === fam.members.length - 1 && styles.memberRowLast]}
-                          onPress={() => openMemberActions(fam, member, idx)}
-                          activeOpacity={0.7}
-                        >
-                          <View style={[styles.avatar, { backgroundColor: avatarColor(member.name) }]}>
-                            <Text style={styles.avatarText}>{member.name[0]}</Text>
-                          </View>
-
-                          <View style={styles.memberInfo}>
-                            <View style={styles.memberNameRow}>
-                              <Text style={styles.memberName}>{member.name}</Text>
-                              {idx === 0 && (
-                                <View style={styles.headBadge}>
-                                  <Icon name="star" size={9} color="#713f12" />
-                                  <Text style={styles.headBadgeText}>head</Text>
-                                </View>
-                              )}
-                              {overridden && (
-                                <View style={styles.overrideBadge}>
-                                  <Text style={styles.overrideBadgeText}>trip override</Text>
-                                </View>
-                              )}
-                            </View>
-                            <Text style={styles.memberMeta}>Age {member.age}</Text>
-                            {eff.needs.length > 0 && (
-                              <View style={styles.needsRow}>
-                                {eff.needs.map(need => (
-                                  <View key={need} style={styles.needTag}>
-                                    <Text style={styles.needText}>{need}</Text>
-                                  </View>
-                                ))}
-                              </View>
-                            )}
-                          </View>
-
-                          <Text style={styles.memberMore}>⋯</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                    {fam.members.map((member, idx) => (
+                      <MemberRow
+                        key={member.id}
+                        member={member}
+                        idx={idx}
+                        isLast={idx === fam.members.length - 1}
+                        eff={effectiveMember(member, travelers)}
+                        overridden={hasOverride(member)}
+                        onMakeHead={() => setFamilyHead(trip.id, fam.id, member.id)}
+                        onEdit={() => setEditMember({
+                          famId: fam.id, memberId: member.id,
+                          name: member.name, age: member.age, needs: member.needs || [],
+                        })}
+                        onRemove={() => confirmDeleteMember(fam, member)}
+                      />
+                    ))}
                   </View>
                 )}
               </View>
@@ -550,12 +614,19 @@ const styles = StyleSheet.create({
   chevronUp: { transform: [{ rotate: '-90deg' }] },
 
   // Member row
+  // Swipe row: outer holds the divider + clips the action tray; the inner row
+  // is an opaque surface so the tray only shows once you swipe.
+  memberRowOuter: { borderTopWidth: 1, borderTopColor: colors.border, overflow: 'hidden' },
+  memberRowOuterLast: {},
   memberRow: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 12,
     padding: spacing.lg,
-    borderTopWidth: 1, borderTopColor: colors.border,
+    backgroundColor: colors.surface,
   },
-  memberRowLast: {},
+  memberActions: { flexDirection: 'row' },
+  memberActionCell: { alignItems: 'center', justifyContent: 'center', gap: 3 },
+  memberActionLabel: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  swipeHint: { fontSize: 11, color: colors.muted, alignSelf: 'center', paddingLeft: spacing.sm },
   avatar: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
   avatarText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   memberInfo: { flex: 1 },
@@ -569,7 +640,14 @@ const styles = StyleSheet.create({
   needsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   needTag: { backgroundColor: colors.greenLight, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 3 },
   needText: { ...typography.tinyBold, color: colors.green },
-  memberMore: { fontSize: 18, color: colors.muted, paddingLeft: spacing.sm, alignSelf: 'center' },
+  // "Dietary & wake time" disclosure (collapsed by default)
+  profileToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm + 2,
+    borderTopWidth: 1, borderTopColor: colors.border,
+    backgroundColor: colors.surface2,
+  },
+  profileToggleText: { flex: 1, fontSize: 12, fontWeight: '700', color: colors.subtle },
 
   emptyMembers: { padding: spacing.lg, alignItems: 'center', gap: 6 },
   emptyMembersText: { ...typography.small, color: colors.muted },

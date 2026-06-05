@@ -1,133 +1,116 @@
 /**
- * tripFilm.js — turns a trip into the "Play My Trip" film (an ordered list of slides).
+ * tripFilm.js — turns a trip into the "Play My Trip" film: a PHOTO-FREE "Trip Wrapped" deck
+ * of branded gradient cards (cover → who → days → the fair-split moat → branded close).
  *
- * PURE + deterministic (same trip → same film), so it's snapshot-testable. The renderer
- * (PlayTripModal) just plays whatever slide list this returns.
+ * Photo-free BY DESIGN: per the legal review, the montage uses NO Google Places imagery —
+ * only the trip's own data, colors, emoji, and copy. So there's nothing to license, cache,
+ * or attribute, no API cost, and it renders identically on iOS + Android.
  *
- * Panel-converged design (reward FIRST, never a tutorial):
- *   · REWARD-led: the trip's place photos are the body and the point.
- *   · IMAGE-BACKED motivational bookends: open on a hero photo + a forward line; close on
- *     the keeper frame + a hopeful line. Never end on a gap.
- *   · ONE forward-framed nudge (the single biggest real gap from Trip Check), reward-voiced
- *     ("one place to stay and that night locks in"), never "missing/incomplete/error".
- *   · ≤2 DOUBLE-DUTY teach lines that reward AND teach in one breath — and pass the
- *     "Foreground Test": each still rewards if you delete the feature it credits. Teach the
- *     OUTCOME, never a button. The moat (per-family splitting) is the one worth teaching.
- *   · STATE-ADAPTIVE — the film grows up with the trip:
- *       trailer  (barely started) → aspiration + the nudge, little reward reel
- *       building (the common case) → bookend → reward reel → progress beat → one nudge → close
- *       victory  (every day planned, no gap) → reward + progress + a celebratory close, NO nudge
+ * PURE + deterministic (same trip → same film; no Date/no random), so it's snapshot-testable.
+ * The renderer (PlayTripModal) just plays whatever this returns.
  *
- * Slide shape: { type, heroUri?, uri?, kicker?, title?, subtitle?, caption?, dayIndex? }
- *   type: 'open' | 'close'   image-backed bookend (heroUri) + title/subtitle lower-third
- *         'day'              day chapter card (kicker + title)
- *         'photo'            reward photo (uri + caption; caption may be a double-duty line)
- *         'progress'         a motivation/teach beat (kicker? + title + subtitle?)
- *         'nudge'            the one forward ask (kicker + title + dayIndex)
+ * Slide shape: { type, grad:[c1,c2], kicker?, emoji?, big?, title?, subtitle?, brand? }
+ *   type: 'cover' | 'stat' | 'day' | 'moat' | 'close'
+ *   big   = a large hero number/amount (e.g. "3", "$8,460")
+ *   brand = true → the close renders the Kithova mark + wordmark lockup
  */
-import { validateTrip } from './tripValidator';
+import { dayVibe } from './tripCopy';
+import { calcTripItineraryTotal } from './costs';
+import { fmtM } from './helpers';
+import { activityIcons } from '../theme';
 
-const MAX_PHOTOS = 10;
-
-// A Trip-Check warning type → a forward-framed nudge (reward voice; gap = potential, not absence).
-const NUDGE_LINES = {
-  no_lodging:               { kicker: 'ALMOST THERE', title: "Add where you'll sleep — and it all comes together." },
-  unbooked_night:           { kicker: 'ALMOST THERE', title: 'One place to stay, and that night locks in.' },
-  lastday_missing_checkout: { kicker: 'LAST THING',   title: "Add your way home — and you're all set." },
-  empty_day:                { kicker: 'ONE MORE',      title: "A day's wide open — that's the fun part." },
+// Cohesive brand gradients (each a 2-stop pair). Cover/close get the trip's own colors / ink.
+const GRADS = {
+  terracotta: ['#e86c3a', '#c8532a'],
+  indigo:     ['#6c5ce7', '#4b3fae'],
+  green:      ['#0e9f6e', '#0b7d57'],
+  amber:      ['#e09a37', '#c8782a'],
+  ink:        ['#2a211b', '#15110d'],   // premium dark — for the moat + close
 };
-// Most trip-breaking first; we surface only ONE.
-const NUDGE_PRIORITY = ['no_lodging', 'unbooked_night', 'lastday_missing_checkout', 'empty_day'];
+const DAY_GRADS = [GRADS.terracotta, GRADS.indigo, GRADS.green, GRADS.amber];
 
-function topNudge(trip) {
-  const ws = validateTrip(trip) || [];
-  for (const type of NUDGE_PRIORITY) {
-    const w = ws.find(x => x.type === type);
-    if (w) return { ...NUDGE_LINES[type], dayIndex: w.dayIndex ?? null };
-  }
-  return null;
+const substantial = (a) => a.status !== 'skipped' && a.type !== 'note';
+
+// A day's emoji = its dominant activity type (a little visual variety per chapter).
+function dayEmoji(d) {
+  const acts = (d.activities || []).filter(substantial);
+  if (!acts.length) return '🗓️';
+  const counts = {};
+  acts.forEach((a) => { counts[a.type] = (counts[a.type] || 0) + 1; });
+  const top = Object.keys(counts).sort((x, y) => counts[y] - counts[x])[0];
+  return activityIcons[top] || '📍';
 }
 
 export function buildTripFilm(trip) {
   if (!trip) return [];
   const days = trip.days || [];
-  const famN = (trip.families || []).length;
   const dayN = days.length;
-  const stat = [
-    famN ? `${famN} ${famN === 1 ? 'family' : 'families'}` : null,
-    dayN ? `${dayN} ${dayN === 1 ? 'day' : 'days'}` : null,
-    trip.destination || null,
-  ].filter(Boolean).join('   ·   ');
+  const fams = trip.families || [];
+  const famN = fams.length;
+  const people = fams.reduce((s, f) => s + (f.members?.length || 0), 0);
+  const place = (trip.destination || '').split(',')[0].trim();
+  const cover = Array.isArray(trip.bgColors) && trip.bgColors.length >= 2 ? trip.bgColors : GRADS.terracotta;
 
-  // Reward material: located photos in day order.
-  const photoActs = [];
-  days.forEach((d, i) => (d.activities || [])
-    .filter(a => a.photo && a.status !== 'skipped')
-    .forEach(a => photoActs.push({ name: a.name, photo: a.photo, dayIndex: i })));
-  const hero = photoActs[0]?.photo || null;                                  // open on the first
-  const closer = photoActs.length ? photoActs[photoActs.length - 1].photo : hero; // close on the last (keeper)
-  const cardBg = photoActs.length ? photoActs[Math.floor((photoActs.length - 1) / 2)].photo : null; // a mid photo behind card slides — never a blank gradient
-
-  const plannedDays = days.filter(d => (d.activities || []).some(a => a.status !== 'skipped' && a.type !== 'note')).length;
-  const placeCount = photoActs.length;
-  const nudge = topNudge(trip);
-  const isVictory = dayN > 0 && plannedDays === dayN && !nudge;   // every day planned, nothing critical missing
-  const isTrailer = placeCount < 2;                              // barely started → aspiration, not a recap
+  const plannedDays = days.filter((d) => (d.activities || []).some(substantial));
+  const stops = days.reduce((s, d) => s + (d.activities || []).filter((a) => substantial(a) && a.type !== 'transport').length, 0);
+  const total = calcTripItineraryTotal(trip);
+  const isTrailer = plannedDays.length === 0;
+  const isVictory = dayN > 0 && plannedDays.length === dayN;
 
   const slides = [];
 
-  // ── OPEN bookend (image-backed + motivational, state-adaptive) ──
+  // ── COVER ──
   slides.push({
-    type: 'open',
-    heroUri: hero,
+    type: 'cover',
+    grad: cover,
+    emoji: trip.emoji || '🌍',
     title: trip.name || 'Our Trip',
-    subtitle: isTrailer ? `${trip.destination || 'Your trip'} — let's make it real.` : stat,
+    subtitle: [dayN ? `${dayN} ${dayN === 1 ? 'day' : 'days'}` : null, place || null].filter(Boolean).join('  ·  ') || null,
   });
 
   if (isTrailer) {
-    slides.push({ type: 'progress', title: 'Every great trip starts with one place.' });
-    if (nudge) slides.push({ type: 'nudge', kicker: nudge.kicker, title: nudge.title, dayIndex: nudge.dayIndex });
-  } else {
-    // ── REWARD REEL (the body) — ≤ MAX_PHOTOS, ≤2 double-duty teach captions ──
-    let count = 0;
-    let taught = 0;
-    days.forEach((d, i) => {
-      const photos = (d.activities || []).filter(a => a.photo && a.status !== 'skipped');
-      if (!photos.length || count >= MAX_PHOTOS) return;
-      photos.slice(0, 3).forEach((a, j) => {
-        if (count >= MAX_PHOTOS) return;
-        // Teach by CREDIT, not instruction. Foreground Test: "<place> — you found this one"
-        // still rewards their taste if you ignore the Discover credit underneath.
-        let caption = a.name;
-        if (taught === 0 && i === 0 && j === 0) { caption = `${a.name} — you found this one.`; taught += 1; }
-        const slide = { type: 'photo', uri: a.photo, caption };
-        if (j === 0) slide.kicker = `Day ${i + 1}`;   // day chapter marker folded onto its first photo — no blank day card
-        slides.push(slide);
-        count += 1;
-      });
+    // Barely started → one aspirational beat, no recap.
+    slides.push({
+      type: 'stat', grad: GRADS.indigo, emoji: '✨',
+      title: 'Every great trip starts with one idea.',
+      subtitle: place ? `${place}, here you come.` : null,
     });
-
-    // ── PROGRESS / MOAT beat — momentum + the one feature worth teaching (reward-framed) ──
+  } else {
+    // ── WHO ── everyone you travel with
+    if (people) {
+      slides.push({
+        type: 'stat', grad: GRADS.indigo, big: `${people}`,
+        title: famN >= 2 ? `${famN} families, together` : `${people} ${people === 1 ? 'traveler' : 'travelers'}`,
+        subtitle: 'everyone you travel with',
+      });
+    }
+    // ── WHAT ── days + stops
+    slides.push({
+      type: 'stat', grad: GRADS.green, big: `${plannedDays.length}`,
+      title: `${plannedDays.length} ${plannedDays.length === 1 ? 'day' : 'days'} mapped out`,
+      subtitle: stops ? `${stops} ${stops === 1 ? 'stop' : 'stops'} along the way` : (place || null),
+    });
+    // ── DAY chapters (capped) ── each a vibe line
+    plannedDays.slice(0, 4).forEach((d, k) => {
+      const i = days.indexOf(d);
+      slides.push({ type: 'day', grad: DAY_GRADS[k % DAY_GRADS.length], kicker: `DAY ${i + 1}`, emoji: dayEmoji(d), title: dayVibe(d, i) });
+    });
+    // ── THE MOAT ── the fair per-family split (only meaningful for 2+ families)
     if (famN >= 2) {
       slides.push({
-        type: 'progress', kicker: 'NICE', heroUri: cardBg,
-        title: `${famN} families, one trip — costs split as you go.`,
-        subtitle: `${placeCount} ${placeCount === 1 ? 'place' : 'places'} · ${plannedDays} of ${dayN} days planned`,
+        type: 'moat', grad: GRADS.ink, kicker: 'THE FAIR PART',
+        big: total > 0 ? fmtM(total) : null,
+        title: 'Split per family, automatically',
+        subtitle: 'everyone knows exactly what they owe',
       });
-    } else {
-      slides.push({ type: 'progress', heroUri: cardBg, title: `${placeCount} ${placeCount === 1 ? 'place' : 'places'} · ${plannedDays} of ${dayN} days planned` });
     }
-
-    // ── ONE forward nudge (never in victory mode) — rides a dimmed photo, never a blank card ──
-    if (nudge && !isVictory) slides.push({ type: 'nudge', kicker: nudge.kicker, title: nudge.title, dayIndex: nudge.dayIndex, heroUri: cardBg });
   }
 
-  // ── CLOSE bookend — image-backed keeper frame, always hopeful, NEVER on a gap ──
+  // ── CLOSE ── branded sign-off (the wordmark lockup, consistent with home + splash)
   slides.push({
-    type: 'close',
-    heroUri: closer,
-    title: isVictory ? 'All set.' : "This is going to be a good one.",
-    subtitle: isVictory ? `${trip.destination || ''} — see you there.` : '',
+    type: 'close', grad: GRADS.ink, brand: true,
+    title: isVictory ? 'All set. ✨' : 'See you out there. ✨',
+    subtitle: 'Travel together, split it fair.',
   });
 
   return slides;

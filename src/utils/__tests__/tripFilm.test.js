@@ -1,88 +1,90 @@
 /**
- * tripFilm.test.js — buildTripFilm turns a trip into a reward-led film: image-backed
- * bookends, a reward reel, ONE forward nudge, ≤2 double-duty teach lines, and it NEVER
- * ends on a gap. State-adaptive: trailer (barely started) / building / victory (all planned).
+ * tripFilm.test.js — buildTripFilm turns a trip into a PHOTO-FREE "Trip Wrapped" deck:
+ * cover → who → days → the fair-split moat → a branded close. No Google imagery (legal),
+ * pure/deterministic, state-adaptive (trailer / building / victory).
  */
 import { buildTripFilm } from '../tripFilm';
 
-const photoAct = (id, name) => ({ id, name, type: 'activity', time: '10:00', photo: `https://x/${id}.jpg`, lat: 0, lng: 0 });
-const last = (film) => film[film.length - 1];
+const act = (id, name, type = 'activity') => ({ id, name, type, time: '10:00' });
+const last = (f) => f[f.length - 1];
 
-describe('buildTripFilm', () => {
-  // 2 families, day 1 planned, days 2-3 empty → a real gap (building mode).
+describe('buildTripFilm (photo-free Trip Wrapped)', () => {
+  // 2 families, day 1 planned, days 2-3 empty (building mode).
   const building = {
-    name: 'Bali', destination: 'Bali, Indonesia',
-    families: [{ id: 'A', name: 'Sharma', members: [{ id: 'a1' }] }, { id: 'B', name: 'Gupta', members: [{ id: 'b1' }] }],
+    name: 'Bali', destination: 'Bali, Indonesia', emoji: '🌴',
+    families: [
+      { id: 'A', name: 'Sharma', members: [{ id: 'a1' }] },
+      { id: 'B', name: 'Gupta', members: [{ id: 'b1' }, { id: 'b2' }] },
+    ],
     days: [
-      { label: 'Day 1', date: '2026-07-10', activities: [photoAct('p1', 'Beach Club'), photoAct('p2', 'Temple')] },
+      { label: 'Day 1', date: '2026-07-10', activities: [act('p1', 'Beach Club', 'food'), act('p2', 'Temple')] },
       { label: 'Day 2', date: '2026-07-11', activities: [] },
       { label: 'Day 3', date: '2026-07-12', activities: [] },
     ],
   };
 
-  test('image-backed bookends: opens on the first photo, closes on the last', () => {
-    const film = buildTripFilm(building);
-    expect(film[0].type).toBe('open');
-    expect(film[0].heroUri).toBe('https://x/p1.jpg');   // hero = first photo
-    expect(film[0].title).toBe('Bali');
-    expect(last(film).type).toBe('close');
-    expect(last(film).heroUri).toBe('https://x/p2.jpg'); // keeper = last photo
+  test('opens on a cover, closes on a branded sign-off with the tagline', () => {
+    const f = buildTripFilm(building);
+    expect(f[0].type).toBe('cover');
+    expect(f[0].title).toBe('Bali');
+    expect(f[0].emoji).toBe('🌴');
+    expect(last(f).type).toBe('close');
+    expect(last(f).brand).toBe(true);
+    expect(last(f).subtitle).toMatch(/split it fair/i);
   });
 
-  test('NEVER ends on a nudge — the close is always last', () => {
-    const film = buildTripFilm(building);
-    const nudgeIdx = film.findIndex(s => s.type === 'nudge');
-    expect(nudgeIdx).toBeGreaterThan(-1);                 // there IS a nudge (empty days)
-    expect(nudgeIdx).toBeLessThan(film.length - 1);       // ...but it's never the last slide
-    expect(last(film).type).toBe('close');
+  test('uses NO photos / Google imagery — every slide is a gradient card', () => {
+    const f = buildTripFilm(building);
+    expect(f.some((s) => s.type === 'photo' || s.uri || s.heroUri)).toBe(false);
+    f.forEach((s) => expect(Array.isArray(s.grad) && s.grad.length >= 2).toBe(true));
   });
 
-  test('exactly ONE forward-framed nudge (reward voice, no "missing")', () => {
-    const nudges = buildTripFilm(building).filter(s => s.type === 'nudge');
-    expect(nudges).toHaveLength(1);
-    expect(nudges[0].title.toLowerCase()).not.toMatch(/missing|incomplete|error|forgot/);
+  test('has who + days stats and the fair-split moat (2+ families)', () => {
+    const f = buildTripFilm(building);
+    expect(f.some((s) => s.type === 'stat' && /families, together/.test(s.title))).toBe(true);
+    expect(f.some((s) => s.type === 'stat' && /mapped out/.test(s.title))).toBe(true);
+    const moat = f.filter((s) => s.type === 'moat');
+    expect(moat).toHaveLength(1);
+    expect(moat[0].subtitle).toMatch(/what they owe/);
   });
 
-  test('≤2 double-duty teach lines: one "you found this" caption + the moat beat', () => {
-    const film = buildTripFilm(building);
-    const found = film.filter(s => s.type === 'photo' && /you found this/.test(s.caption || ''));
-    const moat = film.filter(s => s.type === 'progress' && /families, one trip/.test(s.title || ''));
-    expect(found).toHaveLength(1);
-    expect(moat).toHaveLength(1);                         // the signature feature, reward-framed
-    expect(found.length + moat.length).toBeLessThanOrEqual(2);
+  test('one day card per planned day (capped at 4), each with a vibe line', () => {
+    const f = buildTripFilm(building);
+    const dayCards = f.filter((s) => s.type === 'day');
+    expect(dayCards).toHaveLength(1);            // only Day 1 is planned
+    expect(dayCards[0].kicker).toBe('DAY 1');
+    expect(typeof dayCards[0].title).toBe('string');
+    expect(dayCards[0].title.length).toBeGreaterThan(0);
   });
 
-  test('no blank cards: no standalone day slide, and every card slide rides a photo', () => {
-    const film = buildTripFilm(building);
-    expect(film.some(s => s.type === 'day')).toBe(false);          // day card removed
-    const firstPhoto = film.find(s => s.type === 'photo');
-    expect(firstPhoto.kicker).toBe('Day 1');                       // day marker folded onto the photo
-    film.filter(s => s.type === 'progress' || s.type === 'nudge')
-      .forEach(s => expect(s.heroUri).toBeTruthy());               // cards ride a dimmed photo, never blank
+  test('solo trip (1 family) → no moat beat', () => {
+    const solo = { ...building, families: [{ id: 'A', members: [{ id: 'a1' }] }] };
+    expect(buildTripFilm(solo).some((s) => s.type === 'moat')).toBe(false);
   });
 
-  test('victory mode: every day planned, no gap → no nudge, celebratory close', () => {
+  test('victory mode: every day planned → celebratory close', () => {
     const victory = {
-      name: 'Daytrip', destination: 'San Francisco',
+      name: 'Daytrip', destination: 'San Francisco', emoji: '🌉',
       families: [{ id: 'A', members: [{ id: 'a1' }] }],
-      days: [{ label: 'Day 1', date: '2026-07-10', activities: [photoAct('p1', 'Pier'), photoAct('p2', 'Park')] }],
+      days: [{ label: 'Day 1', date: '2026-07-10', activities: [act('p1', 'Pier'), act('p2', 'Park')] }],
     };
-    const film = buildTripFilm(victory);
-    expect(film.some(s => s.type === 'nudge')).toBe(false);
-    expect(last(film).type).toBe('close');
-    expect(last(film).title).toBe('All set.');
+    expect(last(buildTripFilm(victory)).title).toBe('All set. ✨');
   });
 
-  test('trailer mode: barely started → aspiration + a nudge, no reward reel', () => {
+  test('trailer mode: nothing planned → one aspiration beat, no day cards, no moat, close last', () => {
     const trailer = {
-      name: 'New trip', destination: 'Rome',
+      name: 'New trip', destination: 'Rome', emoji: '🏛️',
       families: [{ id: 'A', members: [{ id: 'a1' }] }],
       days: [{ label: 'Day 1', date: '2026-07-10', activities: [] }, { label: 'Day 2', date: '2026-07-11', activities: [] }],
     };
-    const film = buildTripFilm(trailer);
-    expect(film.some(s => s.type === 'photo')).toBe(false);      // nothing to reward yet
-    expect(film[0].type).toBe('open');
-    expect(film[0].subtitle).toMatch(/Rome/);                    // destination-forward
-    expect(last(film).type).toBe('close');
+    const f = buildTripFilm(trailer);
+    expect(f.some((s) => s.type === 'day')).toBe(false);
+    expect(f.some((s) => s.type === 'moat')).toBe(false);
+    expect(f[1].title).toMatch(/starts with one idea/);
+    expect(last(f).type).toBe('close');
+  });
+
+  test('pure + deterministic — same trip, same film (no Date/random)', () => {
+    expect(buildTripFilm(building)).toEqual(buildTripFilm(building));
   });
 });

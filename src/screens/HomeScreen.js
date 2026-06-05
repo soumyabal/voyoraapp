@@ -170,7 +170,7 @@ function TravelersTab() {
             <Text style={tt.emptyEmoji}>👨‍👩‍👧</Text>
             <Text style={tt.emptyTitle}>No groups yet</Text>
             <Text style={tt.emptyBody}>
-              Group your travelers (e.g. "Sharma Family"). When planning a trip you can add a whole group in one tap.
+              Group your travelers (e.g. &quot;Sharma Family&quot;). When planning a trip you can add a whole group in one tap.
             </Text>
           </View>
         ) : (

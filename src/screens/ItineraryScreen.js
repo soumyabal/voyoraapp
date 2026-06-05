@@ -1098,7 +1098,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
               accessibilityLabel={`${Math.round(spent)} dollars logged so far. ${allSquare ? 'Everyone is square.' : fb.map(x => `${x.family.name} ${x.net >= 0 ? 'up' : 'owes'} ${Math.abs(Math.round(x.net))}`).join('. ')}`}>
               <Text style={styles.tallyTitle}>💰 ${Math.round(spent)} logged so far</Text>
               {allSquare ? (
-                <Text style={styles.tallySquare}>✓ Everyone's square</Text>
+                <Text style={styles.tallySquare}>✓ Everyone&apos;s square</Text>
               ) : (
                 <View style={styles.tallyRow}>
                   {fb.map(x => {
@@ -1478,8 +1478,8 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             <TouchableOpacity style={styles.npOverlay} activeOpacity={1} onPress={closeNightPlan}>
               <View style={styles.npSheet} onStartShouldSetResponder={() => true}>
                 <View style={styles.npHandle} />
-                <Text style={styles.npTitle}>How's tonight handled?</Text>
-                <Text style={styles.npSubtitle}>Just so we know you've got it sorted — we won't ask again.</Text>
+                <Text style={styles.npTitle}>How&apos;s tonight handled?</Text>
+                <Text style={styles.npSubtitle}>Just so we know you&apos;ve got it sorted — we won&apos;t ask again.</Text>
                 {NIGHT_PLAN_OPTIONS.map(opt => {
                   const active = activeType === opt.key;
                   return (
@@ -1505,7 +1505,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                       placeholder="Friend's place, campground…"
                       onSelect={(label, coords) => setNightAddress(label, coords)}
                     />
-                    <Text style={styles.npAddrHint}>Optional — helps us map tomorrow's first drive. Skip anytime.</Text>
+                    <Text style={styles.npAddrHint}>Optional — helps us map tomorrow&apos;s first drive. Skip anytime.</Text>
                   </View>
                 )}
 
@@ -1587,7 +1587,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         <TouchableOpacity style={styles.dayPickerOverlay} activeOpacity={1} onPress={() => setMovingAct(null)}>
           <View style={styles.dayPickerSheet} onStartShouldSetResponder={() => true}>
             <View style={styles.dayPickerHandle} />
-            <Text style={styles.dayPickerTitle}>Move "{movingAct?.name}" to…</Text>
+            <Text style={styles.dayPickerTitle}>Move &quot;{movingAct?.name}&quot; to…</Text>
             <FlatList
               data={trip.days}
               keyExtractor={(_, i) => String(i)}
@@ -1821,7 +1821,7 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
                   <>
                     {isTotal && (
                       <Text style={styles.famChipsTotalHint}>
-                        💰 ${act.costAmount} shared — each family's share:
+                        💰 ${act.costAmount} shared — each family&apos;s share:
                       </Text>
                     )}
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>

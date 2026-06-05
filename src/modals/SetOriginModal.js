@@ -65,7 +65,7 @@ export default function SetOriginModal({ visible, trip, onClose }) {
             <Text style={s.warn}>⚠️ Pick a result from the list so we can place it on the map — typed-only text has no location.</Text>
           )}
           {hasCoords && (
-            <Text style={s.ok}>📍 Located — Day 1's first stop will show its travel time from here.</Text>
+            <Text style={s.ok}>📍 Located — Day 1&apos;s first stop will show its travel time from here.</Text>
           )}
 
           {!!trip?.origin && (

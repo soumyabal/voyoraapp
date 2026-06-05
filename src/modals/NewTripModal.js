@@ -151,7 +151,7 @@ function TravelerStep({ travelers, groups, tripFamilies, setTripFamilies }) {
         <Text style={t.sectionTitle}>
           {totalMembers > 0 ? `${tripFamilies.length} group${tripFamilies.length !== 1 ? 's' : ''} · ${totalMembers} traveler${totalMembers !== 1 ? 's' : ''}` : 'Who\'s coming?'}
         </Text>
-        <Text style={t.sectionSub}>You can also add travelers from the trip's People tab later</Text>
+        <Text style={t.sectionSub}>You can also add travelers from the trip&apos;s People tab later</Text>
       </View>
 
       {/* ── Empty state ───────────────────────────────── */}
@@ -654,12 +654,12 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
               {/* ══ STEP 3: Group Profile ══════════════════════ */}
               {step === 3 && (
                 <>
-                  <Text style={s.stepHint}>Tell us about your group's preferences so the planner can make smarter suggestions.</Text>
+                  <Text style={s.stepHint}>Tell us about your group&apos;s preferences so the planner can make smarter suggestions.</Text>
 
                   {tripFamilies.length === 0 ? (
                     <View style={gp.empty}>
                       <Text style={gp.emptyText}>Add travelers in Step 2 to set their preferences here.</Text>
-                      <Text style={gp.emptyHint}>You can also set this later in the trip's People tab.</Text>
+                      <Text style={gp.emptyHint}>You can also set this later in the trip&apos;s People tab.</Text>
                     </View>
                   ) : (
                     tripFamilies.map(fam => (

@@ -101,11 +101,11 @@ export default function AuthModal({ visible, onClose, defaultTab = 'signup' }) {
 
             {tab === 'signin' && (
               <TouchableOpacity onPress={() => switchTab('signup')} style={styles.switchLink}>
-                <Text style={styles.switchLinkText}>Don't have an account? Sign up →</Text>
+                <Text style={styles.switchLinkText}>Don&apos;t have an account? Sign up →</Text>
               </TouchableOpacity>
             )}
 
-            <Text style={styles.footer}>By continuing you agree to {APP_NAME}'s Terms of Service and Privacy Policy.</Text>
+            <Text style={styles.footer}>By continuing you agree to {APP_NAME}&apos;s Terms of Service and Privacy Policy.</Text>
           </ScrollView>
         </View>
     </Modal>

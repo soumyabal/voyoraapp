@@ -515,7 +515,7 @@ export default function AIPlannerModal({ visible, trip, travelers, onClose }) {
                 <Text style={s.discardEmoji}>⚠️</Text>
                 <Text style={s.discardTitle}>Discard this plan?</Text>
                 <Text style={s.discardMsg}>
-                  Your generated plan hasn't been applied yet. Any changes the agent made will be lost.
+                  Your generated plan hasn&apos;t been applied yet. Any changes the agent made will be lost.
                   {'\n\n'}Apply the plan first, or go back to keep editing.
                 </Text>
                 <TouchableOpacity style={s.discardKeepBtn} onPress={() => setShowDiscardConfirm(false)}>

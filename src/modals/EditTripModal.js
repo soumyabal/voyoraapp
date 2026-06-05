@@ -121,7 +121,7 @@ export default function EditTripModal({ visible, trip, onClose }) {
               onSelect={(label, coords) => setOrigin(label ? { label, lat: coords?.lat ?? null, lng: coords?.lng ?? null } : null)}
               placeholder="Arrival airport, hotel, or home (optional)"
             />
-            <Text style={styles.originHint}>📍 Where Day 1 begins — anchors the first stop's travel time.</Text>
+            <Text style={styles.originHint}>📍 Where Day 1 begins — anchors the first stop&apos;s travel time.</Text>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Travel Dates</Text>

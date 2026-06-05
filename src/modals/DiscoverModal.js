@@ -1064,7 +1064,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <View style={sp.sheet} onStartShouldSetResponder={() => true}>
               <View style={sp.handle}/>
               <View style={sp.sheetTitleRow}>
-                <Text style={[sp.sheetTitle, { flex: 1 }]} numberOfLines={1}>Add "{pendingPlace?.name}"</Text>
+                <Text style={[sp.sheetTitle, { flex: 1 }]} numberOfLines={1}>Add &quot;{pendingPlace?.name}&quot;</Text>
                 <TouchableOpacity onPress={() => setPendingPlace(null)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                   <Text style={sp.sheetCancel}>Cancel</Text>
                 </TouchableOpacity>
@@ -1112,7 +1112,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
               {pendingPlace?.activityType === 'stay' && (
                 <View style={sp.hotelBox}>
                   <Text style={sp.sectionLabel}>Nightly rate (optional)</Text>
-                  <Text style={sp.hotelHint}>Tap "Book rooms ↗" on the card to check prices, then enter what you chose.</Text>
+                  <Text style={sp.hotelHint}>Tap &quot;Book rooms ↗&quot; on the card to check prices, then enter what you chose.</Text>
                   <View style={sp.hotelRow}>
                     <View style={sp.hotelField}>
                       <Text style={sp.hotelFieldLabel}>$ / night</Text>

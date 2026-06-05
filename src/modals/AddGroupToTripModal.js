@@ -91,7 +91,7 @@ export default function AddGroupToTripModal({ visible, trip, onClose }) {
                 <Text style={s.emptyEmoji}>📚</Text>
                 <Text style={s.emptyTitle}>No saved groups yet</Text>
                 <Text style={s.emptyBody}>
-                  Build your traveler library first — add travelers in the People tab, then use "New Family" to group them.
+                  Build your traveler library first — add travelers in the People tab, then use &quot;New Family&quot; to group them.
                 </Text>
               </View>
             )}
@@ -133,7 +133,7 @@ export default function AddGroupToTripModal({ visible, trip, onClose }) {
                   {/* Member list — only visible when group is selected */}
                   {isSelected && (
                     <View style={s.memberList}>
-                      <Text style={s.memberListLabel}>Who's coming?</Text>
+                      <Text style={s.memberListLabel}>Who&apos;s coming?</Text>
                       {groupTravelers.map(tv => {
                         const eff = effectiveMember({ travelerId: tv.id, name: tv.name, age: tv.age, needs: tv.needs }, travelers);
                         const isChecked = !!checkedIds[tv.id];

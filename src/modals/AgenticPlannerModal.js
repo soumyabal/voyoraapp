@@ -585,7 +585,7 @@ export default function AgenticPlannerModal({ visible, trip, travelers, onClose 
             <View style={dr.titleBlock}>
               <Text style={dr.titleEmoji}>✨</Text>
               <Text style={dr.title}>Plan Your Dream Trip</Text>
-              <Text style={dr.subtitle}>Tell the agents what you're looking for</Text>
+              <Text style={dr.subtitle}>Tell the agents what you&apos;re looking for</Text>
             </View>
 
             {/* Trip context pills */}
@@ -673,7 +673,7 @@ export default function AgenticPlannerModal({ visible, trip, travelers, onClose 
 
           {/* Dream recap pill */}
           <View style={base.dreamRecap}>
-            <Text style={base.dreamRecapText} numberOfLines={2}>💬 "{dreamText}"</Text>
+            <Text style={base.dreamRecapText} numberOfLines={2}>💬 &quot;{dreamText}&quot;</Text>
           </View>
 
           {/* Parallel badge */}
@@ -756,7 +756,7 @@ export default function AgenticPlannerModal({ visible, trip, travelers, onClose 
             {/* Dream recap */}
             <View style={rv.dreamBubble}>
               <Text style={rv.dreamBubbleLabel}>YOUR DESCRIPTION</Text>
-              <Text style={rv.dreamBubbleText}>"{dreamText}"</Text>
+              <Text style={rv.dreamBubbleText}>&quot;{dreamText}&quot;</Text>
               {parsedOpts && (
                 <View style={rv.parsedRow}>
                   <View style={rv.parsedChip}><Text style={rv.parsedChipText}>{parsedOpts.pace}</Text></View>

@@ -81,7 +81,7 @@ export default function SplitwiseScreen({ trip }) {
         {tripMode === 'family' && !headTipDismissed && (
           <View style={styles.headTip}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headTipTitle}>How "By Group" works</Text>
+              <Text style={styles.headTipTitle}>How &quot;By Group&quot; works</Text>
               <Text style={styles.headTipBody}>
                 Each family pays an equal share regardless of size. The family head (first member) carries the balance — others in the family show $0 owed. Change the head in the People tab or by tapping a member in Balances below.
               </Text>
@@ -118,7 +118,7 @@ export default function SplitwiseScreen({ trip }) {
               </Text>
               {' '}totalling{' '}
               <Text style={{ fontWeight: '700' }}>{fmtM(calcTripItineraryTotal(trip))}</Text>.{'\n'}
-              Push them here, then edit actuals and skip what you didn't do.
+              Push them here, then edit actuals and skip what you didn&apos;t do.
             </Text>
             <TouchableOpacity style={styles.pushBtn} onPress={() => pushItineraryToSplitwise(trip.id)}>
               <Icon name="open" size={15} color="#fff" />
@@ -565,7 +565,7 @@ function ExpenseCard({
                 <View style={styles.lodgeSplitTip}>
                   <Text style={styles.lodgeSplitTipTitle}>Split equally between groups — adjust if rooms differ</Text>
                   <Text style={styles.lodgeSplitTipBody}>
-                    We split this hotel equally because we can't tell which group took which room. If a family had a bigger or pricier room, set each group's share.
+                    We split this hotel equally because we can&apos;t tell which group took which room. If a family had a bigger or pricier room, set each group&apos;s share.
                   </Text>
                   <TouchableOpacity onPress={switchToCustom} activeOpacity={0.7}>
                     <Text style={styles.lodgeSplitTipCta}>Set custom amounts →</Text>

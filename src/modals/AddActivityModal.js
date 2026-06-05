@@ -618,7 +618,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
 
             {/* ── Name ── (optional — defaults from the type if left blank) */}
             <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>
-              NAME <Text style={s.optional}>(optional — we'll name it from the type)</Text>
+              NAME <Text style={s.optional}>(optional — we&apos;ll name it from the type)</Text>
             </Text>
             <TextInput
               style={s.nameInput}
@@ -660,7 +660,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                     <TimePickerInput value={checkOutTime} onChange={setCheckOutTime} />
                   </View>
                 </View>
-                <Text style={s.checkHint}>We won't plan the room before check-in.</Text>
+                <Text style={s.checkHint}>We won&apos;t plan the room before check-in.</Text>
               </>
             )}
 
@@ -918,7 +918,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                       <Text style={s.addrOk}>📍 Pinned — this stop schedules with the rest of the day.</Text>
                     )}
                     {geoStatus === 'fail' && (
-                      <Text style={s.addrFail}>Couldn't find that address — try a fuller one (street, city).</Text>
+                      <Text style={s.addrFail}>Couldn&apos;t find that address — try a fuller one (street, city).</Text>
                     )}
                   </>
                 )}

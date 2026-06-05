@@ -235,7 +235,7 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
         {/* ── Header ─────────────────────────────────────── */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>Who's Coming</Text>
+            <Text style={styles.title}>Who&apos;s Coming</Text>
             <Text style={styles.subtitle}>
               {trip.families.length} group{trip.families.length !== 1 ? 's' : ''} · {totalTravelers} traveler{totalTravelers !== 1 ? 's' : ''}
             </Text>

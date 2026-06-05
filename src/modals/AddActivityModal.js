@@ -43,10 +43,11 @@ const TILES = [
 
 function tileKey(t) { return `${t.type}:${t.subtype || ''}` ; }
 
-// The 5 transport sub-modes collapse under ONE primary "Transport" tile, so the
-// top row is the 4 mental categories of a trip (Activity/Meal/Stay/Transport) and
-// the modes (✈️🚗🚂🚢⛽) reveal inline only when Transport is chosen.
-const TRANSPORT_MODES = TILES.filter(t => t.type === 'transport');
+// Transport sub-modes shown under the "Transport" tile: Flight / Drive / Train / Ship.
+// Pit Stop is intentionally NOT offered here — a fuel/rest stop is a "Quick stop"
+// (the Activity checkbox), not a transport leg. The pitstop tile is kept in TILES only
+// so any older saved pit-stop still resolves/edits.
+const TRANSPORT_MODES = TILES.filter(t => t.type === 'transport' && t.subtype !== 'pitstop');
 const PRIMARY_TYPES = [
   TILES.find(t => t.type === 'activity'),
   TILES.find(t => t.type === 'food'),
@@ -62,12 +63,13 @@ const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
   return `${String(h).padStart(2, '0')}:${m}`;
 });
 
-function TimePickerInput({ value, onChange }) {
+function TimePickerInput({ value, onChange, placeholder }) {
+  const ph = placeholder || '09:00';   // gray default shown (and pre-selected in the picker) when empty
   const [open, setOpen]   = useState(false);
-  const [draft, setDraft] = useState(value || '09:00');
+  const [draft, setDraft] = useState(value || ph);
   const listRef           = useRef(null);
 
-  useEffect(() => { setDraft(value || '09:00'); }, [value]);
+  useEffect(() => { setDraft(value || ph); }, [value, ph]);
 
   // Auto-insert colon inside the picker input: "0930" → "09:30"
   const handleDraftChange = (raw) => {
@@ -88,8 +90,8 @@ function TimePickerInput({ value, onChange }) {
 
   const handleOpen = () => {
     setOpen(true);
-    setDraft(value || '09:00');
-    const idx = TIME_SLOTS.indexOf(value);
+    setDraft(value || ph);
+    const idx = TIME_SLOTS.indexOf(value || ph);
     setTimeout(() => {
       listRef.current?.scrollToOffset({
         offset: Math.max(0, (idx >= 0 ? idx : 18) - 2) * SLOT_H,
@@ -107,7 +109,7 @@ function TimePickerInput({ value, onChange }) {
       <TouchableOpacity style={tp.row} onPress={handleOpen} activeOpacity={0.75}>
         <Text style={tp.clock}>🕐</Text>
         <Text style={[tp.displayText, !value && { color: colors.muted }]}>
-          {value || '09:00'}
+          {value || ph}
         </Text>
         <Text style={tp.chevron}>▾</Text>
       </TouchableOpacity>
@@ -789,7 +791,12 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
             {/* ── Departs + Arrives ── (transport essentials; the generic TIME
                    fine-tune + DURATION live under "+ Details" — the slot already
                    set a smart time and the duration auto-estimates). */}
-            {!allDays && tile.type === 'transport' && tile.subtype !== 'pitstop' && (
+            {!allDays && tile.type === 'transport' && tile.subtype !== 'pitstop' && (() => {
+              // Suggest a sensible arrival (Departs + 3h), shown GRAY until the user sets it,
+              // so a fresh transport leg never displays a misleading "09:00" before Departs.
+              const dm = (() => { const [h, m] = (time || '09:00').split(':').map(Number); return ((h || 0) * 60 + (m || 0) + 180) % 1440; })();
+              const arrivesDefault = `${String(Math.floor(dm / 60)).padStart(2, '0')}:${String(dm % 60).padStart(2, '0')}`;
+              return (
               <View style={s.inlineRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.sectionLabel}>DEPARTS</Text>
@@ -802,29 +809,40 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                   <Text style={s.sectionLabel}>
                     ARRIVES <Text style={s.optional}>(local)</Text>
                   </Text>
-                  <TimePickerInput value={arriveTime || ''} onChange={setArriveTime} />
+                  <TimePickerInput value={arriveTime || ''} onChange={setArriveTime} placeholder={arrivesDefault} />
                   {!!arriveTime && arriveTime < time && (
                     <Text style={s.nextDayHint}>🌙 Arrives next day</Text>
                   )}
                 </View>
               </View>
-            )}
+              );
+            })()}
 
             {/* ── Destination (transport) ── where this leg ARRIVES (an Airbnb, hotel,
                    trailhead…). Geocoded so the day's routing knows where the drive ends
                    and the next stop's travel leg starts. Above the fold — it's essential
                    for a transport leg, not an optional detail. */}
-            {tile.type === 'transport' && tile.subtype !== 'pitstop' && (
+            {tile.type === 'transport' && tile.subtype !== 'pitstop' && (() => {
+              // Per-mode wording: a flight arrives at an airport, a train at a station, a
+              // ship at a port, a drive at an address (Airbnb/hotel).
+              const dest = tile.subtype === 'flight'
+                ? { hint: 'arrival airport', ph: 'e.g. JFK Airport, New York' }
+                : tile.subtype === 'train'
+                ? { hint: 'arrival station', ph: 'e.g. Union Station, Chicago' }
+                : tile.subtype === 'ship'
+                ? { hint: 'arrival port / terminal', ph: 'e.g. Port of Miami cruise terminal' }
+                : { hint: 'where this leg arrives — Airbnb, hotel, etc.', ph: 'e.g. an Airbnb address, or 123 River Rd…' };
+              return (
               <>
                 <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>
-                  DESTINATION <Text style={s.optional}>(where this leg arrives — Airbnb, hotel, etc.)</Text>
+                  DESTINATION <Text style={s.optional}>({dest.hint})</Text>
                 </Text>
                 <View style={s.addrRow}>
                   <TextInput
                     style={s.addrInput}
                     value={address}
                     onChangeText={t => { setAddress(t); setGeo(null); setGeoStatus('idle'); }}
-                    placeholder="e.g. an Airbnb address, or 123 River Rd…"
+                    placeholder={dest.ph}
                     placeholderTextColor={colors.muted}
                     returnKeyType="search"
                     onSubmitEditing={locate}
@@ -847,7 +865,8 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                   <Text style={s.addrFail}>Couldn&apos;t find that address — try a fuller one (street, city).</Text>
                 )}
               </>
-            )}
+              );
+            })()}
 
             {/* ── Time ── EDIT mode has no WHEN slot picker, so the time control
                    stays above the fold here (Add mode sets it via the slot, and

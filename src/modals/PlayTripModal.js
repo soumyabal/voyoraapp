@@ -20,6 +20,7 @@ import { Modal, View, Text, Image, Animated, Easing, TouchableOpacity, Dimension
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { buildTripFilm } from '../utils/tripFilm';
+import { refreshPhotoKey } from '../utils/places';
 
 // The music bed is ORIGINAL — synthesized from scratch by scripts/gen-music.js (no sample,
 // no third-party track), so there is nothing to license or infringe. In-app only.
@@ -33,7 +34,10 @@ const CARD_HOLD = 2700;                // day / progress / nudge cards
 const FADE = 750;                      // cross-fade duration
 
 // A slide shows an IMAGE when it carries one — a reward photo, or an image-backed bookend.
-const slideImg = (s) => (s ? (s.uri || s.heroUri || null) : null);
+// Re-stamp the current API key (the saved photos are Google URLs with the key baked in, so
+// they break after a key rotation). No new fetching — these are the photos already stored on
+// the trip; RN caches each by URL after first load, so replays don't re-hit Google.
+const slideImg = (s) => refreshPhotoKey(s ? (s.uri || s.heroUri || null) : null);
 const holdOf = (s) => (s.type === 'photo' ? PHOTO_HOLD : (s.type === 'open' || s.type === 'close') ? BOOKEND_HOLD : CARD_HOLD);
 const BIG_TITLE = new Set(['open', 'close', 'day']); // big display title vs a sentence 'line' (progress/nudge)
 

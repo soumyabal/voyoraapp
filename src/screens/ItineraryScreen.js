@@ -18,6 +18,7 @@ import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, hoursLabel, weeklyHoursLabel, dayIntervals } from '../utils/hours';
 import { getSuggestedTime, minToTime } from '../utils/slots';
 import { fetchPlacePhoto } from '../utils/places';
+import { bookingUrl } from '../utils/booking';
 import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
 
@@ -1740,6 +1741,19 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
   const isNote         = act.type === 'note';
   const handleMapPress = () => { if (act.mapUrl) Linking.openURL(act.mapUrl); };
   const handleUrlPress = () => { if (act.url)    Linking.openURL(act.url); };
+
+  // ── Thumbnail tap → website / Booking.com (mirrors Discover, adapted) ──
+  // Smart SINGLE tap target on the 56px thumbnail: a hotel opens its Booking.com
+  // search (the revenue link); everything else opens its own website. The hotel's
+  // own site still lives in the ▾ details fold, so both destinations stay reachable.
+  // Only when not done/skipped (then the thumbnail is the status glyph) and there's
+  // something to open. The labeled rows in details are the screen-reader fallback.
+  const bookHref    = bookingUrl(act);                       // null unless a searchable stay
+  const thumbAction = !dimmed
+    ? (act.type === 'stay' && bookHref ? { url: bookHref, kind: 'book' }
+       : act.url                       ? { url: act.url,  kind: 'web'  }
+       : null)
+    : null;
   const actIcon        = getActivityIcon(act.type, act.subtype);
   const isPerFamily    = act.costMode === 'per_family';
   const isTotal        = act.costMode === 'total';
@@ -1749,6 +1763,17 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
   // ── Swipe-to-action: horizontal ScrollView (no PanResponder conflict) ──
   const swipeScrollRef = useRef(null);
   const close = () => swipeScrollRef.current?.scrollTo({ x: 0, animated: true });
+
+  // Swipe-guard for the thumbnail tap: the thumbnail sits at the left swipe-origin
+  // edge, so a quick flick (to reveal Move/Delete) can release as a tap. Track the
+  // scroll offset and, if the tray is open/being dragged, a thumbnail tap just closes
+  // it instead of launching the browser.
+  const swipeXRef = useRef(0);
+  const handleThumbPress = () => {
+    if (swipeXRef.current > 4) { close(); return; }
+    if (!thumbAction) return;
+    Linking.openURL(thumbAction.url).catch(() => {});
+  };
 
   // Swipe actions are PHASE-AWARE: while a trip is still being PLANNED, "Done / Did Not Do"
   // are meaningless (you can't have done a future stop) — so the swipe leads with Move +
@@ -1781,6 +1806,7 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
         snapToOffsets={[0, CARD_ACTIONS_W]}
         decelerationRate="fast"
         scrollEventThrottle={32}
+        onScroll={e => { swipeXRef.current = e.nativeEvent.contentOffset.x; }}
         contentContainerStyle={styles.actCardScrollContent}
       >
         {/* ── Card ── */}
@@ -1794,10 +1820,32 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
             isHighlighted && styles.actCardHighlighted,
           ]}
         >
-        {/* ── Leading thumbnail: place photo · tinted type icon · status ── */}
+        {/* ── Leading thumbnail: place photo · tinted type icon · status ──
+            When live & openable, the whole thumbnail is ONE tap target (hotel →
+            Booking.com, else → website) with a corner badge hint. When done/skipped
+            it's the status glyph (non-interactive). */}
         <View style={styles.actLead}>
           {dimmed ? (
             <Icon name={isDone ? 'checkmark-circle' : 'close-circle'} size={30} color={isDone ? colors.success : colors.danger} />
+          ) : thumbAction ? (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={handleThumbPress}
+              accessibilityRole="link"
+              accessibilityLabel={thumbAction.kind === 'book' ? `Book ${act.name || 'this stay'}` : `${act.name || 'this place'} website`}
+              accessibilityHint={thumbAction.kind === 'book' ? 'Opens Booking.com in your browser' : 'Opens the website in your browser'}
+            >
+              {act.photo ? (
+                <Image source={{ uri: act.photo }} style={styles.actLeadPhoto} />
+              ) : (
+                <View style={[styles.actLeadIcon, { backgroundColor: (activityColors[act.type] || colors.muted) + '1A' }]}>
+                  <Icon name={ACT_ICON[act.type] || 'activity'} size={22} color={activityColors[act.type] || colors.subtle} />
+                </View>
+              )}
+              <View style={[styles.thumbLinkBadge, thumbAction.kind === 'book' && styles.thumbBookBadge]} pointerEvents="none">
+                <Icon name={thumbAction.kind === 'book' ? 'bed-outline' : 'open-outline'} size={11} color="#fff" />
+              </View>
+            </TouchableOpacity>
           ) : act.photo ? (
             <Image source={{ uri: act.photo }} style={styles.actLeadPhoto} />
           ) : (
@@ -1910,6 +1958,19 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
                       {act.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}
                     </Text>
                     <Text style={styles.locationArrow}>›</Text>
+                  </TouchableOpacity>
+                )}
+                {!!bookHref && (
+                  <TouchableOpacity
+                    style={styles.urlRow}
+                    onPress={() => Linking.openURL(bookHref).catch(() => {})}
+                    activeOpacity={0.7}
+                    accessibilityRole="link"
+                    accessibilityLabel={`Book ${act.name || 'this stay'} on Booking.com`}
+                  >
+                    <Icon name="bed-outline" size={13} color={colors.accent} />
+                    <Text style={[styles.urlText, { color: colors.accent }]} numberOfLines={1}>Book on Booking.com</Text>
+                    <Text style={[styles.locationArrow, { color: colors.accent }]}>›</Text>
                   </TouchableOpacity>
                 )}
                 {hasCoords && !!onExploreNearby && (
@@ -2760,6 +2821,8 @@ const styles = StyleSheet.create({
   actLead:       { width: 56, alignItems: 'center', justifyContent: 'center' },
   actLeadPhoto:  { width: 56, height: 56, borderRadius: 12, backgroundColor: colors.surface2 },
   actLeadIcon:   { width: 56, height: 56, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  thumbLinkBadge:{ position: 'absolute', right: -3, bottom: -3, width: 19, height: 19, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.surface },
+  thumbBookBadge:{ backgroundColor: colors.accent },
   actEyebrow:    { ...typography.caption, color: colors.subtle, marginBottom: 1 },
   actEyebrowTime:{ color: colors.primary, fontWeight: '800' },
   actTimeCol:    { alignItems: 'center', justifyContent: 'center', minWidth: 44 },

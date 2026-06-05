@@ -432,11 +432,32 @@ const useStore = create(
       })),
 
       deleteTraveler: (tripId, famId, memberId) => set(s => ({
-        trips: s.trips.map(t => t.id !== tripId ? t : {
-          ...t,
-          families: t.families.map(f => f.id !== famId ? f : {
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+          const families = t.families.map(f => f.id !== famId ? f : {
             ...f, members: f.members.filter(m => m.id !== memberId),
-          }),
+          });
+          // Keep the books balanced: if the removed person was a payer, the credit
+          // must move to a live member or it vanishes from the ledger (Σ net ≠ 0).
+          // The family's new head inherits it; if the family is now empty, the
+          // first remaining member trip-wide does. Also scrub the id from any
+          // participant list / custom share so it can't leak back in.
+          const heir = families.find(f => f.id === famId)?.members[0]?.id
+            || families.flatMap(f => f.members)[0]?.id || null;
+          const expenses = t.expenses.map(e => {
+            const next = { ...e };
+            if (next.paidBy === memberId) next.paidBy = heir;
+            if (Array.isArray(next.participatingMembers)) {
+              const pm = next.participatingMembers.filter(id => id !== memberId);
+              next.participatingMembers = pm.length ? pm : null;
+            }
+            if (next.customShares && memberId in next.customShares) {
+              const cs = { ...next.customShares }; delete cs[memberId];
+              next.customShares = cs;
+            }
+            return next;
+          });
+          return { ...t, families, expenses };
         }),
       })),
 
@@ -448,15 +469,36 @@ const useStore = create(
       })),
 
       deleteFamily: (tripId, famId) => set(s => ({
-        trips: s.trips.map(t => t.id !== tripId ? t : {
-          ...t,
-          families: t.families.filter(f => f.id !== famId),
-          expenses: t.expenses.map(e => ({
-            ...e,
-            participatingFamilies: e.participatingFamilies
-              ? e.participatingFamilies.filter(id => id !== famId)
-              : null,
-          })),
+        trips: s.trips.map(t => {
+          if (t.id !== tripId) return t;
+          const deadIds = new Set((t.families.find(f => f.id === famId)?.members || []).map(m => m.id));
+          const families = t.families.filter(f => f.id !== famId);
+          // Same balance rule as deleteTraveler: a payment held by anyone in the
+          // removed family is re-homed to a surviving member; stale ids/shares are
+          // scrubbed; an expense left with zero families is re-broadened to all
+          // survivors rather than an empty list (which would silently leak).
+          const heir = families.flatMap(f => f.members)[0]?.id || null;
+          const expenses = t.expenses.map(e => {
+            const next = { ...e };
+            let pf = next.participatingFamilies
+              ? next.participatingFamilies.filter(id => id !== famId)
+              : null;
+            if (Array.isArray(pf) && pf.length === 0) pf = families.length ? families.map(f => f.id) : null;
+            next.participatingFamilies = pf;
+            if (deadIds.has(next.paidBy)) next.paidBy = heir;
+            if (Array.isArray(next.participatingMembers)) {
+              const pm = next.participatingMembers.filter(id => !deadIds.has(id));
+              next.participatingMembers = pm.length ? pm : null;
+            }
+            if (next.customShares) {
+              const cs = { ...next.customShares };
+              delete cs[famId];
+              deadIds.forEach(id => delete cs[id]);
+              next.customShares = cs;
+            }
+            return next;
+          });
+          return { ...t, families, expenses };
         }),
       })),
 

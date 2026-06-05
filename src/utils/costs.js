@@ -40,9 +40,14 @@ export function getEffectiveMembers(exp, trip) {
 
 // ── PER-UNIT SHARE ───────────────────────────────────────────────
 
+// Only families with at least one member can CARRY a share (the head holds it).
+// An empty participating family must not absorb a slice that nobody then owes,
+// or the books leak. Splits divide among "paying" families only.
+const payingFamilies = (fams) => fams.filter(f => f.members.length > 0);
+
 /** Amount owed per family (family mode). */
 export function expSharePerFamily(exp, trip) {
-  const fams = getEffectiveFamilies(exp, trip);
+  const fams = payingFamilies(getEffectiveFamilies(exp, trip));
   return fams.length ? exp.amount / fams.length : 0;
 }
 
@@ -65,7 +70,13 @@ export function expSharePerPerson(exp, trip) {
 export function unevenActive(exp, trip) {
   if (!exp.unevenSplit || !exp.customShares) return false;
   const mode = resolveMode(exp, trip);
-  const units = mode === 'family' ? getEffectiveFamilies(exp, trip) : getEffectiveMembers(exp, trip);
+  // Count only units that can actually carry their custom amount: families with a
+  // head, and members who are still participants. (A custom share pinned to an
+  // empty family or a removed member can never be owed, so it must not count
+  // toward "balanced" — otherwise the head-carried debits won't reach the total.)
+  const units = mode === 'family'
+    ? payingFamilies(getEffectiveFamilies(exp, trip))
+    : getEffectiveMembers(exp, trip);
   const sum = units.reduce((s, u) => s + (exp.customShares[u.id] || 0), 0);
   return Math.abs(sum - exp.amount) < 0.01;
 }
@@ -86,14 +97,19 @@ export function famExpenseShare(fam, exp, trip) {
   // Uneven split — use stored custom amounts (only when they balance to the total)
   if (unevenActive(exp, trip)) {
     if (mode === 'family') {
-      return exp.customShares[fam.id] || 0;
+      return fam.members.length ? (exp.customShares[fam.id] || 0) : 0;
     }
-    // Individual uneven: sum this family's members' custom amounts
-    return fam.members.reduce((s, m) => s + (exp.customShares[m.id] || 0), 0);
+    // Individual uneven: sum this family's PARTICIPATING members' custom amounts
+    const effMembers = getEffectiveMembers(exp, trip);
+    return fam.members
+      .filter(m => effMembers.some(em => em.id === m.id))
+      .reduce((s, m) => s + (exp.customShares[m.id] || 0), 0);
   }
 
   if (mode === 'family') {
-    return exp.amount / effFams.length;
+    if (!fam.members.length) return 0;
+    const paying = payingFamilies(effFams);
+    return paying.length ? exp.amount / paying.length : 0;
   }
 
   const pp = expSharePerPerson(exp, trip);
@@ -122,7 +138,10 @@ export function memberExpenseShare(member, exp, trip) {
       if (!head || head.id !== member.id) return 0;
       return exp.customShares[fam.id] || 0;
     }
-    // Individual uneven: member's own custom amount
+    // Individual uneven: member's own custom amount — only if still a participant,
+    // so a stale customShares entry for a removed/excluded member can't leak in.
+    const effM = getEffectiveMembers(exp, trip);
+    if (!effM.some(m => m.id === member.id)) return 0;
     return exp.customShares[member.id] || 0;
   }
 
@@ -183,6 +202,9 @@ export function calcBalances(trip) {
   members.forEach(m => { paid[m.id] = 0; owed[m.id] = 0; });
 
   trip.expenses.filter(exp => !exp.excluded).forEach(exp => {
+    // An expense with no one to split across isn't in the ledger — crediting the
+    // payer for it would invent money nobody owes (Σ net ≠ 0).
+    if (getEffectiveMembers(exp, trip).length === 0) return;
     if (exp.paidBy) {
       paid[exp.paidBy] = (paid[exp.paidBy] || 0) + exp.amount;
     }
@@ -204,6 +226,7 @@ export function calcFamilyBalances(trip) {
       const memberIds = new Set(fam.members.map(m => m.id));
       let paid = 0, owed = 0;
       trip.expenses.filter(exp => !exp.excluded).forEach(exp => {
+        if (getEffectiveMembers(exp, trip).length === 0) return;
         if (exp.paidBy && memberIds.has(exp.paidBy)) paid += exp.amount;
         fam.members.forEach(m => { owed += memberExpenseShare(m, exp, trip); });
       });

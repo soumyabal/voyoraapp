@@ -1,5 +1,3 @@
-import { colors } from '../theme';
-
 // Generate a short random ID
 export function uid() {
   return 'x' + Math.random().toString(36).slice(2, 9);

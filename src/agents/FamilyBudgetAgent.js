@@ -83,9 +83,7 @@ export function run(trip, dayActivities, groupProfile) {
   // ── Step 3: Per-family cost breakdown ─────────────────────────────────────
   const budgetByFamily = families.map(family => {
     const memberCount  = family.memberCount || family.members?.length || 1;
-    const memberShare  = memberCount / totalMembers;
     const roomsNeeded  = family.roomsNeeded || 1;
-    const roomShare    = roomsNeeded / Math.max(groupProfile.totalRoomsNeeded, 1);
 
     // Accommodation: family pays for their own rooms
     const accommodation = roomRatePerNight * roomsNeeded * nights;
@@ -121,14 +119,6 @@ export function run(trip, dayActivities, groupProfile) {
   // Creates one expense per activity per family, with participatingFamilies set correctly.
   // This means each family only pays for their share in the Splitwise split view.
   const expenses = [];
-
-  // Group activities by type and create family-specific expenses
-  const expenseGroups = [
-    { label: 'Accommodation', icon: '🏨', acts: stayActivities,     source: 'accommodation' },
-    { label: 'Transit',       icon: '✈️', acts: transitActivities,  source: 'transit' },
-    { label: 'Meals',         icon: '🍽️', acts: mealActivities,     source: 'meals' },
-    { label: 'Activities',    icon: '🎯', acts: activityActivities, source: 'activities' },
-  ];
 
   // Payer defaults to first member of each family
   const familyPayerMap = {};

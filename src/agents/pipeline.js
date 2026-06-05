@@ -209,7 +209,6 @@ export async function runPipeline(trip, travelers, options, onProgress, fallback
 
 function buildPreliminaryActivities(trip, stayResults, experiences, transitResult, groupProfile) {
   const hotel     = stayResults?.[0];
-  const nights    = trip.days?.length || 3;
   const roomCost  = hotel
     ? Math.round((hotel.pricePerRoom * groupProfile.totalRoomsNeeded) / groupProfile.totalMembers)
     : 100;

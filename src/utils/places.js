@@ -42,7 +42,7 @@ export async function geocodeAddress(address) {
     const out = loc ? { lat: loc.latitude, lng: loc.longitude, formattedAddress: p.formattedAddress || q } : null;
     cache.set(key, out);
     return out;
-  } catch (e) { cache.set(key, null); return null; }
+  } catch { cache.set(key, null); return null; }
 }
 
 /** Reverse-geocode lat/lng → a human address (for a map-dropped pin). Uses the
@@ -63,7 +63,7 @@ export async function reverseGeocode(lat, lng) {
     const addr = (data.results && data.results[0]?.formatted_address) || null;
     cache.set(key, addr);   // null also cached → we won't retry a key that can't geocode
     return addr;
-  } catch (e) { return null; }   // don't cache aborts/network errors — a later try may succeed
+  } catch { return null; }   // don't cache aborts/network errors — a later try may succeed
 }
 
 /** Best-effort photo URL for a place by name, biased to its coords. null on miss. */
@@ -92,7 +92,7 @@ export async function fetchPlacePhoto(name, lat, lng) {
     const photo = p?.photos?.[0]?.name ? photoUrl(p.photos[0].name) : null;
     cache.set(key, photo);
     return photo;
-  } catch (e) {
+  } catch {
     cache.set(key, null);
     return null;
   }

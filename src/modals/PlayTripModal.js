@@ -62,13 +62,13 @@ export default function PlayTripModal({ visible, trip, onClose }) {
       let v = 0;
       ramp = setInterval(() => {
         v = Math.min(0.55, v + 0.05);
-        try { player.volume = v; } catch (e) { /* ignore */ }
+        try { player.volume = v; } catch { /* ignore */ }
         if (v >= 0.55) clearInterval(ramp);
       }, 90);
-    } catch (e) { /* film still plays without music */ }
+    } catch { /* film still plays without music */ }
     return () => {
       clearInterval(ramp);
-      try { player.pause(); player.seekTo(0); } catch (e) { /* ignore */ }
+      try { player.pause(); player.seekTo(0); } catch { /* ignore */ }
     };
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -86,7 +86,7 @@ export default function PlayTripModal({ visible, trip, onClose }) {
       // the closing card — hold a beat, then STOP the music a fraction of a second BEFORE the
       // window closes, so it resolves into a moment of silence instead of cutting off at dismiss.
       timer.current = setTimeout(() => {
-        try { player.volume = 0; player.pause(); } catch (e) { /* ignore */ }
+        try { player.volume = 0; player.pause(); } catch { /* ignore */ }
         timer.current = setTimeout(() => { if (onClose) onClose(); }, 450);
       }, hold + 600);
     }

@@ -10,7 +10,7 @@
  */
 
 import { CLAUDE_API_KEY, CLAUDE_MODEL, CLAUDE_API_URL } from '../config';
-import { generateSmartItinerary, profileGroup, SD_ACTIVITIES, SFO_ACTIVITIES } from './itineraryPlanner';
+import { generateSmartItinerary, profileGroup } from './itineraryPlanner';
 import { buildSystemPrompt, buildPlanPrompt, buildRefinementPrompt, parsePlanResponse } from './plannerRules';
 import { uid } from './helpers';
 
@@ -138,7 +138,6 @@ function parseMultiLeg(lower, n) {
       const after  = idx + alias.length < lower.length ? lower[idx + alias.length] : ' ';
       if (/[a-z]/.test(before) || /[a-z]/.test(after)) { searchFrom = idx + 1; continue; }
 
-      const context  = lower.slice(Math.max(0, idx - 50), idx + alias.length + 50);
       const pre      = lower.slice(Math.max(0, idx - 50), idx);
       const post     = lower.slice(idx + alias.length, Math.min(lower.length, idx + alias.length + 50));
 
@@ -470,7 +469,6 @@ function applyNoteOverrides(dayActivities, notes, trip, budget, options = {}) {
 
       // Content days for this leg
       for (let d = 0; d < leg.days && dayIdx < n; d++, dayIdx++) {
-        const isArrival   = d === 0 && !isFirst; // already handled arrival via transit day
         const isDeparture = d === leg.days - 1 && isLast;
         result[dayIdx] = buildCityDay(
           leg.city, d, profile, budget,

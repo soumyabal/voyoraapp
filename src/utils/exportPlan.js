@@ -32,7 +32,6 @@ const ACT_ICONS = {
   note:      '📝',
 };
 
-const CAT_ICONS = { '🏨': '🏨', '✈️': '✈️', '🍽️': '🍽️', '🎯': '🎯' };
 
 // Motivational copy (coverTagline / countdownLine / dayVibe / closingNote) is
 // original + varied + deterministic — see ./tripCopy (no AI, no API, no IP risk).
@@ -249,7 +248,6 @@ export function buildHTML(trip, travelers = []) {
   }
 
   // ── Full HTML ──────────────────────────────────────────────────────────────
-  const now = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const [c1, c2] = Array.isArray(trip.bgColors) && trip.bgColors.length >= 2
     ? trip.bgColors : ['#6366f1', '#8b5cf6'];
 
@@ -560,7 +558,6 @@ export async function exportTripAsPDF(trip, travelers = []) {
     }
 
     // Open share sheet — user can save to Files, AirDrop, email, etc.
-    const safeName = trip.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     await Sharing.shareAsync(uri, {
       mimeType: 'application/pdf',
       dialogTitle: `Share ${trip.name} itinerary`,

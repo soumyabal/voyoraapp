@@ -13,7 +13,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   Modal, View, Text, ScrollView, TouchableOpacity,
   TextInput, StyleSheet, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Alert,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useStore, { showToast } from '../store';

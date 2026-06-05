@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import useStore from '../store';
 import AIChatModal from '../modals/AIChatModal';
-import { colors, spacing, radius, typography, shadow } from '../theme';
+import { colors, spacing, radius, typography } from '../theme';
 import { analyzeItinerary } from '../utils/aiAssist';
 
 // ─── Severity config ──────────────────────────────────────────────

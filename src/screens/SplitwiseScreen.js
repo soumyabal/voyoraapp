@@ -6,12 +6,12 @@ import {
 import useStore from '../store';
 import AddExpenseModal from '../modals/AddExpenseModal';
 import { colors, spacing, radius, typography, shadow } from '../theme';
-import { fmtM, getAllMembers, findMember, findMemberFamily, avatarColor } from '../utils/helpers';
+import { fmtM, findMember, findMemberFamily, avatarColor } from '../utils/helpers';
 import Icon from '../components/ui/Icon';
 import {
   resolveMode, getEffectiveFamilies, getEffectiveMembers,
   expSharePerFamily, expSharePerPerson,
-  famExpenseShare, calcFamilyExpenseTotal, calcMemberExpenseShare,
+  calcFamilyExpenseTotal, calcMemberExpenseShare,
   calcTripItineraryTotal, calcBalances, calcSettlements,
 } from '../utils/costs';
 

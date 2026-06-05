@@ -10,7 +10,7 @@
  *   info    → blue  — suggestion / heads-up
  */
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Modal, View, Text, ScrollView, TouchableOpacity,
   StyleSheet, ActivityIndicator, Linking,

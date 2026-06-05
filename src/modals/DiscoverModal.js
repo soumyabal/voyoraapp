@@ -18,11 +18,52 @@ import { weekdayOf, hoursLabel, weeklyHoursLabel, compactHours } from '../utils/
 import { qualityScore } from '../utils/placeScore';
 import { reverseGeocode } from '../utils/places';
 import { bookingUrl } from '../utils/booking';
+import { fetchDestinationImage, WIKI_UA } from '../utils/destinationImage';
 import { WebView } from 'react-native-webview';
 import Icon from '../components/ui/Icon';
 
 // Place type → Icon name + tint
 const TYPE_ICON = { food: 'food', stay: 'hotel', activity: 'activity' };
+
+// Free destination hero (Wikipedia lead image — no API key, no billing). Shows the
+// city photo with a "via Wikipedia" credit (CC attribution). Renders nothing when
+// there's no image, so the layout degrades cleanly.
+function DestinationHero({ city }) {
+  const [img, setImg] = useState(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setImg(null); setFailed(false);
+    fetchDestinationImage(city).then(r => { if (alive) setImg(r); });
+    return () => { alive = false; };
+  }, [city]);
+  // Hide entirely if there's no image or it fails to load (e.g. the CDN rejects
+  // the request) — better than a gray box with a misleading "via Wikipedia" credit.
+  if (!img || failed) return null;
+  return (
+    <View style={s.hero}>
+      <Image
+        source={{ uri: img.imageUrl, headers: { 'User-Agent': WIKI_UA } }}
+        style={s.heroImg}
+        resizeMode="cover"
+        onError={() => setFailed(true)}
+      />
+      <View style={s.heroScrim} />
+      <View style={s.heroText}>
+        <Text style={s.heroCaption}>EXPLORING</Text>
+        <Text style={s.heroCity} numberOfLines={1}>{img.title}</Text>
+      </View>
+      <TouchableOpacity
+        style={s.heroCredit}
+        onPress={() => Linking.openURL(img.pageUrl).catch(() => {})}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        activeOpacity={0.8}
+      >
+        <Text style={s.heroCreditText}>via Wikipedia</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 const TYPE_TINT = { food: '#e17055', stay: colors.smart, activity: colors.success };
 
 // Map layers — independent on/off toggles. Each layer runs its own Places
@@ -923,6 +964,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             </View>
           </View>
 
+          <DestinationHero city={cityLabel(activeCity) || destination} />
+
           <View style={s.searchRow}>
             <Icon name="search" size={16} color={colors.subtle} style={{marginRight:spacing.xs}} />
             <TextInput
@@ -1242,6 +1285,16 @@ const s = StyleSheet.create({
   basketBtn:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:colors.smart,borderRadius:radius.full,paddingHorizontal:spacing.xl,paddingVertical:spacing.md},
   basketBtnText:{color:'#fff',fontWeight:'800',fontSize:15},
   searchRow:{flexDirection:'row',alignItems:'center',marginHorizontal:spacing.xxl,marginBottom:spacing.sm,backgroundColor:colors.surface2,borderRadius:radius.md,paddingHorizontal:spacing.md,paddingVertical:spacing.xs,borderWidth:1,borderColor:colors.border},
+
+  // Destination hero (free Wikipedia image)
+  hero:{height:118,marginHorizontal:spacing.xxl,marginBottom:spacing.sm,borderRadius:radius.lg,overflow:'hidden',backgroundColor:colors.surface2},
+  heroImg:{...StyleSheet.absoluteFillObject,width:'100%',height:'100%'},
+  heroScrim:{...StyleSheet.absoluteFillObject,backgroundColor:'rgba(0,0,0,0.28)'},
+  heroText:{position:'absolute',left:spacing.md,bottom:spacing.sm},
+  heroCaption:{color:'rgba(255,255,255,0.88)',fontSize:10,fontWeight:'800',letterSpacing:1.2},
+  heroCity:{color:'#fff',fontSize:22,fontWeight:'800'},
+  heroCredit:{position:'absolute',right:6,bottom:6,backgroundColor:'rgba(0,0,0,0.45)',borderRadius:radius.sm,paddingHorizontal:6,paddingVertical:2},
+  heroCreditText:{color:'#fff',fontSize:9,fontWeight:'600'},
   searchIcon:{fontSize:15,marginRight:spacing.xs},
   searchInput:{flex:1,fontSize:15,color:colors.text,paddingVertical:6},
   // Fixed-height pills with vertically-centered, separately-sized emoji + label.

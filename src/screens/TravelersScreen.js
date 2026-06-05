@@ -19,7 +19,7 @@ import AddFamilyModal from '../modals/AddFamilyModal';
 import SelectTravelersModal from '../modals/SelectTravelersModal';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import Icon from '../components/ui/Icon';
-import { avatarColor, effectiveMember, NEEDS_OPTIONS } from '../utils/helpers';
+import { avatarColor, effectiveMember, NEEDS_OPTIONS, fmtM } from '../utils/helpers';
 import { ChipSelector } from '../components/ui';
 import { useKeyboardOffset } from '../utils/useKeyboardOffset';
 
@@ -261,10 +261,29 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
 
   const markChanged = () => setTravelersChanged(true);
 
+  // When someone who PAID for expenses is removed, their payments are re-homed to
+  // a surviving traveler so the books stay balanced (see deleteTraveler/deleteFamily
+  // in the store). That's a real change to who's owed what, so warn the planner up
+  // front — they can cancel, and either way they're told to review the Split tab.
+  const payerExpenses = (memberIds) => {
+    const ids = new Set(memberIds);
+    return (trip.expenses || []).filter(e => !e.excluded && ids.has(e.paidBy));
+  };
+  const reassignNote = (memberIds, who) => {
+    const hit = payerExpenses(memberIds);
+    if (!hit.length) return '';
+    const total = hit.reduce((s, e) => s + (e.amount || 0), 0);
+    const n = hit.length;
+    return `\n\n⚠️ ${who} paid for ${n} expense${n !== 1 ? 's' : ''} (${fmtM(total)}). ` +
+      `${n !== 1 ? 'Those payments' : 'That payment'} will be reassigned to a remaining ` +
+      `traveler so the totals stay balanced — review in the Split tab.`;
+  };
+
   const confirmDeleteFamily = (fam) => {
     Alert.alert(
       'Remove Group',
-      `Remove "${fam.name}" and all ${fam.members.length} traveler${fam.members.length !== 1 ? 's' : ''} from this trip?`,
+      `Remove "${fam.name}" and all ${fam.members.length} traveler${fam.members.length !== 1 ? 's' : ''} from this trip?` +
+        reassignNote(fam.members.map(m => m.id), 'This group'),
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -278,7 +297,7 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
   const confirmDeleteMember = (fam, member) => {
     Alert.alert(
       'Remove Traveler',
-      `Remove ${member.name} from ${fam.name}?`,
+      `Remove ${member.name} from ${fam.name}?` + reassignNote([member.id], member.name),
       [
         { text: 'Cancel', style: 'cancel' },
         {

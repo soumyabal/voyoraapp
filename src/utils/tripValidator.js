@@ -337,15 +337,14 @@ export function dayRouteAnchor(trip, i, dayActs = []) {
 
 // ─── Per-day validation ───────────────────────────────────────────
 
-function validateDay(day, dayIndex, families = []) {
-  const warnings = [];
-
+// ─── Per-day rules ─────────────────────────────────────────────────
+// Shared per-day context, built once; each rule reads what it needs from it.
+// (`wd` is the day's weekday — the old wdForFit / venueWd, which were identical.)
+function buildDayContext(day, dayIndex, families) {
   // Sort non-skipped activities by time
   const acts = [...day.activities]
     .filter(a => a.status !== 'skipped')
     .sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
-
-  if (acts.length === 0) return warnings;
 
   // Build timeline with estimated end times
   // Only TIMED stops sit on the timeline. An activity with no time is intentionally
@@ -359,10 +358,35 @@ function validateDay(day, dayIndex, families = []) {
     return { act, startMin, duration, endMin: startMin + duration };
   });
 
-  // ── Rule 0: Doesn't fit this day (unscheduled by the planner) ──
-  // A known-hours, non-seasonal venue the planner left UNSCHEDULED because a packed day
-  // had no open slot during its hours. This is the LOUD, terminal "move it to another
-  // day" signal — never crammed into a wrong slot. (Seasonal/unknown-hours never land here.)
+  const wd = weekdayOf(day.date);
+
+  // Would moving `act` to start at `startMin` run it PAST its closing time? If so, that's
+  // not a real fix — it just re-creates a "closed" problem (the cyclic "move to 19:44" for
+  // a 5 PM venue). When true, the overlap/travel tips drop the closed-time button and say
+  // "move it to another day" instead. Unknown / closed-all-day hours → not guarded here.
+  const wouldCloseBefore = (act, startMin) => {
+    const ivs = dayIntervals(act.openHours, wd);
+    if (!ivs || !ivs.length) return false;
+    return startMin + estimateDuration(act) > ivs[ivs.length - 1].c;
+  };
+
+  // A SHORT "Quick stop" (misc — fuel/rest/errand, ≤45 min) carries an honest, user-set
+  // duration, so a few minutes of overlap with a meal is noise → exempt from estimate-based
+  // overlap/travel tips. A LONGER misc (e.g. a 90 min+ meet-up) still flags a real collision.
+  const isQuietMisc = (a) => a.subtype === 'misc' && estimateDuration(a) <= 45;
+
+  const substantialActs = acts.filter(a => a.type !== 'note' && a.type !== 'stay');
+
+  return { day, dayIndex, families, acts, timeline, wd, wouldCloseBefore, isQuietMisc, substantialActs };
+}
+
+// ── Rule 0: Doesn't fit this day (unscheduled by the planner) ──
+// A known-hours, non-seasonal venue the planner left UNSCHEDULED because a packed day
+// had no open slot during its hours. This is the LOUD, terminal "move it to another
+// day" signal — never crammed into a wrong slot. (Seasonal/unknown-hours never land here.)
+function ruleNoFit(ctx) {
+  const { acts, day, dayIndex } = ctx;
+  const warnings = [];
   acts.forEach(act => {
     if (act.time) return;
     if (act.type !== 'activity' && act.type !== 'food') return;
@@ -381,24 +405,13 @@ function validateDay(day, dayIndex, families = []) {
       verifyUrl: verifyHoursUrl(act), dayIndex, actIds: [act.id],
     });
   });
+  return warnings;
+}
 
-  // Would moving `act` to start at `startMin` run it PAST its closing time? If so, that's
-  // not a real fix — it just re-creates a "closed" problem (the cyclic "move to 19:44" for
-  // a 5 PM venue). When true, the overlap/travel tips drop the closed-time button and say
-  // "move it to another day" instead. Unknown / closed-all-day hours → not guarded here.
-  const wdForFit = weekdayOf(day.date);
-  const wouldCloseBefore = (act, startMin) => {
-    const ivs = dayIntervals(act.openHours, wdForFit);
-    if (!ivs || !ivs.length) return false;
-    return startMin + estimateDuration(act) > ivs[ivs.length - 1].c;
-  };
-
-  // A SHORT "Quick stop" (misc — fuel/rest/errand, ≤45 min) carries an honest, user-set
-  // duration, so a few minutes of overlap with a meal is noise → exempt from estimate-based
-  // overlap/travel tips. A LONGER misc (e.g. a 90 min+ meet-up) still flags a real collision.
-  const isQuietMisc = (a) => a.subtype === 'misc' && estimateDuration(a) <= 45;
-
-  // ── Rule 1: Schedule overlaps ─────────────────────────────────────
+// ── Rule 1: Schedule overlaps ─────────────────────────────────────
+function ruleOverlap(ctx) {
+  const { timeline, isQuietMisc, wouldCloseBefore, wd: wdForFit, dayIndex } = ctx;
+  const warnings = [];
   for (let i = 0; i < timeline.length - 1; i++) {
     const curr = timeline[i];
     const next = timeline[i + 1];
@@ -431,12 +444,17 @@ function validateDay(day, dayIndex, families = []) {
       });
     }
   }
+  return warnings;
+}
 
-  // ── Rule 1b: Not enough travel time between far-apart stops ───────
-  // Distance-aware. Even when two stops don't strictly overlap, if they're far
-  // apart and the next starts before you could realistically get there, flag it.
-  // Pure overlaps are left to Rule 1; this catches "back-to-back but across town".
-  // Uses the free haversine estimate (Phase 2: real routing).
+// ── Rule 1b: Not enough travel time between far-apart stops ───────
+// Distance-aware. Even when two stops don't strictly overlap, if they're far
+// apart and the next starts before you could realistically get there, flag it.
+// Pure overlaps are left to Rule 1; this catches "back-to-back but across town".
+// Uses the free haversine estimate (Phase 2: real routing).
+function ruleTravelTime(ctx) {
+  const { timeline, isQuietMisc, wouldCloseBefore, wd: wdForFit, dayIndex } = ctx;
+  const warnings = [];
   for (let i = 0; i < timeline.length - 1; i++) {
     const curr = timeline[i];
     const next = timeline[i + 1];
@@ -475,10 +493,15 @@ function validateDay(day, dayIndex, families = []) {
       actIds: [curr.act.id, next.act.id],
     });
   }
+  return warnings;
+}
 
-  // ── Rule 2: Full-day venue with too many other activities ─────────
-  // Transport activities are intentionally excluded — long flights are
-  // handled by the trip-level long_journey_conflict rule instead.
+// ── Rule 2: Full-day venue with too many other activities ─────────
+// Transport activities are intentionally excluded — long flights are
+// handled by the trip-level long_journey_conflict rule instead.
+function ruleFullDayVenue(ctx) {
+  const { timeline, acts, dayIndex } = ctx;
+  const warnings = [];
   const fullDayItems = timeline.filter(t => t.duration >= 360 && t.act.type !== 'transport');
   fullDayItems.forEach(({ act }) => {
     const others = acts.filter(a => a.id !== act.id && a.type !== 'note' && a.type !== 'food');
@@ -495,9 +518,13 @@ function validateDay(day, dayIndex, families = []) {
       });
     }
   });
+  return warnings;
+}
 
-  // ── Rule 3: Overpacked day ────────────────────────────────────────
-  const substantialActs = acts.filter(a => a.type !== 'note' && a.type !== 'stay');
+// ── Rule 3: Overpacked day ────────────────────────────────────────
+function rulePacked(ctx) {
+  const { substantialActs, dayIndex } = ctx;
+  const warnings = [];
   if (substantialActs.length >= 8) {
     warnings.push({
       type:     'packed',
@@ -509,11 +536,16 @@ function validateDay(day, dayIndex, families = []) {
       dayIndex,
     });
   }
+  return warnings;
+}
 
-  // ── Rule 3b: Tiring day (hours on your feet) ─────────────────────
-  // The count-based 'packed' rule misses a FEW-but-LONG day — two hikes + a theme
-  // park is only 3 stops but ~13h. Sum the touring-activity hours instead. Soft
-  // 'info' tip; skipped when 'packed' already fires (count >= 8).
+// ── Rule 3b: Tiring day (hours on your feet) ─────────────────────
+// The count-based 'packed' rule misses a FEW-but-LONG day — two hikes + a theme
+// park is only 3 stops but ~13h. Sum the touring-activity hours instead. Soft
+// 'info' tip; skipped when 'packed' already fires (count >= 8).
+function ruleTiringDay(ctx) {
+  const { acts, substantialActs, dayIndex } = ctx;
+  const warnings = [];
   const tourActs     = acts.filter(a => a.type === 'activity' && a.status !== 'skipped');
   const activityMins = tourActs.reduce((s, a) => s + estimateDuration(a), 0);
   if (activityMins > 600 && tourActs.length >= 2 && substantialActs.length < 8) {
@@ -527,10 +559,16 @@ function validateDay(day, dayIndex, families = []) {
       dayIndex,
     });
   }
+  return warnings;
+}
 
-  // Rules 4–6 read the timeline directly; it can be empty when a day holds only
-  // time-less stops (e.g. a check-in stay, or venues left unscheduled by the planner).
-  if (timeline.length) {
+// ── Rules 4–6: timeline-edge checks (no meal / past midnight / early start) ──
+// Read the timeline directly; it can be empty when a day holds only time-less
+// stops (e.g. a check-in stay, or venues left unscheduled by the planner).
+function ruleTimelineEdges(ctx) {
+  const { timeline, acts, substantialActs, dayIndex } = ctx;
+  const warnings = [];
+  if (!timeline.length) return warnings;
   // ── Rule 4: No meal on a long day ────────────────────────────────
   const totalDaySpan = timeline[timeline.length - 1].endMin - timeline[0].startMin;
   const hasMeal = acts.some(a => a.type === 'food');
@@ -576,12 +614,16 @@ function validateDay(day, dayIndex, families = []) {
       actIds:   [firstItem.act.id],
     });
   }
-  }   // end timeline-based rules (4–6)
+  return warnings;
+}
 
-  // ── Rule 8: Multi-day journey (arriveTime crosses midnight) ──────
-  // When a transport activity has arriveTime set and it is earlier in
-  // the clock than departTime, the journey crosses midnight and the
-  // arrival logically belongs on the next day.
+// ── Rule 8: Multi-day journey (arriveTime crosses midnight) ──────
+// When a transport activity has arriveTime set and it is earlier in
+// the clock than departTime, the journey crosses midnight and the
+// arrival logically belongs on the next day.
+function ruleMultiDayJourney(ctx) {
+  const { acts, dayIndex } = ctx;
+  const warnings = [];
   acts.filter(a => a.type === 'transport' && a.arriveTime).forEach(act => {
     const crossesMidnight = act.arriveTime < act.time; // e.g. departs 22:00, arrives 06:00
     if (crossesMidnight) {
@@ -597,11 +639,16 @@ function validateDay(day, dayIndex, families = []) {
       });
     }
   });
+  return warnings;
+}
 
-  // ── Rule 9: Wake time conflict ────────────────────────────────────
-  // 'late' families shouldn't have non-transport activities before 9am.
-  // 'regular' (default) families shouldn't have non-transport before 7am.
-  // 'early' families have no restriction.
+// ── Rule 9: Wake time conflict ────────────────────────────────────
+// 'late' families shouldn't have non-transport activities before 9am.
+// 'regular' (default) families shouldn't have non-transport before 7am.
+// 'early' families have no restriction.
+function ruleWakeTime(ctx) {
+  const { families, timeline, dayIndex } = ctx;
+  const warnings = [];
   if (families.length > 0) {
     const lateFamilies    = families.filter(f => f.wakeTime === 'late').map(f => f.name);
     const regularFamilies = families.filter(f => !f.wakeTime || f.wakeTime === 'regular').map(f => f.name);
@@ -634,7 +681,13 @@ function validateDay(day, dayIndex, families = []) {
     });
   }
 
-  // ── Rule 10: Dietary conflict ─────────────────────────────────────
+  return warnings;
+}
+
+// ── Rule 10: Dietary conflict ─────────────────────────────────────
+function ruleDietary(ctx) {
+  const { families, acts, dayIndex } = ctx;
+  const warnings = [];
   if (families.length > 0) {
     const vegFamilies    = families.filter(f => (f.dietary || []).some(d => d === 'vegetarian' || d === 'vegan')).map(f => f.name);
     const noAlcoFamilies = families.filter(f => (f.dietary || []).includes('no-alcohol')).map(f => f.name);
@@ -667,9 +720,14 @@ function validateDay(day, dayIndex, families = []) {
       }
     });
   }
+  return warnings;
+}
 
-  // ── Rule 11: Duplicate activity (same event added more than once today) ──
-  // Transport (drives, pit stops) can legitimately repeat; notes are free-form.
+// ── Rule 11: Duplicate activity (same event added more than once today) ──
+// Transport (drives, pit stops) can legitimately repeat; notes are free-form.
+function ruleDuplicate(ctx) {
+  const { acts, dayIndex } = ctx;
+  const warnings = [];
   const byName = new Map();
   acts.forEach(a => {
     if (a.type === 'transport' || a.type === 'note') return;
@@ -692,10 +750,15 @@ function validateDay(day, dayIndex, families = []) {
       });
     }
   });
+  return warnings;
+}
 
-  // ── Rule 12: Activities span multiple cities in one day ──
-  // Uses the `city` tag set when a place is added from Discover. Transport is
-  // excluded — the drive between cities is exactly how you'd bridge them.
+// ── Rule 12: Activities span multiple cities in one day ──
+// Uses the `city` tag set when a place is added from Discover. Transport is
+// excluded — the drive between cities is exactly how you'd bridge them.
+function ruleMultiCity(ctx) {
+  const { acts, dayIndex } = ctx;
+  const warnings = [];
   const cityTagged = acts.filter(a => a.city && a.type !== 'transport');
   const distinctCities = [...new Set(cityTagged.map(a => a.city))];
   if (distinctCities.length >= 2) {
@@ -710,10 +773,15 @@ function validateDay(day, dayIndex, families = []) {
       actIds:   cityTagged.map(a => a.id),
     });
   }
+  return warnings;
+}
 
-  // ── Rule 13a: Permanently / temporarily closed (Google businessStatus) ──
-  // A date-INDEPENDENT, high-signal fact — unlike weekly hours it isn't a seasonal
-  // snapshot. Only set on places added from Discover after this shipped.
+// ── Rule 13a: Permanently / temporarily closed (Google businessStatus) ──
+// A date-INDEPENDENT, high-signal fact — unlike weekly hours it isn't a seasonal
+// snapshot. Only set on places added from Discover after this shipped.
+function ruleBusinessStatus(ctx) {
+  const { timeline, dayIndex } = ctx;
+  const warnings = [];
   timeline.forEach(({ act }) => {
     if (act.businessStatus === 'CLOSED_PERMANENTLY') {
       warnings.push({
@@ -733,17 +801,21 @@ function validateDay(day, dayIndex, families = []) {
       });
     }
   });
+  return warnings;
+}
 
-  // ── Rule 13b: Scheduled outside opening hours ──
-  // Opening hours are HARD: a non-seasonal venue scheduled when it's shut is a PROVABLE
-  // conflict (we know the hours, we know the time) → ERROR, so it blocks the green badge
-  // (no false green) and Plan-my-day + Trip Check agree it must move. Confidence tiers:
-  //   · seasonal-prone venue  → never red; soft "verify hours for your dates" tip
-  //     (the snapshot can't see the trip's season — a false "closed" is the worst error)
-  //   · closed that whole weekday, non-seasonal → error ("Closed that day")
-  //   · open that day but scheduled outside the window, non-seasonal → error ("Closed at that time")
-  // Unknown hours stay silent (isOpenAt → null).
-  const venueWd = weekdayOf(day.date);
+// ── Rule 13b: Scheduled outside opening hours ──
+// Opening hours are HARD: a non-seasonal venue scheduled when it's shut is a PROVABLE
+// conflict (we know the hours, we know the time) → ERROR, so it blocks the green badge
+// (no false green) and Plan-my-day + Trip Check agree it must move. Confidence tiers:
+//   · seasonal-prone venue  → never red; soft "verify hours for your dates" tip
+//     (the snapshot can't see the trip's season — a false "closed" is the worst error)
+//   · closed that whole weekday, non-seasonal → error ("Closed that day")
+//   · open that day but scheduled outside the window, non-seasonal → error ("Closed at that time")
+// Unknown hours stay silent (isOpenAt → null).
+function ruleClosedVenue(ctx) {
+  const { timeline, wd: venueWd, dayIndex } = ctx;
+  const warnings = [];
   timeline.forEach(({ act, startMin }) => {
     if (act.type !== 'activity' && act.type !== 'food') return;
     if (act.businessStatus === 'CLOSED_PERMANENTLY' || act.businessStatus === 'CLOSED_TEMPORARILY') return; // 13a covers it
@@ -774,7 +846,34 @@ function validateDay(day, dayIndex, families = []) {
     }
     warnings.push({ type: 'closed_venue', ...warning, verifyUrl: verifyHoursUrl(act), dayIndex, actIds: [act.id] });
   });
+  return warnings;
+}
 
+// Ordered registry of per-day rules. validateDay builds the shared context once,
+// then runs these in this exact order — the warning array order is load-bearing
+// (the golden snapshot pins it).
+const DAY_RULES = [
+  ruleNoFit,
+  ruleOverlap,
+  ruleTravelTime,
+  ruleFullDayVenue,
+  rulePacked,
+  ruleTiringDay,
+  ruleTimelineEdges,
+  ruleMultiDayJourney,
+  ruleWakeTime,
+  ruleDietary,
+  ruleDuplicate,
+  ruleMultiCity,
+  ruleBusinessStatus,
+  ruleClosedVenue,
+];
+
+function validateDay(day, dayIndex, families = []) {
+  const ctx = buildDayContext(day, dayIndex, families);
+  if (ctx.acts.length === 0) return [];
+  const warnings = [];
+  DAY_RULES.forEach(rule => warnings.push(...rule(ctx)));
   return warnings;
 }
 

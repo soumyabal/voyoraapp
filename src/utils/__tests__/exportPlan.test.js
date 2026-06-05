@@ -64,13 +64,15 @@ describe('buildHTML (full-trip PDF)', () => {
 describe('buildDayHTML (day PDF)', () => {
   const html = buildDayHTML(trip, trip.days[0], 0);
 
-  test('day hero + vibe + tappable addresses + day-route link', () => {
+  test('day hero + vibe + plain addresses + VISIBLE day-route URL', () => {
     expect(html).toContain('class="cover"');
     expect(html).toContain('Day 1');
-    expect(html).toContain('class="cover-tag"');           // the vibe one-liner
-    expect(html).toContain('maps/dir/');                   // path-style day-route link
-    expect(html).toContain('maps/search/?api=1&query=');   // per-address place link
-    expect(html).toContain('1 Beach Rd');
+    expect(html).toContain('class="cover-tag"');     // the vibe one-liner
+    expect(html).toContain('class="route-box"');     // route link box
+    expect(html).toContain('class="route-url"');     // url shown as visible text
+    expect(html).toMatch(/route-url[^>]*>https:\/\/www\.google\.com\/maps\/dir\//); // the URL is the link TEXT
+    expect(html).toContain('1 Beach Rd');            // address as plain text
+    expect(html).not.toContain('maps/search/?api=1&query='); // no per-address anchors
   });
 
   test('NO key leak in a shared file', () => noLeak(html));

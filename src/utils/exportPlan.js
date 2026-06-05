@@ -10,7 +10,7 @@
 
 import { Alert } from 'react-native';
 import { getAllMembers, fmt, fmtM } from './helpers';
-import { googleMapsDayShareUrl, googleMapsPlaceUrl } from './mapsRoute';
+import { googleMapsDayShareUrl } from './mapsRoute';
 import { APP_NAME } from '../config';
 
 // ─── Activity type metadata ───────────────────────────────────────────────────
@@ -390,11 +390,8 @@ function escHtml(str) {
 export function buildDayHTML(trip, day, dayIndex) {
   const dayCost = (day.activities || []).reduce((s, a) => s + (a.costPerPerson || 0), 0);
   const oneLine = (s) => String(s || '').replace(/\s+/g, ' ').trim();
-  // Real tappable links work in a PDF: each address opens THAT place, and one
-  // link opens the whole day's route. (Plain-text share can't do per-address taps.)
-  const placeHref = (a) =>
-    googleMapsPlaceUrl(a.lat, a.lng)
-    || (a.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(oneLine(a.address))}` : null);
+  // expo-print drops <a> link annotations, so addresses are plain text and the
+  // ONE day-route link is rendered as a visible (copyable / auto-linkified) URL.
   const routeUrl = googleMapsDayShareUrl(trip, dayIndex);
 
   const css = `
@@ -421,7 +418,11 @@ export function buildDayHTML(trip, day, dayIndex) {
     .act-addr  { font-size: 10px; color: #9ca3af; margin-top: 2px; }
     .act-addr a { color: #6366f1; text-decoration: none; }
     .act-cost  { font-size: 12px; font-weight: 700; color: #374151; white-space: nowrap; flex-shrink: 0; }
-    .route-link { display: inline-block; margin: 0 0 14px; font-size: 12px; font-weight: 700; color: #6366f1; text-decoration: none; background: #ede9fe; padding: 6px 14px; border-radius: 20px; }
+    /* Route link shown as a VISIBLE url — expo-print drops <a> link annotations,
+       so a raw URL is what PDF viewers auto-linkify / users can copy. */
+    .route-box   { background: #ede9fe; border-radius: 8px; padding: 10px 12px; margin: 0 0 14px; }
+    .route-label { font-size: 12px; font-weight: 700; color: #6366f1; margin-bottom: 3px; }
+    .route-url   { font-size: 10px; color: #4f46e5; word-break: break-all; text-decoration: none; }
     .summary   { background: #f3f4f6; border-radius: 8px; padding: 12px 16px; margin-top: 16px; display: flex; justify-content: space-between; align-items: center; }
     .sum-label { font-size: 10px; color: #6b7280; font-weight: 700; text-transform: uppercase; }
     .sum-val   { font-size: 18px; font-weight: 800; color: #1a1a2e; }
@@ -459,7 +460,7 @@ export function buildDayHTML(trip, day, dayIndex) {
             <div class="act-body">
               <div class="act-name">${icon} ${escHtml(act.name)}</div>
               ${act.detail ? `<div class="act-detail">${escHtml(act.detail)}</div>` : ''}
-              ${act.address ? `<div class="act-addr">📍 ${placeHref(act) ? `<a href="${placeHref(act)}">${escHtml(oneLine(act.address))}</a>` : escHtml(oneLine(act.address))}</div>` : ''}
+              ${act.address ? `<div class="act-addr">📍 ${escHtml(oneLine(act.address))}</div>` : ''}
             </div>
             ${act.costPerPerson > 0 ? `<div class="act-cost">$${act.costPerPerson}/p</div>` : ''}
           </div>`;
@@ -497,7 +498,7 @@ export function buildDayHTML(trip, day, dayIndex) {
     <div class="cover-tag">${escHtml(dayVibe(day))}</div>
   </div>
   <div class="pad">
-  ${routeUrl ? `<a class="route-link" href="${routeUrl}">🗺️ Open this day's route in Google Maps</a>` : ''}
+  ${routeUrl ? `<div class="route-box"><div class="route-label">🗺️ Open this day's route in Google Maps</div><a class="route-url" href="${routeUrl}">${escHtml(routeUrl)}</a></div>` : ''}
   <div class="families">${familiesHTML}</div>
   <div class="divider"></div>
   ${activitiesHTML || '<p style="color:#9ca3af;font-size:12px;">No activities planned.</p>'}

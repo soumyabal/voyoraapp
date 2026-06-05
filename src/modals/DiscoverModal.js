@@ -14,7 +14,8 @@ import useStore from '../store';
 import { uid, getAllMembers, defaultNightsFor } from '../utils/helpers';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
-import { weekdayOf, hoursLabel, weeklyHoursLabel, compactHours } from '../utils/hours';
+import { weekdayOf, hoursLabel, weeklyHoursLabel } from '../utils/hours';
+import { mapPlace, metersBetween } from '../utils/discoverPlaces';
 import { qualityScore } from '../utils/placeScore';
 import { reverseGeocode, refreshPhotoKey } from '../utils/places';
 import { bookingUrl } from '../utils/booking';
@@ -127,43 +128,8 @@ function Chip({ label, active, activeStyle, activeTextStyle, onPress }) {
     </TouchableOpacity>
   );
 }
-const VEG_NAME_RE = /vegetarian|vegan|veggie|plant.based|organic|salad|juice|smoothie|falafel/i;
-const VEG_TYPES   = new Set(['cafe','bakery','juice_bar','health','natural_goods']);
-function isVegFriendly(place) {
-  if (VEG_NAME_RE.test(place.name)) return true;
-  return (place.types || []).some(t => VEG_TYPES.has(t));
-}
-
-const PRICE_TO_COST = {
-  PRICE_LEVEL_FREE:0,PRICE_LEVEL_INEXPENSIVE:15,PRICE_LEVEL_MODERATE:35,
-  PRICE_LEVEL_EXPENSIVE:75,PRICE_LEVEL_VERY_EXPENSIVE:150,
-};
-function inferActivityType(types = []) {
-  // Lodging WINS over food: a resort/hotel almost always also lists 'restaurant'/'food'
-  // for its in-house dining (Great Wolf Lodge's types include resort_hotel AND restaurant
-  // AND food). Checking food first mis-filed it as a restaurant, so the Stay layer hid it.
-  if (types.some(t => ['lodging','hotel','resort_hotel','motel','guest_house','bed_and_breakfast','campground','rv_park'].includes(t))) return 'stay';
-  if (types.some(t => ['restaurant','food','meal_takeaway','bakery','cafe','coffee_shop','bar'].includes(t))) return 'food';
-  return 'activity';
-}
-
-// Great-circle distance in metres — used to drop area-search outliers (Google's
-// locationBias is a hint, not a hard radius, so it can return far-off results).
-function metersBetween(a, b) {
-  const R = 6371000, toRad = x => (x * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
 const PLACES_URL = 'https://places.googleapis.com/v1/places:searchText';
 const FIELD_MASK = ['nextPageToken','places.displayName','places.formattedAddress','places.rating','places.userRatingCount','places.priceLevel','places.types','places.accessibilityOptions','places.websiteUri','places.location','places.photos','places.regularOpeningHours','places.businessStatus'].join(',');
-
-// Google Place Photos: a photo resource name → image URL (billed per fetch).
-const photoUrl = name => `https://places.googleapis.com/v1/${name}/media?maxWidthPx=640&maxHeightPx=420&key=${GOOGLE_PLACES_API_KEY}`;
-
-// compactHours (Google regularOpeningHours.periods → [{d,o,c}]) now lives in utils/hours
-// (shared + unit-tested) and correctly expands 24/7 (no-close) periods to all seven days.
 
 // Discover ranks by QUALITY only — `qualityScore` (../utils/placeScore): rating +
 // damped popularity, so a 5.0 with 3 reviews can't outrank a proven 4.7 with thousands.
@@ -171,22 +137,7 @@ const photoUrl = name => `https://places.googleapis.com/v1/${name}/media?maxWidt
 // see every well-rated place and filter for themselves (the dietary chips are opt-in).
 // Profile-aware group-fit (accessibility ♿, kids, dietary, interests, budget) still
 // lives in `scorePlace` for the AI pipeline — Discover just doesn't pre-apply it.
-
-function mapPlace(p) {
-  const place = {
-    name:p.displayName?.text??'Place', address:p.formattedAddress??'',
-    rating:p.rating??null, ratingCount:p.userRatingCount??0,
-    costPerPerson:PRICE_TO_COST[p.priceLevel]??0, priceLevel:p.priceLevel??null, types:p.types??[],
-    activityType:inferActivityType(p.types??[]),
-    wheelchairOk:p.accessibilityOptions?.wheelchairAccessibleEntrance??null,
-    url:p.websiteUri??'', lat:p.location?.latitude??null, lng:p.location?.longitude??null,
-    photo:p.photos?.[0]?.name ? photoUrl(p.photos[0].name) : null,
-    openHours:compactHours(p.regularOpeningHours),
-    businessStatus:p.businessStatus??null,   // OPERATIONAL | CLOSED_TEMPORARILY | CLOSED_PERMANENTLY
-  };
-  place.vegFriendly = isVegFriendly(place);
-  return place;
-}
+// mapPlace / inferActivityType / metersBetween / PRICE_TO_COST now live in utils/discoverPlaces.
 
 // Text Search (New) returns max 20 per page; follow `nextPageToken` for up to
 // `pages` pages (≤60 places). Surfaces MORE top attractions — the See layer was

@@ -129,3 +129,66 @@ describe('updateExpenseCustomShares — partial updates do not clobber', () => {
     expect(e.customShares).toEqual({ x: 1, y: 2 });               // shares untouched
   });
 });
+
+describe('moveActivity — keeps the expense link across days', () => {
+  test('moves the activity, preserves activityId; no-op when from === to', () => {
+    const t = makeTrip();
+    addDinner(t.id, 10);
+    const actId = firstActId(t.id);
+    const expId = tripById(t.id).expenses[0].id;
+    S().moveActivity(t.id, 0, 1, actId);
+    let t2 = tripById(t.id);
+    expect(t2.days[0].activities).toHaveLength(0);
+    expect(t2.days[1].activities.find(a => a.id === actId)).toBeTruthy();
+    expect(t2.expenses.find(e => e.id === expId).activityId).toBe(actId); // link intact
+    S().moveActivity(t.id, 1, 1, actId);                                  // no-op
+    expect(tripById(t.id).days[1].activities.find(a => a.id === actId)).toBeTruthy();
+  });
+});
+
+describe('applyArrangedActivities — append-only merge, strips draft fields', () => {
+  test('appends to days without overwriting, strips _draftId/_source, funds costed', () => {
+    const t = makeTrip();
+    addDinner(t.id, 10); // itineraryPushed = true; day 0 has Dinner
+    S().applyArrangedActivities(t.id, [
+      [],
+      [{ name: 'Museum', type: 'activity', time: '10:00', costPerPerson: 5, _draftId: 'd1', _source: 'discover' }],
+      [],
+    ]);
+    const t2 = tripById(t.id);
+    expect(t2.days[0].activities.find(a => a.name === 'Dinner')).toBeTruthy(); // untouched
+    const museum = t2.days[1].activities.find(a => a.name === 'Museum');
+    expect(museum).toBeTruthy();
+    expect(museum.id).toBeTruthy();
+    expect(museum._draftId).toBeUndefined();
+    expect(museum._source).toBeUndefined();
+    expect(t2.expenses.find(e => e.activityId === museum.id)).toBeTruthy(); // costed → funded
+  });
+});
+
+describe('applyPlannedActivities — budget attachment', () => {
+  test('with ._budget → populates expenses/budgetByFamily/agentMeta + marks pushed', () => {
+    const t = makeTrip();
+    const dayActivities = [[{ name: 'Check-in', type: 'stay', time: '15:00' }], [], []];
+    dayActivities._budget = {
+      expenses: [{ id: 'be1', name: 'Hotel', amount: 200, estimatedAmount: 200, source: 'itinerary', participatingFamilies: [], participatingMembers: null, excluded: false }],
+      budgetByFamily: [{ famId: 'x', total: 200 }],
+      meta: { ran: true },
+    };
+    S().applyPlannedActivities(t.id, dayActivities);
+    const t2 = tripById(t.id);
+    expect(t2.itineraryPushed).toBe(true);
+    expect(t2.expenses.find(e => e.name === 'Hotel')).toBeTruthy();
+    expect(t2.budgetByFamily).toEqual([{ famId: 'x', total: 200 }]);
+    expect(t2.agentMeta).toEqual({ ran: true });
+    expect(t2.days[0].activities[0].id).toBeTruthy(); // id assigned
+  });
+
+  test('without ._budget → writes days only, does not mark pushed', () => {
+    const t = makeTrip();
+    S().applyPlannedActivities(t.id, [[{ name: 'Walk', type: 'activity' }], [], []]);
+    const t2 = tripById(t.id);
+    expect(t2.days[0].activities[0].name).toBe('Walk');
+    expect(t2.itineraryPushed).toBe(false);
+  });
+});

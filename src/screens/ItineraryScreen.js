@@ -8,7 +8,7 @@ import PlayTripModal from '../modals/PlayTripModal';
 import { colors, spacing, radius, typography, shadow, activityColors, activityIcons } from '../theme';
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
-import { fmt, fmtM, getActivityIcon, uid, tripPhase, defaultDayFor, daysBetweenISO, todayISO, nowNextOf } from '../utils/helpers';
+import { fmt, fmtM, getActivityIcon, uid, tripPhase, defaultDayFor, todayISO, nowNextOf } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost, calcFamilyBalances } from '../utils/costs';
 import { summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
@@ -21,6 +21,7 @@ import { getDietaryWarning } from '../utils/dietary';
 import { generateDayShareText } from '../utils/dayShare';
 import { computeTripHealth } from '../utils/tripHealth';
 import { tripCheckStatus } from '../utils/tripCheckStatus';
+import { buildStatusPill } from '../utils/tripStatus';
 import { bookingUrl } from '../utils/booking';
 import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
@@ -470,15 +471,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   // by the status pill and the phase-aware day chips.
   const phase    = tripPhase(trip);
   const todayIdx = phase === 'active' ? defaultDayFor(trip) : -1;
-  const statusPill = (() => {
-    if (phase === 'upcoming') {
-      const n = daysBetweenISO(todayISO(), trip.startDate);
-      return { tone: 'upcoming', text: n <= 0 ? '📅 Starts today' : n === 1 ? '📅 Tomorrow' : `📅 In ${n} days` };
-    }
-    if (phase === 'active') return { tone: 'active', text: `🟢 Day ${todayIdx + 1} of ${trip.days.length} · today` };
-    if (phase === 'past')   return { tone: 'past', text: '✓ Trip complete' };
-    return null;
-  })();
+  const statusPill = buildStatusPill(trip, phase, todayIdx, todayISO());
   // Live-trip "Today" lens: are we viewing today, and what's now/next.
   const isToday = phase === 'active' && currentDay === todayIdx;
   const nowMin  = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();

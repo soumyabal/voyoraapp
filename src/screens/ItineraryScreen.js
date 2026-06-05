@@ -17,7 +17,6 @@ import { scheduleDay, planDay, returnJourneyDraft, suggestDayForVenue } from '..
 import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, hoursLabel, weeklyHoursLabel, dayIntervals } from '../utils/hours';
 import { getSuggestedTime, minToTime } from '../utils/slots';
-import { fetchPlacePhoto } from '../utils/places';
 import { bookingUrl } from '../utils/booking';
 import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
@@ -524,7 +523,7 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
 }
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
-  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, setActivityPhoto, markPlanDayNoteSeen, setNightPlan, toggleActivityLock, ignoreWarning } = useStore();
+  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, markPlanDayNoteSeen, setNightPlan, toggleActivityLock, ignoreWarning } = useStore();
   const [showPlayTrip,          setShowPlayTrip]          = useState(false);
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
@@ -594,18 +593,12 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   // Backfill place photos for this day's stops that don't have one yet (added
   // before we stored photos / via the AI planner), so the cards show a thumbnail.
   // One cached Places lookup per place; guarded so we never refetch.
-  const photoTriedRef = useRef(new Set());
-  useEffect(() => {
-    (day?.activities || []).forEach(act => {
-      if (act.photo || act.lat == null || act.lng == null) return;
-      if (act.type !== 'activity' && act.type !== 'food' && act.type !== 'stay') return;
-      if (photoTriedRef.current.has(act.id)) return;
-      photoTriedRef.current.add(act.id);
-      fetchPlacePhoto(act.name, act.lat, act.lng)
-        .then(photo => { if (photo) setActivityPhoto(trip.id, act.id, photo); })
-        .catch(() => {});
-    });
-  }, [trip.id, currentDay, day?.activities?.length]);
+  // NOTE: per-stop place-photo backfill was removed to stop recurring Google
+  // Places API spend (each stored photo URL re-billed on every render, and
+  // photoless stops re-ran a Text Search every session). Itinerary cards fall
+  // back to type icons. A future, ToS-aligned option is a short-lived (≤30-day)
+  // attributed in-app cache — never embedded into shared exports. (git history
+  // has the original backfill if we revisit.)
 
   // Trip Check warnings for THIS day — surfaced inline so "arrange → see what's
   // still off" is one glance. Memoised so validateTrip doesn't run every render.

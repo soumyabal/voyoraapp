@@ -33,9 +33,55 @@ const ACT_ICONS = {
 
 const CAT_ICONS = { '🏨': '🏨', '✈️': '✈️', '🍽️': '🍽️', '🎯': '🎯' };
 
+// ─── Motivating copy (rule-derived — no AI, no API) ───────────────────────────
+
+/** Whole days until the trip starts (null if no date). Negative = already begun. */
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = new Date(dateStr + 'T00:00:00');
+  return Math.round((start - today) / 86400000);
+}
+
+/** A warm countdown line for the cover. */
+function countdownLine(trip) {
+  const n = daysUntil(trip.startDate);
+  if (n == null) return '';
+  if (n > 1)  return `in ${n} days`;
+  if (n === 1) return 'tomorrow!';
+  if (n === 0) return 'today — have the best time';
+  return 'the adventure is underway';
+}
+
+/** Cover tagline, built from real trip facts (family-trip tone, not hype). */
+function coverTagline(trip) {
+  const days  = trip.days?.length || 0;
+  const fams  = trip.families?.length || 0;
+  const place = (trip.destination || '').split(',')[0].trim();
+  const dLabel = `${days} day${days !== 1 ? 's' : ''}`;
+  if (fams >= 2 && place) return `${dLabel}, ${fams} families, one ${place} adventure.`;
+  if (place)              return `${dLabel} in ${place}. Let’s go.`;
+  return 'The plan’s done. Now the fun part — going.';
+}
+
+/** A one-line vibe for a day, from its activity mix. Deterministic. */
+function dayVibe(day) {
+  const acts = (day.activities || []).filter(a => a.status !== 'skipped');
+  if (!acts.length) return 'An open day — leave room to wander, or add one thing you’d hate to miss.';
+  const transport = acts.filter(a => a.type === 'transport').length;
+  const food      = acts.filter(a => a.type === 'food').length;
+  const activity  = acts.filter(a => a.type === 'activity').length;
+  const hasStay   = acts.some(a => a.type === 'stay');
+  if (hasStay && transport) return 'Arrival day — land, settle in, and let it start slow. 🌅';
+  if (transport && acts.length <= 2) return 'A travel day — snacks packed, playlist ready. 🚗';
+  if (activity >= 4 || acts.length >= 6) return 'A full one today — pace yourselves and soak it in.';
+  if (food >= 2 && activity <= 1) return 'A day to eat your way around. 🍽️';
+  return 'A good mix today — a little to see, a little to savour.';
+}
+
 // ─── HTML builder ─────────────────────────────────────────────────────────────
 
-function buildHTML(trip, travelers = []) {
+export function buildHTML(trip, travelers = []) {
   const allMembers   = getAllMembers(trip);
   const totalDays    = trip.days?.length || 0;
   const totalActs    = trip.days?.flatMap(d => d.activities).length || 0;
@@ -46,18 +92,20 @@ function buildHTML(trip, travelers = []) {
   // ── CSS ────────────────────────────────────────────────────────────────────
   const css = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; font-size: 13px; }
-    .page { max-width: 800px; margin: 0 auto; padding: 32px; }
+    /* print-color-adjust: keep hero/table/pill backgrounds when rendered to PDF */
+    body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; font-size: 13px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { max-width: 800px; margin: 0 auto; padding: 0 0 32px; }
+    .pad { padding: 22px 32px 0; }
 
-    /* Header */
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; padding-bottom: 20px; border-bottom: 2px solid #e5e7eb; }
-    .header-left { flex: 1; }
-    .brand { font-size: 11px; font-weight: 700; color: #6b7280; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; }
-    .trip-title { font-size: 28px; font-weight: 800; color: #1a1a2e; margin-bottom: 4px; }
-    .trip-dest  { font-size: 14px; color: #6366f1; font-weight: 600; margin-bottom: 8px; }
-    .trip-meta  { font-size: 12px; color: #6b7280; }
-    .header-right { text-align: right; }
-    .generated { font-size: 10px; color: #9ca3af; }
+    /* Cover hero — rich trip color (solid fallback + gradient where it renders) */
+    .cover { color: #fff; padding: 40px 32px 30px; background-color: #6366f1; background-image: linear-gradient(135deg, var(--c1), var(--c2)); }
+    .cover-emoji { font-size: 52px; line-height: 1; margin-bottom: 10px; }
+    .cover-brand { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.85; margin-bottom: 6px; }
+    .cover-title { font-size: 34px; font-weight: 800; line-height: 1.1; margin-bottom: 8px; }
+    .cover-dest  { font-size: 15px; font-weight: 600; opacity: 0.95; margin-bottom: 4px; }
+    .cover-dates { font-size: 13px; opacity: 0.9; }
+    .cover-pill  { display: inline-block; margin-top: 14px; background: rgba(255,255,255,0.20); border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 700; }
+    .cover-tag   { margin-top: 14px; font-size: 14px; font-style: italic; opacity: 0.95; }
 
     /* Summary row */
     .summary { display: flex; gap: 12px; margin-bottom: 24px; }
@@ -112,6 +160,11 @@ function buildHTML(trip, travelers = []) {
     /* Footer */
     .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 10px; color: #9ca3af; display: flex; justify-content: space-between; }
     .footer-brand { color: #6366f1; font-weight: 700; }
+
+    /* Excitement extras */
+    .moat-intro { font-size: 12px; color: #6b7280; line-height: 1.5; margin: 2px 0 12px; }
+    .day-vibe   { font-size: 11px; color: #6366f1; font-style: italic; margin: 2px 0 8px; }
+    .closing    { text-align: center; font-size: 14px; font-weight: 700; color: #6366f1; margin: 30px 0 6px; }
   `;
 
   // ── Families HTML ──────────────────────────────────────────────────────────
@@ -160,6 +213,7 @@ function buildHTML(trip, travelers = []) {
           ${day.date ? `<span class="day-date">${fmt(day.date)}</span>` : ''}
           ${dayCost > 0 ? `<span class="day-cost">${fmtM(dayCost)}/person</span>` : ''}
         </div>
+        <div class="day-vibe">${escHtml(dayVibe(day))}</div>
         ${activitiesHTML}
       </div>`;
   }).join('');
@@ -184,7 +238,8 @@ function buildHTML(trip, travelers = []) {
     const grandTotal = trip.budgetByFamily.reduce((s, fb) => s + (fb.total || 0), 0);
 
     budgetHTML = `
-      <div class="section-title">Budget breakdown by family</div>
+      <div class="section-title">💰 What each family pays</div>
+      <p class="moat-intro">The part no other planner does: everyone pays their fair share — hotels by rooms × nights per family, the rest by headcount. Never just averaged.</p>
       <table class="budget-table">
         <thead>
           <tr>
@@ -237,6 +292,8 @@ function buildHTML(trip, travelers = []) {
 
   // ── Full HTML ──────────────────────────────────────────────────────────────
   const now = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const [c1, c2] = Array.isArray(trip.bgColors) && trip.bgColors.length >= 2
+    ? trip.bgColors : ['#6366f1', '#8b5cf6'];
 
   return `<!DOCTYPE html>
 <html>
@@ -247,24 +304,20 @@ function buildHTML(trip, travelers = []) {
   <style>${css}</style>
 </head>
 <body>
-<div class="page">
+<div class="page" style="--c1:${c1};--c2:${c2};">
 
-  <!-- Header -->
-  <div class="header">
-    <div class="header-left">
-      <div class="brand">${APP_NAME} · Trip Plan</div>
-      <div class="trip-title">${escHtml(trip.emoji || '✈️')} ${escHtml(trip.name)}</div>
-      <div class="trip-dest">📍 ${escHtml(trip.destination)}</div>
-      <div class="trip-meta">
-        📅 ${fmt(trip.startDate)} – ${fmt(trip.endDate)} · ${totalDays} day${totalDays !== 1 ? 's' : ''}
-        &nbsp;·&nbsp;
-        👥 ${allMembers.length} traveller${allMembers.length !== 1 ? 's' : ''} · ${trip.families.length} group${trip.families.length !== 1 ? 's' : ''}
-      </div>
-    </div>
-    <div class="header-right">
-      <div class="generated">Generated ${now}</div>
-    </div>
+  <!-- Cover hero -->
+  <div class="cover" style="background-color:${c1};background-image:linear-gradient(135deg,${c1},${c2});">
+    <div class="cover-emoji">${escHtml(trip.emoji || '✈️')}</div>
+    <div class="cover-brand">${APP_NAME} · Trip Plan</div>
+    <div class="cover-title">${escHtml(trip.name)}</div>
+    <div class="cover-dest">📍 ${escHtml(trip.destination)}</div>
+    <div class="cover-dates">📅 ${fmt(trip.startDate)} – ${fmt(trip.endDate)} · ${totalDays} day${totalDays !== 1 ? 's' : ''} · 👥 ${allMembers.length} traveller${allMembers.length !== 1 ? 's' : ''} · ${trip.families.length} group${trip.families.length !== 1 ? 's' : ''}</div>
+    ${countdownLine(trip) ? `<div class="cover-pill">✦ ${escHtml(countdownLine(trip))} ✦</div>` : ''}
+    <div class="cover-tag">${escHtml(coverTagline(trip))}</div>
   </div>
+
+  <div class="pad">
 
   <!-- Summary row -->
   <div class="summary">
@@ -305,6 +358,8 @@ function buildHTML(trip, travelers = []) {
   <!-- Expenses -->
   ${expensesHTML}
 
+  <div class="closing">Made for your crew with ${APP_NAME}. Now go make the stories. ✨</div>
+
   <!-- Footer -->
   <div class="footer">
     <div>
@@ -313,6 +368,7 @@ function buildHTML(trip, travelers = []) {
     <div>${escHtml(trip.name)} · ${fmt(trip.startDate)} – ${fmt(trip.endDate)}</div>
   </div>
 
+  </div>
 </div>
 </body>
 </html>`;
@@ -331,7 +387,7 @@ function escHtml(str) {
 
 // ─── Per-day HTML builder ─────────────────────────────────────────────────────
 
-function buildDayHTML(trip, day, dayIndex) {
+export function buildDayHTML(trip, day, dayIndex) {
   const dayCost = (day.activities || []).reduce((s, a) => s + (a.costPerPerson || 0), 0);
   const oneLine = (s) => String(s || '').replace(/\s+/g, ' ').trim();
   // Real tappable links work in a PDF: each address opens THAT place, and one
@@ -343,11 +399,14 @@ function buildDayHTML(trip, day, dayIndex) {
 
   const css = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; font-size: 13px; }
-    .page { max-width: 600px; margin: 0 auto; padding: 28px; }
-    .brand { font-size: 10px; font-weight: 700; color: #6b7280; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 4px; }
-    .day-title { font-size: 22px; font-weight: 800; color: #1a1a2e; margin-bottom: 2px; }
-    .day-meta  { font-size: 12px; color: #6b7280; margin-bottom: 16px; }
+    body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; font-size: 13px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { max-width: 600px; margin: 0 auto; padding: 0 0 24px; }
+    .pad  { padding: 0 28px; }
+    .cover { color: #fff; padding: 26px 28px 22px; background-color: #6366f1; background-image: linear-gradient(135deg, var(--c1), var(--c2)); margin-bottom: 16px; }
+    .cover-brand { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.85; margin-bottom: 6px; }
+    .day-title { font-size: 24px; font-weight: 800; margin-bottom: 3px; }
+    .day-meta  { font-size: 12px; opacity: 0.92; }
+    .cover-tag { margin-top: 10px; font-size: 13px; font-style: italic; opacity: 0.95; }
     .families  { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
     .fam-tag   { border-radius: 20px; padding: 4px 12px; font-size: 11px; font-weight: 700; border-left: 3px solid; }
     .diet-tag  { font-size: 10px; color: #6b7280; margin-top: 2px; }
@@ -418,6 +477,8 @@ function buildDayHTML(trip, day, dayIndex) {
   }).join('');
 
   const now = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const [c1, c2] = Array.isArray(trip.bgColors) && trip.bgColors.length >= 2
+    ? trip.bgColors : ['#6366f1', '#8b5cf6'];
 
   return `<!DOCTYPE html>
 <html>
@@ -428,10 +489,14 @@ function buildDayHTML(trip, day, dayIndex) {
   <style>${css}</style>
 </head>
 <body>
-<div class="page">
-  <div class="brand">${APP_NAME} · ${escHtml(trip.name)}</div>
-  <div class="day-title">${escHtml(day.label)}</div>
-  <div class="day-meta">📅 ${fmt(day.date)} · 📍 ${escHtml(trip.destination)}</div>
+<div class="page" style="--c1:${c1};--c2:${c2};">
+  <div class="cover" style="background-color:${c1};background-image:linear-gradient(135deg,${c1},${c2});">
+    <div class="cover-brand">${APP_NAME} · ${escHtml(trip.name)}</div>
+    <div class="day-title">${escHtml(day.label)}</div>
+    <div class="day-meta">📅 ${fmt(day.date)} · 📍 ${escHtml(trip.destination)}</div>
+    <div class="cover-tag">${escHtml(dayVibe(day))}</div>
+  </div>
+  <div class="pad">
   ${routeUrl ? `<a class="route-link" href="${routeUrl}">🗺️ Open this day's route in Google Maps</a>` : ''}
   <div class="families">${familiesHTML}</div>
   <div class="divider"></div>
@@ -445,7 +510,8 @@ function buildDayHTML(trip, day, dayIndex) {
       <div class="sum-label">${(day.activities || []).length} activities</div>
     </div>
   </div>
-  <div class="footer">Generated ${now} · ${APP_NAME} multi-family travel planner</div>
+  <div class="footer">Generated ${now} · ${APP_NAME} multi-family travel planner · Now go make the stories ✨</div>
+  </div>
 </div>
 </body>
 </html>`;

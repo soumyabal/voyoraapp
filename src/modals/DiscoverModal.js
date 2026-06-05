@@ -15,9 +15,8 @@ import { uid, getAllMembers, defaultNightsFor } from '../utils/helpers';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
 import { weekdayOf, hoursLabel, compactHours } from '../utils/hours';
-import { scorePlace } from '../utils/placeScore';
+import { qualityScore } from '../utils/placeScore';
 import { reverseGeocode } from '../utils/places';
-import { run as buildGroupProfile } from '../agents/FamilyProfileAgent';
 import { WebView } from 'react-native-webview';
 import Icon from '../components/ui/Icon';
 
@@ -114,10 +113,12 @@ const photoUrl = name => `https://places.googleapis.com/v1/${name}/media?maxWidt
 // compactHours (Google regularOpeningHours.periods → [{d,o,c}]) now lives in utils/hours
 // (shared + unit-tested) and correctly expands 24/7 (no-close) periods to all seven days.
 
-// Ranking now uses the shared deterministic kernel `scorePlace` (../utils/placeScore):
-// base quality (rating + damped popularity) PLUS group-fit (accessibility ♿, kids,
-// dietary, interests, budget) when a group profile is available. Distance is left
-// to the map. Same scorer the AI pipeline will use — "one engine ranks."
+// Discover ranks by QUALITY only — `qualityScore` (../utils/placeScore): rating +
+// damped popularity, so a 5.0 with 3 reviews can't outrank a proven 4.7 with thousands.
+// It is deliberately NOT personalised by the traveler profile here: testers expect to
+// see every well-rated place and filter for themselves (the dietary chips are opt-in).
+// Profile-aware group-fit (accessibility ♿, kids, dietary, interests, budget) still
+// lives in `scorePlace` for the AI pipeline — Discover just doesn't pre-apply it.
 
 function mapPlace(p) {
   const place = {
@@ -466,13 +467,6 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   // Read the LIVE trip from the store so "added" (grey + ✓) and "seen" (grey)
   // always reflect the real plan, reactively — no stale snapshot to wipe on open.
   const liveTrip   = useStore(s => s.trips.find(t => t.id === trip?.id)) || trip;
-  const travelers  = useStore(s => s.travelers);
-  // Group profile (♿/kids/dietary/interests/budget) → feeds scorePlace so Discover
-  // ranks by group-fit, not just quality. Pure derive, memoised on the live trip.
-  const groupProfile = React.useMemo(
-    () => (liveTrip ? buildGroupProfile(liveTrip, travelers || []) : null),
-    [liveTrip, travelers],
-  );
   const seenNames  = new Set(liveTrip?.seenPlaces || []);
   const addedNames = new Set((liveTrip?.days || []).flatMap(d => (d.activities || []).map(a => a.name)));
   // Weekday of the day we're adding to → show each place's hours for that day.
@@ -512,14 +506,15 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const reqSeq        = useRef(0);   // monotonic: only the LATEST loadScope may write results (no stale-wins)
 
   const destination   = trip?.destination ?? '';
-  const families      = trip?.families ?? [];
-  const allDietary    = families.flatMap(f => f.dietary || []);  // seeds the dietary filter chips below
 
   // Merged, layer-filtered results feeding the list, carousel and map. Free-text
   // mode searches across all types then filters by enabled layers; default mode
-  // concatenates each enabled layer's results (deduped). Both rank by placeScore —
-  // quality + popularity (footfall), so a 5.0 with 3 reviews doesn't outrank a
-  // proven 4.7 with thousands.
+  // concatenates each enabled layer's results (deduped). Ranked by QUALITY only —
+  // rating + damped popularity (footfall), so a 5.0 with 3 reviews doesn't outrank a
+  // proven 4.7 with thousands. NOT personalised by the traveler profile: Discover
+  // shows every place sorted by how good it is; the planner opts into filters (the
+  // dietary chips) themselves. (Profile-aware group-fit ranking lives in the AI
+  // pipeline; surfacing it here was hiding places testers wanted to see.)
   const results = React.useMemo(() => {
     const base = searchText.trim()
       ? textResults.filter(p => layers[TYPE_TO_LAYER[p.activityType]] !== false)
@@ -529,7 +524,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             .flatMap(l => layerData[l.key] || [])
             .filter(p => { if (seen.has(p.name)) return false; seen.add(p.name); return true; });
         })();
-    const ranked = base.slice().sort((a, b) => scorePlace(b, groupProfile) - scorePlace(a, groupProfile));
+    const ranked = base.slice().sort((a, b) => qualityScore(b) - qualityScore(a));
     // Explore-nearby: the area search usually doesn't return the stop you came
     // from (a niche place). Inject it so IT shows as a real pin + selectable card.
     if (nearLabel && nearby && nearby.lat != null && !ranked.some(p => p.name === nearby.label)) {
@@ -544,7 +539,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
       });
     }
     return ranked;
-  }, [searchText, textResults, layerData, layers, nearLabel, nearby, nearbyHydrated, groupProfile]);
+  }, [searchText, textResults, layerData, layers, nearLabel, nearby, nearbyHydrated]);
 
   useEffect(() => {
     if (!visible) return;
@@ -557,7 +552,11 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     setCities(parsed.length ? parsed : (destination ? [destination] : []));
     setActiveCity(start);
     setCityPickerOpen(false); setNewCity('');
-    setActiveFilters(FILTER_OPTS.filter(f => allDietary.includes(f.key)).map(f => f.key));
+    // Start UNFILTERED — Discover shows every place sorted by quality. The dietary
+    // chips are a planner OPT-IN, not auto-applied from the profile (auto-seeding them
+    // silently hid places: a tester searched for Great Wolf Lodge, never saw it because
+    // the profile bias filtered it out, and lost interest).
+    setActiveFilters([]);
     if (nearby && nearby.lat != null) {
       // "Explore nearby" from an activity → open straight into the map, biased to
       // that place's spot, so the user sees what's around it.

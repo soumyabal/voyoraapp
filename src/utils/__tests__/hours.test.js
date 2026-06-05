@@ -2,7 +2,7 @@
  * hours.test.js — opening-hours helpers + the closed_venue Trip Check rule.
  * 2026-06-12 is a Friday (weekday 5).
  */
-import { weekdayOf, isOpenAt, hoursLabel, compactHours } from '../hours';
+import { weekdayOf, isOpenAt, hoursLabel, weeklyHoursLabel, compactHours } from '../hours';
 import { validateTrip } from '../tripValidator';
 
 const FRI = 5;
@@ -81,6 +81,38 @@ describe('hoursLabel', () => {
     expect(hoursLabel([{ d: FRI, o: 0, c: 1440 }], FRI)).toBe('Open 24 h');
     expect(hoursLabel(NINE_TO_FIVE, 1)).toBe('Closed');     // not open Monday
     expect(hoursLabel(null, FRI)).toBe('');
+  });
+});
+
+describe('weeklyHoursLabel — hours of operation, not a today status', () => {
+  // The real bug: Boardman River Nature Center is open Tue–Fri 10–4, closed Mon/Sat/Sun.
+  // Landing on a closed day must show WHEN it's open, not a bare "Closed".
+  const NATURE_CTR = [2, 3, 4, 5].map((d) => ({ d, o: 10 * 60, c: 16 * 60 }));
+
+  test('groups consecutive same-hours days into a range', () => {
+    expect(weeklyHoursLabel(NATURE_CTR)).toBe('Tue–Fri 10 AM–4 PM');
+  });
+  test('Mon-first, with a separate weekend group', () => {
+    const oh = [
+      ...[1, 2, 3, 4, 5].map((d) => ({ d, o: 9 * 60, c: 17 * 60 })),
+      { d: 6, o: 10 * 60, c: 14 * 60 },
+    ];
+    expect(weeklyHoursLabel(oh)).toBe('Mon–Fri 9 AM–5 PM, Sat 10 AM–2 PM');
+  });
+  test('a single open day is not a range', () => {
+    expect(weeklyHoursLabel([{ d: 5, o: 9 * 60, c: 17 * 60 }])).toBe('Fri 9 AM–5 PM');
+  });
+  test('open 24/7 collapses to "Open 24 h"', () => {
+    const oh = Array.from({ length: 7 }, (_, d) => ({ d, o: 0, c: 1440 }));
+    expect(weeklyHoursLabel(oh)).toBe('Open 24 h');
+  });
+  test('a closed day breaks the range (not merged across the gap)', () => {
+    const oh = [{ d: 1, o: 9 * 60, c: 17 * 60 }, { d: 3, o: 9 * 60, c: 17 * 60 }];
+    expect(weeklyHoursLabel(oh)).toBe('Mon 9 AM–5 PM, Wed 9 AM–5 PM');
+  });
+  test('unknown / empty → ""', () => {
+    expect(weeklyHoursLabel(null)).toBe('');
+    expect(weeklyHoursLabel([])).toBe('');
   });
 });
 

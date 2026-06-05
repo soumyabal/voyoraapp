@@ -95,3 +95,37 @@ export function hoursLabel(openHours, wd) {
   if (today.length === 1 && today[0].o <= 0 && today[0].c >= 1440) return 'Open 24 h';
   return today.map(h => `${fmtClock(h.o)}–${fmtClock(h.c)}`).join(', ');
 }
+
+const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * Compact WEEKLY operating-hours summary — days grouped into ranges that share the
+ * same hours: "Tue–Fri 10 AM–4 PM", "Mon–Fri 9 AM–5 PM, Sat 10 AM–2 PM", "Open 24 h".
+ * Returns '' when hours are unknown or the venue is closed all week. Mon-first so the
+ * ranges read naturally. This is HOURS OF OPERATION, not a live/today status: we show
+ * WHEN a place is open rather than a bare "Closed" for the one day you landed on.
+ */
+export function weeklyHoursLabel(openHours) {
+  if (!Array.isArray(openHours) || !openHours.length) return '';
+  const order = [1, 2, 3, 4, 5, 6, 0];   // Mon … Sun
+  const sig = (wd) => {
+    const ints = dayIntervals(openHours, wd);
+    if (!ints || !ints.length) return null;                          // closed that day
+    if (ints.length === 1 && ints[0].o <= 0 && ints[0].c >= 1440) return 'Open 24 h';
+    return ints.map(h => `${fmtClock(h.o)}–${fmtClock(h.c)}`).join(', ');
+  };
+  const groups = [];
+  let cur = null;
+  for (const wd of order) {
+    const s = sig(wd);
+    if (s == null) { cur = null; continue; }            // closed day breaks a range
+    if (cur && cur.s === s) cur.end = wd;
+    else { cur = { start: wd, end: wd, s }; groups.push(cur); }
+  }
+  if (!groups.length) return '';
+  if (groups.length === 1 && groups[0].s === 'Open 24 h' &&
+      order.every((wd) => sig(wd) === 'Open 24 h')) return 'Open 24 h';
+  return groups
+    .map((g) => `${g.start === g.end ? DAY_ABBR[g.start] : `${DAY_ABBR[g.start]}–${DAY_ABBR[g.end]}`} ${g.s}`)
+    .join(', ');
+}

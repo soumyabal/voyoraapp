@@ -14,7 +14,7 @@ import useStore from '../store';
 import { uid, getAllMembers, defaultNightsFor } from '../utils/helpers';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
-import { weekdayOf, hoursLabel, compactHours } from '../utils/hours';
+import { weekdayOf, hoursLabel, weeklyHoursLabel, compactHours } from '../utils/hours';
 import { qualityScore } from '../utils/placeScore';
 import { reverseGeocode } from '../utils/places';
 import { WebView } from 'react-native-webview';
@@ -191,8 +191,10 @@ async function cachedPlaces(q, bias, pages = 1) {
 }
 
 function PlaceCard({ place, onToggle, added, wd, seen, onOpenWeb }) {
-  const hrs = hoursLabel(place.openHours, wd);
-  const closed = hrs === 'Closed';
+  // HOURS OF OPERATION, not a today/live status: open on this day → that day's hours;
+  // closed this day → the weekly hours so you see WHEN it's open (not a bare "Closed").
+  const day = hoursLabel(place.openHours, wd);
+  const hrs = day && day !== 'Closed' ? day : weeklyHoursLabel(place.openHours);
   const dim = seen && !added;   // looked at on the web → fade so it's easy to skip
   return (
     <View style={card.wrap}>
@@ -211,7 +213,7 @@ function PlaceCard({ place, onToggle, added, wd, seen, onOpenWeb }) {
             : place.priceLevel==='PRICE_LEVEL_FREE'
               ? <View style={[card.costBadge,{backgroundColor:'#dcfce7'}]}><Text style={[card.costText,{color:'#15803d'}]}>Free</Text></View>
               : null}
-          {!!hrs && <Text style={[card.hours, closed && card.hoursClosed]} numberOfLines={1}>{'\u{1F552}'} {hrs}</Text>}
+          {!!hrs && <Text style={card.hours} numberOfLines={1}>{'\u{1F552}'} {hrs}</Text>}
           {place.wheelchairOk && <Text style={card.badge}>{'♿'}</Text>}
         </View>
         {!!place.address && <Text style={card.address} numberOfLines={1}>{'\u{1F4CD}'} {place.address}</Text>}
@@ -236,8 +238,8 @@ function PlaceCard({ place, onToggle, added, wd, seen, onOpenWeb }) {
 // Tapping the card focuses the map on the place; the check circle toggles the
 // basket (separate touch targets so they don't fight).
 function PlaceMapCard({ place, checked, selected, onToggle, onFocus, onOpenWeb, seen, wd }) {
-  const hrs = hoursLabel(place.openHours, wd);
-  const closed = hrs === 'Closed';
+  const day = hoursLabel(place.openHours, wd);
+  const hrs = day && day !== 'Closed' ? day : weeklyHoursLabel(place.openHours);
   const dim = seen && !checked;
   return (
     <TouchableOpacity style={[mc.card, selected && mc.cardSel]} activeOpacity={0.9} onPress={() => onFocus && onFocus(place)}>
@@ -266,7 +268,7 @@ function PlaceMapCard({ place, checked, selected, onToggle, onFocus, onOpenWeb, 
             : place.priceLevel === 'PRICE_LEVEL_FREE' ? <Text style={mc.free}>Free</Text> : null}
           {seen && <Text style={mc.seenTag}>{'✓'} seen</Text>}
         </View>
-        {!!hrs && <Text style={[mc.hours, closed && mc.hoursClosed]} numberOfLines={1}>{'\u{1F552}'} {hrs}</Text>}
+        {!!hrs && <Text style={mc.hours} numberOfLines={1}>{'\u{1F552}'} {hrs}</Text>}
       </View>
     </TouchableOpacity>
   );

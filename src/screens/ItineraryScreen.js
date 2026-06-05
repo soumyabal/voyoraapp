@@ -15,7 +15,7 @@ import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodg
 import { googleMapsDayUrl } from '../utils/mapsRoute';
 import { scheduleDay, planDay, returnJourneyDraft } from '../utils/autoArrange';
 import { travelLeg, formatKm } from '../utils/geo';
-import { weekdayOf, isOpenAt, hoursLabel } from '../utils/hours';
+import { weekdayOf, hoursLabel, weeklyHoursLabel } from '../utils/hours';
 import { fetchPlacePhoto } from '../utils/places';
 import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
@@ -1631,12 +1631,14 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
   const dietWarn  = getDietaryWarning(act, trip.families || []);
   const duration  = estimateDuration(act);
 
-  // Hours of operation (attractions + restaurants) for this day. Closed-at-time
-  // turns the badge red — the same call Trip Check's closed_venue rule makes.
+  // HOURS OF OPERATION (attractions + restaurants) — not a live/today status. Open on
+  // this day → that day's hours ("10 AM–4 PM"); closed this day → when it IS open across
+  // the week ("Tue–Fri 10 AM–4 PM") instead of a bare red "Closed". Scheduling something
+  // while a venue is closed is flagged separately by Trip Check, so the card just informs.
   const showsHours  = act.type === 'activity' || act.type === 'food';
   const hoursWd     = showsHours ? weekdayOf(dayDate) : null;
-  const hoursStr    = showsHours ? hoursLabel(act.openHours, hoursWd) : '';
-  const openAtTime  = showsHours && act.time ? isOpenAt(act.openHours, hoursWd, toMin(act.time)) : null;
+  const dayHours    = showsHours ? hoursLabel(act.openHours, hoursWd) : '';
+  const hoursStr    = !showsHours ? '' : (dayHours && dayHours !== 'Closed' ? dayHours : weeklyHoursLabel(act.openHours));
   const durationLabel = act.type !== 'note' && act.type !== 'stay' && duration > 0
     ? formatDuration(duration)
     : null;
@@ -1744,10 +1746,8 @@ function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, is
                   </View>
                 )}
                 {!!hoursStr && (
-                  <View style={[styles.hoursBadge, openAtTime === false && styles.hoursBadgeClosed]}>
-                    <Text style={[styles.hoursBadgeText, openAtTime === false && styles.hoursBadgeClosedText]}>
-                      {openAtTime === false ? '🔴' : '🕒'} {hoursStr}
-                    </Text>
+                  <View style={styles.hoursBadge}>
+                    <Text style={styles.hoursBadgeText}>🕒 {hoursStr}</Text>
                   </View>
                 )}
                 {!!dietWarn && (
@@ -2694,8 +2694,6 @@ const styles = StyleSheet.create({
     borderColor: '#cdd7e1',
   },
   hoursBadgeText: { fontSize: 11, color: '#516072', fontWeight: '600' },
-  hoursBadgeClosed: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
-  hoursBadgeClosedText: { color: '#dc2626', fontWeight: '800' },
   dietWarnBadge: {
     borderRadius: radius.full,
     paddingHorizontal: spacing.sm,

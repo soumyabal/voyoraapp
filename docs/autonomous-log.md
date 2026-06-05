@@ -28,6 +28,16 @@
 - 2026-06-04 — lint cleanup (path-to-10 "lint/CI" win): eliminated the ENTIRE react/no-unescaped-entities category — 39 display-text apostrophes/quotes escaped across 13 screens/modals (line-scoped, JSX expressions untouched). Zero behavior change (pure text), 214 tests stay green; eslint 212→173 problems (111→72 errors). Deferred the rule-registry + store-slice refactors (§9.4): too large to do "small" + only partially snapshot-covered → better with the user available
 - 2026-06-05 — lint cleanup (§9.1 highest-ROI / path-to-10): removed dead code across 14 files — unused imports + pure dead local vars (FamilyBudgetAgent memberShare/roomShare/orphaned expenseGroups, pipeline nights, exportPlan CAT_ICONS/now/safeName, plannerAPI SD/SFO imports + context + isArrival, places/PlayTripModal unused catch bindings → optional-catch, + 8 unused imports). Zero behavior change (no functions/handlers/setters/tests touched; react-compiler ref/setState/impure diagnostics left for device review); 325 tests + 25 snapshots green; eslint 175→148 problems (−27 warnings, 0 new)
 
+## 2026-06-05 — refactoring session (autonomous lead, panel-guided)
+Owner handed the lead for ~8h to refactor, going with the panel's recommendation, committing
+frequently for review. Safe mode (panel consensus): extract PURE logic from the big screens
+into unit-tested utils (jest-provable); NO JSX/component extraction or react-native-testing-library
+setup (unverifiable without a device; reanimated-v4 mocking too fragile to stand up unattended).
+Each increment: jest green + count stable, snapshots byte-identical (never -u), lint not worse,
+diff only intended files. Target: ItineraryScreen.js (3022 lines) + DiscoverModal/SplitwiseScreen.
+- 2026-06-05 — compile safety net: a babel-transform test over every screen + modal, so a
+  syntax/JSX break in a file jest never imports now turns a test red. 330→355 tests.
+
 ## 2026-06-04 — test-user bug fixes (user driving)
 - 2026-06-04 — Bug1: 24/7 places (bridge/lighthouse) no longer show "Closed" — Google's no-close period was recorded Sunday-only; compactHours now expands 24/7 to all 7 days + handles cross-midnight; store v4→v5 migration repairs existing trips. ✓ device-verified (19b84aa)
 - 2026-06-04 — Bug2: typed Discover search is literal (no dietary-bias pollution) + unclamped (a named place outside the viewport isn't dropped); address autocomplete now surfaces street addresses (Photon no-name filter fixed); "Search without filters" override in the empty state. ✓ device-verified search (1ae0468, 59bcbf2, e62236b)

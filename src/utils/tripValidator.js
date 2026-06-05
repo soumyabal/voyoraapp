@@ -69,7 +69,7 @@ function verifyHoursUrl(act) {
  * Returns estimated duration in minutes for a given activity.
  * Uses keyword matching on name + detail fields.
  */
-export function estimateDuration(activity) {
+export function estimateDuration(activity, origin) {
   // Manual override always wins — covers long-haul flights, multi-day treks, etc.
   if (activity.durationMins > 0) return activity.durationMins;
 
@@ -93,6 +93,15 @@ export function estimateDuration(activity) {
       let span = tm(activity.arriveTime) - tm(activity.time);
       if (span <= 0) span += 24 * 60;
       if (span > 0) return span;
+    }
+    // No Arrives set, but we know BOTH ends — the origin (previous stop / where you
+    // start) and this leg's destination geocode. For a DRIVE the real distance beats
+    // the flat 2h default (a 371 km "drive home" is ~5.7 h, not 2 h). Driving modes
+    // only — flights/trains/ships keep their per-mode defaults. Falls through when
+    // either end lacks coordinates.
+    if (origin && (!activity.subtype || activity.subtype === 'car')) {
+      const leg = travelLeg(origin, activity);
+      if (leg && leg.mode === 'drive') return leg.min;
     }
     switch (activity.subtype) {
       case 'flight':  return 180;  // flight + 2h airport buffer
@@ -351,10 +360,13 @@ function buildDayContext(day, dayIndex, families) {
   // UNSCHEDULED (the planner couldn't fit it in its open hours that day) — it must not
   // be mapped to a phantom 09:00 and generate false overlap/closed warnings; it's handled
   // by the dedicated "doesn't fit this day" rule below.
-  const timeline = acts.filter(act => act.time).map(act => {
+  const timed = acts.filter(act => act.time);
+  const timeline = timed.map((act, i) => {
     const parts = act.time.split(':');
     const startMin = (parseInt(parts[0]) || 0) * 60 + (parseInt(parts[1]) || 0);
-    const duration = estimateDuration(act);
+    // Pass the prior timed stop so a drive's duration can come from the real leg
+    // (origin → destination geocode), not the flat per-mode default.
+    const duration = estimateDuration(act, i > 0 ? timed[i - 1] : undefined);
     return { act, startMin, duration, endMin: startMin + duration };
   });
 

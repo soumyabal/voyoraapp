@@ -1427,6 +1427,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                           activity={act}
                           trip={trip}
                           dayDate={day.date}
+                          originStop={index > 0 ? slotActs[index - 1] : prevSlotLast}
                           isHighlighted={highlightedActIds.includes(act.id)}
                           isFirst={index === 0}
                           isLast={index === slotActs.length - 1}
@@ -1715,13 +1716,15 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   );
 }
 
-function ActivityCard({ activity: act, trip, dayDate, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onMarkSkipped, onEdit, onDelete, onMoveRequest, onSlotMove, onToggleLock, onExploreNearby }) {
+function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onMarkSkipped, onEdit, onDelete, onMoveRequest, onSlotMove, onToggleLock, onExploreNearby }) {
   const status    = act.status ?? null;
   const isDone    = status === 'done';
   const isSkipped = status === 'skipped';
   const dimmed    = isDone || isSkipped;
   const dietWarn  = getDietaryWarning(act, trip.families || []);
-  const duration  = estimateDuration(act);
+  // originStop = the prior stop; lets a drive's duration come from the real leg
+  // (origin → this stop's destination geocode) instead of the flat 2h default.
+  const duration  = estimateDuration(act, originStop);
 
   // HOURS OF OPERATION (attractions + restaurants) — not a live/today status. Open on
   // this day → that day's hours ("10 AM–4 PM"); closed this day → when it IS open across

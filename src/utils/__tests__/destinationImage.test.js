@@ -9,7 +9,7 @@ const ok = (body) => Promise.resolve({ ok: true, json: () => Promise.resolve(bod
 
 afterEach(() => { global.fetch = undefined; });
 
-test('returns image + title + page url, and bumps the thumbnail size', async () => {
+test('returns image + title + page url (thumbnail used as-is)', async () => {
   global.fetch = jest.fn(() => ok({
     title: 'San Diego',
     thumbnail: { source: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/b/SD.jpg/320px-SD.jpg' },

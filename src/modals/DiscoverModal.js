@@ -29,38 +29,46 @@ const TYPE_ICON = { food: 'food', stay: 'hotel', activity: 'activity' };
 // city photo with a "via Wikipedia" credit (CC attribution). Renders nothing when
 // there's no image, so the layout degrades cleanly.
 function DestinationHero({ city }) {
-  const [img, setImg] = useState(null);
-  const [failed, setFailed] = useState(false);
+  const [info, setInfo]     = useState(null);   // { imageUrl, title, pageUrl }
+  const [loaded, setLoaded] = useState(false);  // photo actually painted
+  const [failed, setFailed] = useState(false);  // photo couldn't load
   useEffect(() => {
     let alive = true;
-    setImg(null); setFailed(false);
-    fetchDestinationImage(city).then(r => { if (alive) setImg(r); });
+    fetchDestinationImage(city).then(r => {
+      if (alive) { setInfo(r); setLoaded(false); setFailed(false); }
+    });
     return () => { alive = false; };
   }, [city]);
-  // Hide entirely if there's no image or it fails to load (e.g. the CDN rejects
-  // the request) — better than a gray box with a misleading "via Wikipedia" credit.
-  if (!img || failed) return null;
+  if (!info) return null;
   return (
     <View style={s.hero}>
-      <Image
-        source={{ uri: img.imageUrl, headers: { 'User-Agent': WIKI_UA } }}
-        style={s.heroImg}
-        resizeMode="cover"
-        onError={() => setFailed(true)}
-      />
+      {/* iOS honors source headers (photo loads); Android's loader may not, →
+          onError, and we fall back to the plain branded banner below. */}
+      {!failed && (
+        <Image
+          source={{ uri: info.imageUrl, headers: { 'User-Agent': WIKI_UA } }}
+          style={s.heroImg}
+          resizeMode="cover"
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+        />
+      )}
       <View style={s.heroScrim} />
       <View style={s.heroText}>
         <Text style={s.heroCaption}>EXPLORING</Text>
-        <Text style={s.heroCity} numberOfLines={1}>{img.title}</Text>
+        <Text style={s.heroCity} numberOfLines={1}>{info.title}</Text>
       </View>
-      <TouchableOpacity
-        style={s.heroCredit}
-        onPress={() => Linking.openURL(img.pageUrl).catch(() => {})}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        activeOpacity={0.8}
-      >
-        <Text style={s.heroCreditText}>via Wikipedia</Text>
-      </TouchableOpacity>
+      {/* Credit shows only when the Wikipedia photo is actually visible. */}
+      {loaded && (
+        <TouchableOpacity
+          style={s.heroCredit}
+          onPress={() => Linking.openURL(info.pageUrl).catch(() => {})}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          activeOpacity={0.8}
+        >
+          <Text style={s.heroCreditText}>via Wikipedia</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -964,7 +972,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             </View>
           </View>
 
-          <DestinationHero city={cityLabel(activeCity) || destination} />
+          <DestinationHero city={destination || activeCity} />
 
           <View style={s.searchRow}>
             <Icon name="search" size={16} color={colors.subtle} style={{marginRight:spacing.xs}} />
@@ -1287,7 +1295,7 @@ const s = StyleSheet.create({
   searchRow:{flexDirection:'row',alignItems:'center',marginHorizontal:spacing.xxl,marginBottom:spacing.sm,backgroundColor:colors.surface2,borderRadius:radius.md,paddingHorizontal:spacing.md,paddingVertical:spacing.xs,borderWidth:1,borderColor:colors.border},
 
   // Destination hero (free Wikipedia image)
-  hero:{height:118,marginHorizontal:spacing.xxl,marginBottom:spacing.sm,borderRadius:radius.lg,overflow:'hidden',backgroundColor:colors.surface2},
+  hero:{height:118,marginHorizontal:spacing.xxl,marginBottom:spacing.sm,borderRadius:radius.lg,overflow:'hidden',backgroundColor:colors.accent},
   heroImg:{...StyleSheet.absoluteFillObject,width:'100%',height:'100%'},
   heroScrim:{...StyleSheet.absoluteFillObject,backgroundColor:'rgba(0,0,0,0.28)'},
   heroText:{position:'absolute',left:spacing.md,bottom:spacing.sm},

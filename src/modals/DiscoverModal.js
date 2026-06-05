@@ -16,7 +16,7 @@ import { colors, spacing, radius, typography, shadow } from '../theme';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
 import { weekdayOf, hoursLabel, weeklyHoursLabel, compactHours } from '../utils/hours';
 import { qualityScore } from '../utils/placeScore';
-import { reverseGeocode } from '../utils/places';
+import { reverseGeocode, refreshPhotoKey } from '../utils/places';
 import { bookingUrl } from '../utils/booking';
 import { fetchDestinationImage, WIKI_UA } from '../utils/destinationImage';
 import { WebView } from 'react-native-webview';
@@ -247,7 +247,7 @@ function PlaceCard({ place, onToggle, added, wd, seen, onOpenWeb, onOpenBooking 
   const hrs = day && day !== 'Closed' ? day : weeklyHoursLabel(place.openHours);
   const dim = seen && !added;   // looked at on the web → fade so it's easy to skip
   const Thumb = place.photo
-    ? <Image source={{uri:place.photo}} style={[card.thumb, dim && card.seenDim]} />
+    ? <Image source={{uri:refreshPhotoKey(place.photo)}} style={[card.thumb, dim && card.seenDim]} />
     : <View style={[card.thumb, card.thumbPh, dim && card.seenDim]}><Icon name={TYPE_ICON[place.activityType]||'activity'} size={20} color={TYPE_TINT[place.activityType]||colors.subtle} /></View>;
   return (
     <View style={card.wrap}>
@@ -305,7 +305,7 @@ function PlaceMapCard({ place, checked, selected, onToggle, onFocus, onOpenWeb, 
     <TouchableOpacity style={[mc.card, selected && mc.cardSel]} activeOpacity={0.9} onPress={() => onFocus && onFocus(place)}>
       <View>
         {place.photo
-          ? <Image source={{ uri: place.photo }} style={[mc.photo, dim && mc.seenDim]} />
+          ? <Image source={{ uri: refreshPhotoKey(place.photo) }} style={[mc.photo, dim && mc.seenDim]} />
           : <View style={[mc.photo, mc.photoPh, dim && mc.seenDim]}><Icon name={TYPE_ICON[place.activityType]||'activity'} size={26} color={TYPE_TINT[place.activityType]||colors.subtle} /></View>}
         {/* Overlay actions. Hotels get TWO: a globe → the venue's own site, and a bed →
             Booking.com (the revenue action, warm-tinted). Everything else: one globe → site. */}

@@ -12,6 +12,16 @@ const PLACES_URL = 'https://places.googleapis.com/v1/places:searchText';
 const FIELD_MASK = 'places.displayName,places.location,places.photos';
 const photoUrl = name => `https://places.googleapis.com/v1/${name}/media?maxWidthPx=640&maxHeightPx=420&key=${GOOGLE_PLACES_API_KEY}`;
 
+// Stored place-photo URLs (act.photo / place.photo) bake the API key into the URL. When the
+// key is rotated, every saved URL carries a DEAD key → the image 403s and the thumbnail
+// vanishes. Re-stamp the CURRENT key at render time so thumbnails survive key rotation.
+// Non-Google URLs (e.g. Wikipedia) and empty values pass through untouched.
+export function refreshPhotoKey(url) {
+  if (!url || typeof url !== 'string' || !url.includes('places.googleapis.com')) return url;
+  if (!GOOGLE_PLACES_API_KEY) return url;
+  return url.replace(/([?&])key=[^&]*/, `$1key=${GOOGLE_PLACES_API_KEY}`);
+}
+
 const cache = new Map();   // "name@lat,lng" -> photo URL | null (avoids re-billing)
 
 /**

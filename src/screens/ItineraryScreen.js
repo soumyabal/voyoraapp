@@ -16,6 +16,7 @@ import { googleMapsDayUrl, googleMapsDayShareUrl } from '../utils/mapsRoute';
 import { scheduleDay, planDay, returnJourneyDraft, suggestDayForVenue } from '../utils/autoArrange';
 import { travelLeg, formatKm } from '../utils/geo';
 import { weekdayOf, hoursLabel, weeklyHoursLabel, dayIntervals } from '../utils/hours';
+import { refreshPhotoKey } from '../utils/places';
 import { getSuggestedTime, minToTime } from '../utils/slots';
 import { bookingUrl } from '../utils/booking';
 import { exportDayAsPDF } from '../utils/exportPlan';
@@ -1854,7 +1855,7 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
               accessibilityHint={thumbAction.kind === 'book' ? 'Opens Booking.com in your browser' : 'Opens the website in your browser'}
             >
               {act.photo ? (
-                <Image source={{ uri: act.photo }} style={styles.actLeadPhoto} />
+                <Image source={{ uri: refreshPhotoKey(act.photo) }} style={styles.actLeadPhoto} />
               ) : (
                 <View style={[styles.actLeadIcon, { backgroundColor: (activityColors[act.type] || colors.muted) + '1A' }]}>
                   <Icon name={ACT_ICON[act.type] || 'activity'} size={22} color={activityColors[act.type] || colors.subtle} />
@@ -1865,7 +1866,7 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
               </View>
             </TouchableOpacity>
           ) : act.photo ? (
-            <Image source={{ uri: act.photo }} style={styles.actLeadPhoto} />
+            <Image source={{ uri: refreshPhotoKey(act.photo) }} style={styles.actLeadPhoto} />
           ) : (
             <View style={[styles.actLeadIcon, { backgroundColor: (activityColors[act.type] || colors.muted) + '1A' }]}>
               <Icon name={ACT_ICON[act.type] || 'activity'} size={22} color={activityColors[act.type] || colors.subtle} />

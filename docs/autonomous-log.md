@@ -62,6 +62,10 @@ diff only intended files. Target: ItineraryScreen.js (3022 lines) + DiscoverModa
   DAY_PILL, HEALTH_DOT, SLOT_MEAL, MEAL_LABEL, NIGHT_PLAN_OPTIONS/META) → utils/itineraryConfig.js
   + 4 invariant tests (slot tiling, slot→meal, night-plan key parity, sev ordering). Pure data,
   behavior-identical (no-undef/no-unused confirm clean); screen −62 lines; 402 tests green (7baa9d6).
+- 2026-06-05 — extracted Discover's pure Places helpers (mapPlace, inferActivityType, metersBetween,
+  PRICE_TO_COST, isVegFriendly, photoUrl) → utils/discoverPlaces.js + 11 tests (incl. a regression
+  lock on the Great-Wolf-Lodge "lodging beats food" classification). Screen imports back mapPlace +
+  metersBetween, drops the now-unused compactHours import. −49 lines; 413 tests green (de4b982).
 
 ## 2026-06-04 — test-user bug fixes (user driving)
 - 2026-06-04 — Bug1: 24/7 places (bridge/lighthouse) no longer show "Closed" — Google's no-close period was recorded Sunday-only; compactHours now expands 24/7 to all 7 days + handles cross-midnight; store v4→v5 migration repairs existing trips. ✓ device-verified (19b84aa)

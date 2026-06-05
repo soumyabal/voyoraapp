@@ -6,6 +6,7 @@ import { uid, getAllMembers, findMemberFamily, TRIP_EMOJIS, TRIP_BG_COLORS, fami
 import { getExpSplitBetween } from '../utils/costs';
 import { activityToExpense, rebuildItineraryExpenses } from '../utils/expenses';
 import { generateSmartItinerary as planSmartItinerary } from '../utils/itineraryPlanner';
+import { createExpensesSlice } from './slices/expensesSlice';
 
 // Toast reference (set by Toast component)
 let _showToast = null;
@@ -15,6 +16,11 @@ export const showToast = (msg, icon = '✅') => _showToast && _showToast(msg, ic
 const useStore = create(
   persist(
     (set, get) => ({
+      // ── SLICES (see src/store/slices/) ──────────────────────
+      // Spread first; each is a (set, get) => ({...}) factory operating on the
+      // full merged store. Behaviour is identical to inline definitions.
+      ...createExpensesSlice(set, get),
+
       // ── STATE ───────────────────────────────────────────────
       trips: sampleTrips,
       travelers: sampleTravelers,    // global traveler library — unique people
@@ -502,112 +508,6 @@ const useStore = create(
         }),
       })),
 
-      // ── EXPENSES ────────────────────────────────────────────
-      addExpense: (tripId, expense) => set(s => ({
-        trips: s.trips.map(t => t.id !== tripId ? t : {
-          ...t, expenses: [...t.expenses, { ...expense, id: uid() }],
-        }),
-      })),
-
-      deleteExpense: (tripId, expId) => set(s => ({
-        trips: s.trips.map(t => t.id !== tripId ? t : {
-          ...t, expenses: t.expenses.filter(e => e.id !== expId),
-        }),
-      })),
-
-      toggleFamilySplit: (tripId, expId, famId, checked) => set(s => ({
-        trips: s.trips.map(t => {
-          if (t.id !== tripId) return t;
-          return {
-            ...t,
-            expenses: t.expenses.map(e => {
-              if (e.id !== expId) return e;
-              let pf = e.participatingFamilies ? [...e.participatingFamilies] : t.families.map(f => f.id);
-              if (checked) { if (!pf.includes(famId)) pf.push(famId); }
-              else { pf = pf.filter(id => id !== famId); }
-              if (!pf.length) pf = [famId]; // enforce at-least-one
-              return { ...e, participatingFamilies: pf };
-            }),
-          };
-        }),
-      })),
-
-      updateExpensePayer: (tripId, expId, memberId) => set(s => ({
-        trips: s.trips.map(t => {
-          if (t.id !== tripId) return t;
-          return {
-            ...t,
-            expenses: t.expenses.map(e => {
-              if (e.id !== expId) return e;
-              const payerFam = t.families.find(f => f.members.some(m => m.id === memberId));
-              let pf = e.participatingFamilies ? [...e.participatingFamilies] : t.families.map(f => f.id);
-              if (payerFam && !pf.includes(payerFam.id)) pf.push(payerFam.id);
-              return { ...e, paidBy: memberId, participatingFamilies: pf };
-            }),
-          };
-        }),
-      })),
-
-      // ── SPLIT MODE ──────────────────────────────────────────────
-
-      setTripSplitMode: (tripId, mode) => set(s => ({
-        trips: s.trips.map(t => t.id === tripId ? { ...t, splitMode: mode } : t),
-      })),
-
-      updateExpenseSplitMode: (tripId, expId, mode) => set(s => ({
-        trips: s.trips.map(t => t.id !== tripId ? t : {
-          ...t,
-          expenses: t.expenses.map(e => e.id !== expId ? e : { ...e, splitMode: mode }),
-        }),
-      })),
-
-      // Toggle individual member in/out of an expense (individual mode)
-      toggleExpenseMember: (tripId, expId, memberId, included) => set(s => {
-        const trip = s.trips.find(t => t.id === tripId);
-        const allMemberIds = trip ? getAllMembers(trip).map(m => m.id) : [];
-        return {
-          trips: s.trips.map(t => t.id !== tripId ? t : {
-            ...t,
-            expenses: t.expenses.map(e => {
-              if (e.id !== expId) return e;
-              const current = e.participatingMembers ?? allMemberIds;
-              const next = included
-                ? (current.includes(memberId) ? current : [...current, memberId])
-                : current.filter(id => id !== memberId);
-              // Enforce at-least-one participant
-              return { ...e, participatingMembers: next.length ? next : current };
-            }),
-          }),
-        };
-      }),
-
-      toggleExpenseExcluded: (tripId, expId) => set(s => ({
-        trips: s.trips.map(t => t.id !== tripId ? t : {
-          ...t,
-          expenses: t.expenses.map(e => e.id !== expId ? e : { ...e, excluded: !e.excluded }),
-        }),
-      })),
-
-      updateExpenseAmount: (tripId, expId, amount) => set(s => ({
-        trips: s.trips.map(t => t.id !== tripId ? t : {
-          ...t,
-          expenses: t.expenses.map(e => e.id !== expId ? e : { ...e, amount }),
-        }),
-      })),
-
-      // Uneven / custom split — stores per-participant amounts keyed by memberId or famId.
-      // Set unevenSplit:false to revert to even splitting.
-      // Toggle a settlement transfer as paid/unpaid.
-      // Key: `${fromId}→${toId}` — stable per trip since settlements are deterministic.
-      toggleSettlementPaid: (tripId, key) => set(s => ({
-        trips: s.trips.map(t => {
-          if (t.id !== tripId) return t;
-          const settled = new Set(t.settledTransfers || []);
-          if (settled.has(key)) settled.delete(key); else settled.add(key);
-          return { ...t, settledTransfers: [...settled] };
-        }),
-      })),
-
       // Move a member to index 0 of their family so they become the family head.
       // The head carries the family's full balance share in "By Group" split mode.
       setFamilyHead: (tripId, famId, memberId) => set(s => ({
@@ -619,57 +519,6 @@ const useStore = create(
             const head = f.members.find(m => m.id === memberId);
             return head ? { ...f, members: [head, ...rest] } : f;
           }),
-        }),
-      })),
-
-      updateExpenseCustomShares: (tripId, expId, customShares, unevenSplit) => set(s => ({
-        trips: s.trips.map(t => t.id !== tripId ? t : {
-          ...t,
-          expenses: t.expenses.map(e => e.id !== expId ? e : {
-            ...e,
-            unevenSplit: unevenSplit !== undefined ? unevenSplit : e.unevenSplit,
-            customShares: customShares !== undefined ? customShares : e.customShares,
-          }),
-        }),
-      })),
-
-      pushItineraryToSplitwise: (tripId) => set(s => ({
-        trips: s.trips.map(t => {
-          if (t.id !== tripId) return t;
-          const allMembers = getAllMembers(t);
-          const memberIds = allMembers.map(m => m.id);
-          const allFamilyIds = t.families.map(f => f.id);
-          const payer = allMembers[0]?.id;
-          const itinExpenses = [];
-          t.days.forEach(day => {
-            day.activities.filter(a => a.costPerPerson > 0).forEach(act => {
-              const cat = act.type === 'food' ? '🍽️' : act.type === 'transport' ? '✈️' : act.type === 'stay' ? '🏨' : '🎯';
-              const estimatedAmount = act.costPerPerson * allMembers.length;
-              itinExpenses.push({
-                id: uid(),
-                name: `${act.name} (${day.label})`,
-                amount: estimatedAmount,
-                estimatedAmount,              // immutable reference to original estimate
-                category: cat, paidBy: payer,
-                splitMode: null,              // inherit from trip
-                participatingFamilies: [...allFamilyIds],
-                participatingMembers: null,   // null = all in participating families
-                excluded: false,              // user can soft-hide from split
-                source: 'itinerary',
-                activityId: act.id,           // ← link for live sync
-              });
-            });
-          });
-          const manualExpenses = t.expenses.filter(e => e.source !== 'itinerary');
-          return { ...t, expenses: [...manualExpenses, ...itinExpenses], itineraryPushed: true };
-        }),
-      })),
-
-      clearPushedItinerary: (tripId) => set(s => ({
-        trips: s.trips.map(t => t.id !== tripId ? t : {
-          ...t,
-          expenses: t.expenses.filter(e => e.source !== 'itinerary'),
-          itineraryPushed: false,
         }),
       })),
 

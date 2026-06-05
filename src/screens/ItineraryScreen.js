@@ -1047,10 +1047,11 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           );
         })()}
 
-        {/* Day Header */}
+        {/* Day Header — the day + date live in the selector chips and sticky header
+            right above, so this row is just the day's actions (kept right-aligned so
+            they don't compete with the left-anchored day-status pill below). */}
         {day && (
           <View style={styles.dayHeader}>
-            <Text style={styles.dayTitle}>{day.label} — {fmt(day.date)}</Text>
             <View style={styles.dayHeaderActions}>
               {!!dayRouteUrl && (
                 <TouchableOpacity style={styles.routeBtn} onPress={openDayRoute} activeOpacity={0.85}>
@@ -2285,12 +2286,11 @@ const styles = StyleSheet.create({
   dayHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     paddingHorizontal: spacing.xxl,
     paddingTop: spacing.xl,
     paddingBottom: spacing.sm,
   },
-  dayTitle: { ...typography.h4, color: colors.text, flex: 1, marginRight: spacing.sm },
   dayHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   addActBtn: {
     flexDirection: 'row',

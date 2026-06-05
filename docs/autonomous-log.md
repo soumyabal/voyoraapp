@@ -50,6 +50,10 @@ diff only intended files. Target: ItineraryScreen.js (3022 lines) + DiscoverModa
   utils/tripHealth.js with 7 unit tests (validateTrip mocked for deterministic severities; logic
   had 0 coverage). useMemo body collapsed to a one-line call. ItineraryScreen 2936→2921; 378 tests.
   Session so far: 3022→2921 lines (−101), 5 new tested utils, 330→378 tests, all green.
+- 2026-06-05 — extracted tripCheckStatus (the Trip-Check chip's fix/look/building/clear decision +
+  conflict/check counts) → utils/tripCheckStatus.js with 8 unit tests (validateTrip mocked; 0→tested).
+  Screen keeps only the state→colors/icon/label mapping; dropped the now-unused validateTrip import.
+  Behavior-identical chip; 392 tests green; screen lint unchanged (f04423a).
 
 ## 2026-06-04 — test-user bug fixes (user driving)
 - 2026-06-04 — Bug1: 24/7 places (bridge/lighthouse) no longer show "Closed" — Google's no-close period was recorded Sunday-only; compactHours now expands 24/7 to all 7 days + handles cross-midnight; store v4→v5 migration repairs existing trips. ✓ device-verified (19b84aa)

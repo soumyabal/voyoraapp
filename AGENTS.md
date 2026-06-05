@@ -198,8 +198,12 @@ useKeyboardOffset.js  Keyboard height hook (kept for future use; AIChatModal now
 
 ### State & Config
 ```
-src/store/index.js    Zustand store. ALL global state + actions. Persisted to AsyncStorage
-                      with name:'voyara-storage', version:1, migrate (see Invariants #7).
+src/store/index.js    Zustand store ROOT: state + persist config (name:'voyara-storage',
+                      version:5, migrate — see Invariants #7) + the slice spreads. ~88 lines.
+src/store/slices/     The actions, split into (set,get)=>({...}) factories spread into the
+                      single create(persist(...)): trips · people · activities · expenses · ui.
+                      set/get resolve against the FULL merged store (cross-slice get() works);
+                      useStore() returns the merged object — consumers are unchanged.
 src/config.js         APP_NAME · CLAUDE_API_KEY · GOOGLE_PLACES_API_KEY · CLAUDE_MODEL ·
                       RELEASE_FLAGS · billing config
 src/theme.js          colors (legacy + Refined-Warm semantic tokens), spacing, radius, typography

@@ -628,7 +628,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
               style={s.nameInput}
               value={name}
               onChangeText={v => { setName(v); setNameTouched(true); }}
-              placeholder={misc ? 'e.g. Fuel stop · Meet Sam · Pharmacy' : tile.type === 'transport' ? `e.g. ${tile.label} to Paris` : tile.type === 'stay' ? 'e.g. Marriott Downtown' : tile.type === 'food' ? 'e.g. Breakfast at hotel' : 'e.g. Visit Eiffel Tower'}
+              placeholder={misc ? 'e.g. Fuel stop · Vista point · Meet Sam' : tile.type === 'transport' ? `e.g. ${tile.label} to Paris` : tile.type === 'stay' ? 'e.g. Marriott Downtown' : tile.type === 'food' ? 'e.g. Breakfast at hotel' : 'e.g. Visit Eiffel Tower'}
               placeholderTextColor={colors.muted}
               selectTextOnFocus
               returnKeyType="next"
@@ -660,7 +660,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                     <Text style={s.quickStopHint}>
                       {misc
                         ? 'Set the time below — starts at 15 min, change it for longer (e.g. meeting a friend).'
-                        : 'For a fuel stop, errand, or meet-up. Won’t get the usual 2-hour estimate.'}
+                        : 'For a fuel stop, vista / viewing-area stop, errand, or meet-up. Won’t get the usual 2-hour estimate.'}
                     </Text>
                   </View>
                 </TouchableOpacity>

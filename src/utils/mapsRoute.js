@@ -27,6 +27,7 @@ export function dayRoutePoints(trip, dayIndex) {
     .filter(
       (a) =>
         a.status !== 'skipped' &&
+        a.time &&                 // skip UNSCHEDULED stops (didn't fit their hours)
         a.lat != null &&
         a.lng != null &&
         a.type !== 'stay' &&

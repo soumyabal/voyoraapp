@@ -27,9 +27,9 @@
  */
 import { timeToMin, minToTime } from './slots';
 import { checkInOf, checkOutOf } from './helpers';
-import { estimateDuration, validateTrip, dayRouteAnchor, dayStartAnchor } from './tripValidator';
+import { estimateDuration, validateTrip, dayRouteAnchor, dayStartAnchor, SEASONAL_RE } from './tripValidator';
 import { travelLeg } from './geo';
-import { weekdayOf, dayIntervals } from './hours';
+import { weekdayOf, dayIntervals, hoursLabel } from './hours';
 
 // Substantial activities allowed per day, by pace. Meals/notes/stays don't count.
 const PACE_CAP = { relaxed: 3, moderate: 4, packed: 6 };
@@ -564,29 +564,43 @@ export function scheduleDay(activities, opts = {}) {
   //    b) TRAVEL — the gap after each stop is the estimated travel time to the next
   //       (free haversine), so the arranged day already clears the distance rule.
   const wd2 = weekdayOf(opts.date);
-  // Earliest open slot for `a` at/after `from` that fits `need` within its hours.
+  // Free placement anywhere in the day (used for unknown hours, closed-all-day —
+  // which the closed_venue rule owns — and low-confidence seasonal venues).
+  const placeFree = (from, need) =>
+    findSlotMin(occ, from, need, DAY_END_MIN)
+      ?? findSlotMin(occ, DAY_START_MIN, need, DAY_END_MIN) ?? from;
+  // Earliest open slot for `a` that fits `need` within its KNOWN hours. Returns null
+  // when the venue has known hours that day but no open slot is free for the visit —
+  // the caller must NOT cram it past close; it's left unscheduled and flagged instead.
   const placeInHours = (a, from, need) => {
     const intervals = dayIntervals(a.openHours, wd2);   // null=unknown, []=closed today
-    if (intervals && intervals.length) {
-      for (const { o, c } of intervals) {
-        const start = Math.max(from, o), end = Math.min(c, DAY_END_MIN);
-        if (start + need <= end) {
-          const s = findSlotMin(occ, start, need, end);
-          if (s != null) return s;
-        }
-      }
-      // Can't fit fully within hours → at least don't start before it opens.
-      const earliest = Math.max(from, intervals[0].o);
-      return findSlotMin(occ, earliest, need, DAY_END_MIN) ?? earliest;
+    if (!(intervals && intervals.length)) return placeFree(from, need);  // unknown/closed → free
+    // 1) a slot at/after the cursor, inside an open interval (keeps route order)
+    for (const { o, c } of intervals) {
+      const start = Math.max(from, o), end = Math.min(c, DAY_END_MIN);
+      if (start + need <= end) { const s = findSlotMin(occ, start, need, end); if (s != null) return s; }
     }
-    return findSlotMin(occ, from, need, DAY_END_MIN)
-        ?? findSlotMin(occ, DAY_START_MIN, need, DAY_END_MIN) ?? from;
+    // 2) retry from each interval's OPEN (an earlier free slot the cursor skipped past)
+    for (const { o, c } of intervals) {
+      const end = Math.min(c, DAY_END_MIN);
+      if (o + need <= end) { const s = findSlotMin(occ, o, need, end); if (s != null) return s; }
+    }
+    return null;   // known hours, no room today → don't cram past close
   };
   const daytime = routeOrder(acts.filter(a => windowFor(a) == null), anchor, opts.endAnchor || null);
   let cursor = DAY_START_MIN;
   daytime.forEach((a, idx) => {
     const need = Math.max(BUFFER_MIN, estimateDuration(a));
-    const start = placeInHours(a, cursor, need);
+    let start = placeInHours(a, cursor, need);
+    if (start == null) {
+      // Known-hours venue that can't fit today. A SEASONAL venue's weekly hours are a
+      // low-confidence snapshot (it may keep different seasonal hours) → place it freely
+      // rather than declare it unfittable. Otherwise leave it UNSCHEDULED (time=null) so
+      // the day packs around it and planDay can shout "move it to another day" — never
+      // shoved to a slot after it has closed.
+      if (SEASONAL_RE.test(text(a))) start = placeFree(cursor, need);
+      else { a.time = null; return; }   // cursor unchanged → the next stop flows into the gap
+    }
     a.time = minToTime(start);
     addInterval(occ, start, need);
     const nxt = daytime[idx + 1];
@@ -743,9 +757,22 @@ export function planDay(activities, opts = {}) {
   const substantial = scheduled.filter((a) =>
     a.status !== 'skipped' && a.type !== 'note' && a.type !== 'stay' &&
     a.type !== 'food' && a.type !== 'transport');
-  const overflow = substantial.slice(cap)
+  // Overflow is a CAPACITY signal about SCHEDULED stops — an unscheduled (no-fit-hours)
+  // stop has no time and is reported separately below, so exclude it here (no double-count).
+  const overflow = substantial.filter((a) => a.time).slice(cap)
     .filter((a) => !a.timeLocked)
     .map((a) => ({ actId: a.id, name: a.name, reason: 'capacity' }));
+
+  // Doesn't-fit-its-hours: scheduleDay left these UNSCHEDULED (time=null) because the
+  // venue has known, non-seasonal hours that day but no open slot was free for the visit
+  // — rather than cram them past close. Shout them so the UI can offer "move to another
+  // day". (Closed-all-day venues are placed + caught by the 'closed' rule; seasonal ones
+  // are placed freely — neither lands here.)
+  const wd = weekdayOf(opts.date);
+  const noFitHours = scheduled
+    .filter((a) => !a.time && a.status !== 'skipped' && (a.type === 'activity' || a.type === 'food'))
+    .filter((a) => { const ivs = dayIntervals(a.openHours, wd); return ivs && ivs.length; })
+    .map((a) => ({ actId: a.id, name: a.name, reason: 'no_fit_hours', open: hoursLabel(a.openHours, wd), needMin: estimateDuration(a) }));
 
   // Unresolvable closures: re-timing can't open a venue that's dark all day (non-
   // seasonal) or permanently closed. Reuse validateTrip so the rule logic is shared
@@ -766,10 +793,10 @@ export function planDay(activities, opts = {}) {
   // ever pushing it — so the day_full guard there never fires. Catch it here too, so a
   // crammed-late stop is honestly reported as day_full instead of looking "planned ✓".
   const lateRunovers = substantial
-    .filter((a) => timeToMin(a.time) + Math.max(BUFFER_MIN, estimateDuration(a)) > DAY_END_MIN)
+    .filter((a) => a.time && timeToMin(a.time) + Math.max(BUFFER_MIN, estimateDuration(a)) > DAY_END_MIN)
     .filter((a) => !comfort.unresolved.some((u) => u.actId === a.id))
     .map((a) => ({ actId: a.id, name: a.name, reason: 'day_full' }));
-  const unresolved = [...closed, ...comfort.unresolved, ...lateRunovers];
+  const unresolved = [...closed, ...noFitHours, ...comfort.unresolved, ...lateRunovers];
 
   return {
     scheduled,

@@ -39,7 +39,7 @@
  */
 
 import { travelLeg, formatKm } from './geo';
-import { weekdayOf, isOpenAt, hoursLabel } from './hours';
+import { weekdayOf, isOpenAt, hoursLabel, dayIntervals } from './hours';
 import { checkOutOf } from './helpers';
 
 // ─── Dietary conflict patterns ────────────────────────────────────
@@ -52,7 +52,7 @@ const ALCO_RE = /\b(beer|wine|cocktail|whisky|whiskey|vodka|rum|gin|spirits|alco
 // trusted for a future trip date. For these we never hard-flag "closed"; we soften
 // to a "verify hours for your dates" tip. Bias is deliberate: a false "closed"
 // (deleting a place that's actually open) is worse than a soft verify nudge.
-const SEASONAL_RE = /\b(water ?park|aquapark|beach|ski resort|skiing|snowboard|snow park|ice rink|outdoor pool|botanical|arboretum|vineyard|winery|orchard|national park|state park|hiking|nature trail|kayak|canoe|rafting|surfing|snorkel|scuba|diving|boat tour|sunset cruise|dinner cruise|ferry|festival|farmers? market|night market|open.?air|amusement park|theme park|safari|waterfall)\b/i;
+export const SEASONAL_RE = /\b(water ?park|aquapark|beach|ski resort|skiing|snowboard|snow park|ice rink|outdoor pool|botanical|arboretum|vineyard|winery|orchard|national park|state park|hiking|nature trail|kayak|canoe|rafting|surfing|snorkel|scuba|diving|boat tour|sunset cruise|dinner cruise|ferry|festival|farmers? market|night market|open.?air|amusement park|theme park|safari|waterfall)\b/i;
 
 /** Best link to the venue's live, authoritative hours (for the "verify" tap-through). */
 function verifyHoursUrl(act) {
@@ -333,11 +333,35 @@ function validateDay(day, dayIndex, families = []) {
   if (acts.length === 0) return warnings;
 
   // Build timeline with estimated end times
-  const timeline = acts.map(act => {
-    const parts = (act.time || '09:00').split(':');
+  // Only TIMED stops sit on the timeline. An activity with no time is intentionally
+  // UNSCHEDULED (the planner couldn't fit it in its open hours that day) — it must not
+  // be mapped to a phantom 09:00 and generate false overlap/closed warnings; it's handled
+  // by the dedicated "doesn't fit this day" rule below.
+  const timeline = acts.filter(act => act.time).map(act => {
+    const parts = act.time.split(':');
     const startMin = (parseInt(parts[0]) || 0) * 60 + (parseInt(parts[1]) || 0);
     const duration = estimateDuration(act);
     return { act, startMin, duration, endMin: startMin + duration };
+  });
+
+  // ── Rule 0: Doesn't fit this day (unscheduled by the planner) ──
+  // A known-hours, non-seasonal venue the planner left UNSCHEDULED because a packed day
+  // had no open slot during its hours. This is the LOUD, terminal "move it to another
+  // day" signal — never crammed into a wrong slot. (Seasonal/unknown-hours never land here.)
+  acts.forEach(act => {
+    if (act.time) return;
+    if (act.type !== 'activity' && act.type !== 'food') return;
+    if (act.status === 'skipped') return;
+    const ivs = dayIntervals(act.openHours, weekdayOf(day.date));
+    if (!ivs || !ivs.length) return;   // unknown / closed-all-day → not this rule
+    const lbl = hoursLabel(act.openHours, weekdayOf(day.date));
+    warnings.push({
+      type: 'no_fit_hours', severity: 'warning', icon: '🗓️',
+      title: "Doesn't fit this day",
+      message: `"${act.name}" is open ${lbl}, but this day is too packed to fit it. Move it to another day.`,
+      hint: 'Tap the activity’s 📅 to move it to a day with room.',
+      verifyUrl: verifyHoursUrl(act), dayIndex, actIds: [act.id],
+    });
   });
 
   // ── Rule 1: Schedule overlaps ─────────────────────────────────────
@@ -461,6 +485,9 @@ function validateDay(day, dayIndex, families = []) {
     });
   }
 
+  // Rules 4–6 read the timeline directly; it can be empty when a day holds only
+  // time-less stops (e.g. a check-in stay, or venues left unscheduled by the planner).
+  if (timeline.length) {
   // ── Rule 4: No meal on a long day ────────────────────────────────
   const totalDaySpan = timeline[timeline.length - 1].endMin - timeline[0].startMin;
   const hasMeal = acts.some(a => a.type === 'food');
@@ -506,6 +533,7 @@ function validateDay(day, dayIndex, families = []) {
       actIds:   [firstItem.act.id],
     });
   }
+  }   // end timeline-based rules (4–6)
 
   // ── Rule 8: Multi-day journey (arriveTime crosses midnight) ──────
   // When a transport activity has arriveTime set and it is earlier in

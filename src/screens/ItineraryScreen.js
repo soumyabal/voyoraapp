@@ -15,7 +15,8 @@ import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodg
 import { googleMapsDayUrl } from '../utils/mapsRoute';
 import { scheduleDay, planDay, returnJourneyDraft } from '../utils/autoArrange';
 import { travelLeg, formatKm } from '../utils/geo';
-import { weekdayOf, hoursLabel, weeklyHoursLabel } from '../utils/hours';
+import { weekdayOf, hoursLabel, weeklyHoursLabel, dayIntervals } from '../utils/hours';
+import { getSuggestedTime, minToTime } from '../utils/slots';
 import { fetchPlacePhoto } from '../utils/places';
 import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
@@ -727,11 +728,18 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     // PREVIEW-DIFF: show exactly what will move (times are ~approximate — they ride on
     // a free straight-line travel estimate), and let the user Apply or Discard. Nothing
     // is written until they tap Apply.
+    // Venues the planner couldn't fit in their open hours today — shown LOUDLY in their
+    // own block + left UNSCHEDULED (in the day's "doesn't fit" tray) after Apply, never
+    // crammed past close. They're not "time changes", so keep them out of the shift list.
+    const noFit = r.unresolved.filter(u => u.reason === 'no_fit_hours');
+    const noFitIds = new Set(noFit.map(u => u.actId));
+
     const apply = () => {
       markPlanDayNoteSeen();
       setDayActivities(trip.id, currentDay, r.scheduled);
       const undo = () => setDayActivities(trip.id, currentDay, prev);
       const bits = [];
+      if (noFit.length) bits.push(`${noFit.length} to move to another day`);
       const dayFull = r.unresolved.filter(u => u.reason === 'day_full').length;
       if (dayFull) bits.push(`${dayFull} won't fit in one day`);
       if (r.overflow.length)   bits.push(`${r.overflow.length} may not fit a ${trip.pace} day`);
@@ -740,9 +748,16 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
       showUndoAction(bits.length ? `Day planned · ${bits.join(' · ')}` : 'Day planned ✓', 'sparkles', undo);
     };
 
+    const changeRows = r.changes.filter(c => !noFitIds.has(c.actId));
     const fmtRow = (c) => `•  ${c.name.length > 26 ? c.name.slice(0, 25) + '…' : c.name}:  ${c.from || '—'} → ~${c.to}`;
-    const shown = r.changes.slice(0, 6).map(fmtRow).join('\n');
-    const more  = r.changes.length > 6 ? `\n…and ${r.changes.length - 6} more` : '';
+    const shown = changeRows.slice(0, 6).map(fmtRow).join('\n');
+    const more  = changeRows.length > 6 ? `\n…and ${changeRows.length - 6} more` : '';
+
+    // LOUD, separate "won't fit today — move it" block (the owner's ask).
+    const noFitBlock = noFit.length
+      ? `\n\n🗓️  Won’t fit today — move to another day:\n${noFit.slice(0, 5).map(u => `•  ${u.name}${u.open ? ` (open ${u.open})` : ''}`).join('\n')}${noFit.length > 5 ? `\n…and ${noFit.length - 5} more` : ''}`
+      : '';
+
     const residual = [];
     const dayFullN = r.unresolved.filter(u => u.reason === 'day_full').length;
     if (dayFullN) residual.push(`${dayFullN} stop${dayFullN > 1 ? 's' : ''} won't fit in one day (too far apart)`);
@@ -750,14 +765,18 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     const tightN = r.unresolved.filter(u => u.reason === 'tight').length;
     if (tightN) residual.push(`${tightN} locked time${tightN > 1 ? 's' : ''} can't move (still tight)`);
     const note = residual.length ? `\n\n⚠️  ${residual.join(' · ')}` : '';
-    const n = r.changes.length;
+
+    const n = changeRows.length;
+    const lead = n
+      ? `I'll shift ${n} ${n === 1 ? 'time' : 'times'} so the day's travel and opening hours fit. Times are estimates (~):\n\n${shown}${more}`
+      : `I’ve arranged the day around what fits.`;
 
     Alert.alert(
       '✨ Plan my day',
-      `I'll shift ${n} ${n === 1 ? 'time' : 'times'} so the day's travel and opening hours fit. Times are estimates (~):\n\n${shown}${more}${note}`,
+      `${lead}${noFitBlock}${note}`,
       [
         { text: 'Discard', style: 'cancel' },
-        { text: 'Apply', onPress: apply },
+        { text: noFit.length ? 'Apply (move later)' : 'Apply', onPress: apply },
       ],
     );
   };
@@ -1177,6 +1196,38 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           </View>
         )}
 
+        {/* "Doesn't fit this day" tray — venues the planner left UNSCHEDULED because this
+            day is too packed to fit them during their open hours. Loud + actionable: move
+            to another day (never crammed into a slot after the venue has closed). */}
+        {day && (() => {
+          const unfit = day.activities.filter(a => !a.time && a.status !== 'skipped' && a.type !== 'note');
+          if (!unfit.length) return null;
+          return (
+            <View style={styles.noFitTray}>
+              <Text style={styles.noFitTitle}>
+                🗓️  {unfit.length === 1 ? "1 stop doesn’t fit this day" : `${unfit.length} stops don’t fit this day`}
+              </Text>
+              <Text style={styles.noFitSub}>
+                This day is too packed to fit {unfit.length === 1 ? 'it' : 'them'} during open hours — move to another day.
+              </Text>
+              {unfit.map(a => (
+                <View key={a.id} style={styles.noFitRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.noFitName} numberOfLines={1}>{a.name}</Text>
+                    {!!a.openHours && (
+                      <Text style={styles.noFitHours}>Open {hoursLabel(a.openHours, weekdayOf(day.date))}</Text>
+                    )}
+                  </View>
+                  <TouchableOpacity style={styles.noFitMoveBtn} onPress={() => setMovingAct(a)} activeOpacity={0.85}>
+                    <Icon name="calendar" size={13} color="#fff" />
+                    <Text style={styles.noFitMoveText}>Move to a day</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          );
+        })()}
+
         {/* Day template — Morning / Afternoon / Evening / Night */}
         <View style={styles.activities}>
           {!day ? null : day.activities.length === 0 ? (
@@ -1218,9 +1269,11 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             (() => {
               const slotActsMap = DAY_SLOTS.map(slot => ({
                 slot,
+                // Only TIMED stops sit in a slot. Unscheduled stops (time=null — the planner
+                // couldn't fit them in their open hours) go in the "Doesn't fit" tray below.
                 acts: [...day.activities]
-                  .filter(a => getSlotKey(a.time) === slot.key)
-                  .sort((a, b) => (a.time || '').localeCompare(b.time || '')),
+                  .filter(a => a.time && getSlotKey(a.time) === slot.key)
+                  .sort((a, b) => toMin(a.time) - toMin(b.time)),
               }));
               const lastFilledIdx = slotActsMap.reduce((best, { acts }, i) => acts.length > 0 ? i : best, -1);
               return slotActsMap.map(({ slot, acts }, slotIdx) => {
@@ -1599,7 +1652,18 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                     style={[styles.dayPickerRow, isCurrent && styles.dayPickerRowCurrent]}
                     onPress={() => {
                       if (!isCurrent) {
+                        const wasUnscheduled = !movingAct.time;
                         moveActivity(trip.id, currentDay, i, movingAct.id);
+                        // An unscheduled (didn't-fit) stop gets a real, in-hours time on its
+                        // new day so it lands scheduled — not dropped into that day's tray too.
+                        if (wasUnscheduled) {
+                          const need   = estimateDuration(movingAct);
+                          const openMin = (dayIntervals(movingAct.openHours, weekdayOf(d.date)) || [])[0]?.o;
+                          const slotKey = getSlotKey(openMin != null ? minToTime(openMin) : '10:00');
+                          updateActivity(trip.id, movingAct.id, {
+                            time: getSuggestedTime(trip, i, slotKey, need, movingAct.openHours),
+                          });
+                        }
                         setMovingAct(null);
                       }
                     }}
@@ -2779,6 +2843,19 @@ const styles = StyleSheet.create({
   actActionBtnDisabled:{ opacity: 0.25 },
 
   // Reorder hint bar
+  // "Doesn't fit this day" tray — amber, loud-but-calm (a placement problem with an easy fix).
+  noFitTray: {
+    marginHorizontal: spacing.xxl, marginBottom: spacing.md,
+    backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a',
+    borderRadius: radius.lg, padding: spacing.md,
+  },
+  noFitTitle: { ...typography.bodyBold, color: '#92400e' },
+  noFitSub:   { ...typography.caption, color: '#a16207', marginTop: 2, marginBottom: spacing.sm },
+  noFitRow:   { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 6, borderTopWidth: 1, borderTopColor: '#fef3c7' },
+  noFitName:  { ...typography.body, color: colors.text, fontWeight: '700' },
+  noFitHours: { ...typography.caption, color: colors.subtle, marginTop: 1 },
+  noFitMoveBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#d97706', borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 7 },
+  noFitMoveText: { color: '#fff', fontWeight: '800', fontSize: 12.5 },
   reorderHintBar: {
     marginHorizontal: spacing.xxl,
     marginBottom: spacing.sm,

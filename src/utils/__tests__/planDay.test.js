@@ -5,6 +5,7 @@
  * seasonal closed → soft tip, NOT reported). Nothing is ever dropped.
  */
 import { planDay } from '../autoArrange';
+import { timeToMin } from '../slots';
 
 const FRI = '2026-06-12'; // weekday 5
 const act = (id, time, extra = {}) => ({
@@ -104,5 +105,41 @@ describe('planDay — unpadded times sort chronologically (not as strings)', () 
     const r = planDay(acts, { date: FRI, pace: 'moderate' });
     expect(r.changed).toBe(false);
     expect(r.changes).toEqual([]);
+  });
+});
+
+describe('planDay honors opening hours — unfit venues are unscheduled, never crammed past close', () => {
+  const H_10_5 = [{ d: 5, o: 10 * 60, c: 17 * 60 }]; // Fri 10 AM–5 PM
+  // 3h visits at the same spot (no travel): only ~2 fit a 10–5 window.
+  const lh = (id, extra = {}) => ({ id, type: 'activity', name: id, time: '10:00', durationMins: 180, lat: 0, lng: 0, openHours: H_10_5, ...extra });
+
+  test('three 10–5 venues: the ones that fit stay within hours, the rest are unscheduled (never after 17:00)', () => {
+    const r = planDay([lh('A'), lh('B'), lh('C')], { date: FRI, pace: 'moderate' });
+    const placed = r.scheduled.filter(a => a.time);
+    const unsched = r.scheduled.filter(a => !a.time);
+    placed.forEach(a => expect(timeToMin(a.time) + 180).toBeLessThanOrEqual(17 * 60)); // ends by close
+    expect(unsched.length).toBeGreaterThanOrEqual(1);  // at least one can't fit
+    expect(r.scheduled).toHaveLength(3);               // nothing dropped
+    expect(r.unresolved.some(u => u.reason === 'no_fit_hours')).toBe(true);
+  });
+
+  test('convergent: re-running on a day with an unfit venue changes nothing (no loop)', () => {
+    const first = planDay([lh('A'), lh('B'), lh('C')], { date: FRI, pace: 'moderate' });
+    const second = planDay(first.scheduled, { date: FRI, pace: 'moderate' });
+    expect(second.changed).toBe(false);
+  });
+
+  test('unknown-hours venue is never marked no_fit (flows freely)', () => {
+    const free = { id: 'X', type: 'activity', name: 'X', time: '10:00', durationMins: 180, lat: 0, lng: 0 }; // no openHours
+    const r = planDay([lh('A'), lh('B'), free], { date: FRI, pace: 'moderate' });
+    expect(r.scheduled.find(a => a.id === 'X').time).toBeTruthy();
+    expect(r.unresolved.some(u => u.actId === 'X')).toBe(false);
+  });
+
+  test('seasonal venue that cannot fit is placed (low-confidence hours), not declared no_fit', () => {
+    const park = lh('Water Park'); // SEASONAL_RE matches "water park"
+    const r = planDay([lh('A'), lh('B'), park], { date: FRI, pace: 'moderate' });
+    expect(r.scheduled.find(a => a.id === 'Water Park').time).toBeTruthy();
+    expect(r.unresolved.some(u => u.actId === 'Water Park' && u.reason === 'no_fit_hours')).toBe(false);
   });
 });

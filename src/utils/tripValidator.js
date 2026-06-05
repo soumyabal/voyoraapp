@@ -85,6 +85,15 @@ export function estimateDuration(activity) {
 
   // ── Transport ────────────────────────────────────────────────────
   if (activity.type === 'transport') {
+    // If the user gave both Departs (time) and Arrives, THAT span is the real duration —
+    // honor it over the per-mode default (a 05:00 → 16:00 drive is 11h, not the 2h default).
+    // Arrives earlier than Departs = crosses midnight → add a day.
+    if (activity.time && activity.arriveTime) {
+      const tm = (t) => { const [h, m] = String(t).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+      let span = tm(activity.arriveTime) - tm(activity.time);
+      if (span <= 0) span += 24 * 60;
+      if (span > 0) return span;
+    }
     switch (activity.subtype) {
       case 'flight':  return 180;  // flight + 2h airport buffer
       case 'car':     return 120;  // default drive

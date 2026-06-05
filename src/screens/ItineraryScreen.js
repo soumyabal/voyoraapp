@@ -10,7 +10,7 @@ import { colors, spacing, radius, typography, shadow, activityColors, activityIc
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
 import { fmt, fmtM, getActivityIcon, uid, tripPhase, defaultDayFor, daysBetweenISO, todayISO, nowNextOf } from '../utils/helpers';
-import { calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost, calcFamilyBalances } from '../utils/costs';
+import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost, calcFamilyBalances } from '../utils/costs';
 import { validateTrip, summariseWarnings, estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl, googleMapsDayShareUrl } from '../utils/mapsRoute';
 import { scheduleDay, planDay, returnJourneyDraft, suggestDayForVenue } from '../utils/autoArrange';
@@ -322,8 +322,6 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
   const [showDetail, setShowDetail] = useState(false);
   const itinTotal = calcTripItineraryTotal(trip);
   const day     = trip.days[currentDay];
-  const dayCost = day ? calcDayCostForTrip(day, trip) : 0;
-  const dayPP   = day ? calcDayPerPersonCost(day) : 0;
 
   const handleShare = async () => {
     try {
@@ -338,58 +336,32 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
     <>
       {/* ── Sticky bar ── */}
       <View style={ch.stickyBar}>
-        {/* Active day — the Plan tab's context. (Trip total is a roll-up; it lives in
-            the ⓘ "Trip Overview" sheet, so the bar isn't crowded into overlaps.) */}
+        {/* Trip total — the headline number for the whole trip (owner's call: total on
+            top, not the day). Per-day cost lives in the day pills + the ⓘ sheet. */}
         <View style={ch.miniDayBlock}>
-          <Text style={ch.miniTripLabel} numberOfLines={1}>{day?.label?.toUpperCase() || 'DAY'}</Text>
-          <View style={ch.miniDayRow}>
-            <Text style={ch.miniDayAmt} numberOfLines={1}>{dayCost > 0 ? fmtM(dayCost) : '—'}</Text>
-            {dayCost > 0 && <Text style={ch.miniPP} numberOfLines={1}>{fmtM(dayPP)}/p</Text>}
-          </View>
+          <Text style={ch.miniTripLabel} numberOfLines={1}>TRIP TOTAL</Text>
+          <Text style={ch.miniDayAmt} numberOfLines={1}>{itinTotal > 0 ? fmtM(itinTotal) : '—'}</Text>
         </View>
 
-        {/* Trip health — THREE honest states (a green ✓ is EARNED, not the default):
-              · amber + count → a genuine, provable conflict to fix
-              · neutral "…"   → planned-so-far is clean but the trip ISN'T finished
-                                (a blank/half-built trip — calm, never an alarm)
-              · green ✓        → every (interior) day planned AND no conflicts
-            Reserving green stops a half-empty trip from claiming "all set", without
-            re-introducing red/amber alarm on a fresh trip (neutral can't scare). */}
+        {/* Trip health — flag ONLY a real conflict (amber + count). When all's well we
+            DON'T show a green ✓ here: it just duplicated the inline "Looks well-paced"
+            tip + the green day-status pill below (owner flagged the redundant green). */}
         {!!onCheckTrip && (() => {
           const ignored = trip.ignoredWarnings || [];
           const conflicts = validateTrip(trip)
             .filter(w => w.severity === 'error' && !ignored.includes(`${w.type}:${w.dayIndex ?? 'trip'}`))
             .length;
-          // Green ✓ is earned only when EVERY day has real content AND there's no
-          // conflict — so the checkmark never contradicts a half-empty trip. A
-          // day with just a note (rest day) doesn't count as planned.
-          const isPlanned   = d => d.activities.some(a => a.status !== 'skipped' && a.type !== 'note');
-          const totalDays   = trip.days.length;
-          const plannedDays = trip.days.filter(isPlanned).length;
-
-          let bg, icon, label;
-          if (conflicts > 0) {
-            bg = colors.warn;    icon = 'warning-outline';
-            label = `Trip check: ${conflicts} thing${conflicts > 1 ? 's' : ''} to fix`;
-          } else if (plannedDays < totalDays) {
-            bg = colors.subtle;  icon = 'more';
-            label = plannedDays === 0
-              ? 'Trip check: nothing planned yet'
-              : `Trip check: ${plannedDays} of ${totalDays} days planned, no conflicts so far`;
-          } else {
-            bg = colors.success; icon = 'checkmark-circle';
-            label = `Trip check: all ${totalDays} days planned, no conflicts`;
-          }
+          if (conflicts === 0) return null;   // no green/neutral chip — only flag conflicts
           return (
             <TouchableOpacity
-              style={[ch.checkChip, { backgroundColor: bg }]}
+              style={[ch.checkChip, { backgroundColor: colors.warn }]}
               onPress={onCheckTrip}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel={label}
+              accessibilityLabel={`Trip check: ${conflicts} thing${conflicts > 1 ? 's' : ''} to fix`}
             >
-              <Icon name={icon} size={13} color="#fff" />
-              {conflicts > 0 && <Text style={ch.checkChipText}>{conflicts}</Text>}
+              <Icon name="warning-outline" size={13} color="#fff" />
+              <Text style={ch.checkChipText}>{conflicts}</Text>
             </TouchableOpacity>
           );
         })()}
@@ -2108,24 +2080,12 @@ const ch = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  miniDayRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-    minWidth: 0,
-  },
   miniDayAmt: {
     fontSize: 20,
     fontWeight: '800',
     color: '#fff',
     letterSpacing: -0.5,
-    flexShrink: 1,   // the big amount ellipsizes first if space is tight…
-  },
-  miniPP: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.green,
-    flexShrink: 0,   // …keep "$XX/p" (the moat) intact
+    flexShrink: 1,   // ellipsizes (numberOfLines) instead of overflowing if ever squeezed
   },
   checkChip: {
     flexDirection: 'row', alignItems: 'center', gap: 3,

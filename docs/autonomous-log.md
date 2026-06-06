@@ -79,6 +79,11 @@ diff only intended files. Target: ItineraryScreen.js (3022 lines) + DiscoverModa
   SESSION COMPLETE — loop stopped (no further wakeups scheduled).
 - 2026-06-05 — ✓ Play My Trip (cached photos + 4 music themes + multi-photo reel) VERIFIED ON
   DEVICE by the owner ("looks good"). The on-device open item from this session is now closed.
+- 2026-06-05 — roadmap item (a) close-time-first ordering — DONE, comfort-first per owner's call
+  ("keep the trip comfortable, not rushed; add the detour requirement later"). routeOrder now does
+  distance routing then a bounded comfortClosePass that pulls earlier-closing stops forward ONLY
+  within a 2 km comfort budget (never detours). No-op without close-times → all snapshots unchanged.
+  +7 tests; 429 green (8278eaa). The aggressive "detour to catch a closing" mode stays deferred.
 
 ## 2026-06-04 — test-user bug fixes (user driving)
 - 2026-06-04 — Bug1: 24/7 places (bridge/lighthouse) no longer show "Closed" — Google's no-close period was recorded Sunday-only; compactHours now expands 24/7 to all 7 days + handles cross-midnight; store v4→v5 migration repairs existing trips. ✓ device-verified (19b84aa)

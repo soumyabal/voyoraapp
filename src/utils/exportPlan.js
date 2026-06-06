@@ -13,7 +13,14 @@ import { getAllMembers, fmt, fmtM } from './helpers';
 import { calcBalances, calcSettlements, calcFamilyBalances } from './costs';
 import { googleMapsDayShareUrl } from './mapsRoute';
 import { coverTagline, countdownLine, dayVibe, closingNote } from './tripCopy';
+import { timeToMin } from './slots';
 import { APP_NAME } from '../config';
+
+// Order a day's stops the way the app does: by numeric start time (ascending),
+// with any untimed stop sorted last. Matches ItineraryScreen's timeToMin sort —
+// a raw array order can put a late "drive home" before earlier stops.
+const byTime = (a, b) =>
+  (a.time ? timeToMin(a.time) : Infinity) - (b.time ? timeToMin(b.time) : Infinity);
 
 // ─── Activity type metadata ───────────────────────────────────────────────────
 
@@ -150,7 +157,7 @@ export function buildHTML(trip, travelers = [], { includeExpenses = false } = {}
     const dayCost = day.activities.reduce((s, a) => s + (a.costPerPerson || 0), 0);
     const hasTransit = day.activities.some(a => a.type === 'transport' && a.name?.includes('→'));
 
-    const activitiesHTML = day.activities.map(act => {
+    const activitiesHTML = day.activities.slice().sort(byTime).map(act => {
       const color = ACT_COLORS[act.type] || '#6b7280';
       const icon  = ACT_ICONS[act.type] || '📌';
       return `
@@ -405,7 +412,7 @@ export function buildDayHTML(trip, day, dayIndex) {
   const bySlot = { morning: [], afternoon: [], evening: [], night: [] };
   (day.activities || [])
     .slice()
-    .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+    .sort(byTime)
     .forEach(a => bySlot[getSlot(a.time)].push(a));
 
   const activitiesHTML = SLOT_ORDER

@@ -26,7 +26,7 @@ export default function SplitwiseScreen({ trip }) {
     deleteExpense, toggleFamilySplit, toggleExpenseMember,
     updateExpensePayer, updateExpenseSplitMode, setTripSplitMode,
     toggleExpenseExcluded, updateExpenseAmount, updateExpenseCustomShares,
-    setFamilyHead, toggleSettlementPaid,
+    setFamilyHead, toggleSettlementPaid, updateActivity,
   } = useStore();
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [headTipDismissed, setHeadTipDismissed] = useState(false);
@@ -63,9 +63,23 @@ export default function SplitwiseScreen({ trip }) {
               Confirm they happened (check them off in Plan) or remove them, so the split only divides what actually occurred.
             </Text>
             {unconfirmed.slice(0, 4).map(({ activity, expense, dayLabel }) => (
-              <Text key={activity.id} style={styles.unconfItem} numberOfLines={1}>
-                •  {activity.name} · {dayLabel} · {fmtM(expense.amount)}
-              </Text>
+              <TouchableOpacity
+                key={activity.id}
+                style={styles.unconfRow}
+                activeOpacity={0.7}
+                onPress={() => Alert.alert(
+                  activity.name,
+                  `${dayLabel} · ${fmtM(expense.amount)} is in the split. Did this happen?`,
+                  [
+                    { text: '✓ Yes, it happened', onPress: () => updateActivity(trip.id, activity.id, { status: 'done' }) },
+                    { text: 'Remove from split', style: 'destructive', onPress: () => toggleExpenseExcluded(trip.id, expense.id) },
+                    { text: 'Cancel', style: 'cancel' },
+                  ],
+                )}
+              >
+                <Text style={styles.unconfItem} numberOfLines={1}>•  {activity.name} · {dayLabel} · {fmtM(expense.amount)}</Text>
+                <Text style={styles.unconfResolve}>Resolve ›</Text>
+              </TouchableOpacity>
             ))}
             {unconfirmed.length > 4 && (
               <Text style={styles.unconfMore}>…and {unconfirmed.length - 4} more</Text>
@@ -847,7 +861,9 @@ const styles = StyleSheet.create({
   unconfIcon:   { fontSize: 15 },
   unconfTitle:  { flex: 1, ...typography.smallBold, color: colors.ink, lineHeight: 18 },
   unconfSub:    { ...typography.caption, color: colors.body, marginTop: spacing.xs, lineHeight: 16 },
-  unconfItem:   { ...typography.caption, color: colors.body, marginTop: spacing.xs },
+  unconfRow:    { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
+  unconfItem:   { flex: 1, ...typography.caption, color: colors.body },
+  unconfResolve:{ ...typography.caption, color: colors.accent, fontWeight: '800' },
   unconfMore:   { ...typography.caption, color: colors.subtle, marginTop: 2 },
 
   // Sticky footer

@@ -1,6 +1,7 @@
 # Voyara — rule engines, visualized
 
-Two deterministic, pure engines power the planning experience. This doc is the **structure**
+Three deterministic, pure engines power the experience — **Trip Check** (§1), the **planner** (§2),
+and the **split/settlement moat** (§3). This doc is the **structure**
 (how they're wired); for **behavior** (what actually fires for real trips) open the generated
 **[`rule-report.html`](rule-report.html)** — run `npm run rule-report` to regenerate it from the
 live `validateTrip()`. Together: the Mermaid below = the map, the report = the territory.
@@ -89,7 +90,49 @@ than a repeating alert.
 
 ---
 
-## 3. Why a generated report (not just diagrams)
+## 3. Split / settlement engine — `costs.js` (THE MOAT)
+
+Not a *warning* engine — a **money-resolution** engine. Given an expense + the trip, it resolves
+who owes what, then nets everyone and reduces to the minimum set of transfers. The decision logic
+is the **mode** (family vs individual) × the **split kind** (even vs uneven/custom), guarded so the
+books can never leak.
+
+```mermaid
+flowchart TD
+  inp["expense + trip<br/>amount · paidBy · participatingFamilies / Members<br/>splitMode · unevenSplit · customShares"]
+  inp --> rm{"resolveMode<br/>exp.splitMode ▸ trip.splitMode ▸ 'individual'"}
+  rm --> ef["effective participants<br/>getEffectiveFamilies / getEffectiveMembers<br/>(an EMPTY family carries NO share → no leak)"]
+  ef --> un{"unevenActive?<br/>custom shares sum to the frozen total"}
+  un -->|"yes"| cs["use customShares[id]<br/>family: head carries it · individual: per member"]
+  un -->|"no / unbalanced"| ev["EVEN split<br/>family: amount ÷ paying families<br/>individual: amount ÷ members"]
+  cs --> sh["famExpenseShare / memberExpenseShare"]
+  ev --> sh
+  sh --> bal["calcBalances<br/>per member: paid − owed  (Σ net = 0)"]
+  bal --> set["calcSettlements<br/>greedy credits ↔ debts → minimal transfers"]
+  set --> out["who pays whom → the settlement screen"]
+```
+
+**The four resolution quadrants** (what `famExpenseShare` returns):
+
+| | **Even** | **Uneven (balanced custom)** |
+|---|---|---|
+| **Family mode** | `amount ÷ paying families` | `customShares[familyId]` (head carries) |
+| **Individual mode** | `involved members × (amount ÷ members)` | Σ family's members' `customShares[memberId]` |
+
+**Invariants the engine guarantees** (and that `costs.test.js` pins):
+- **No leak:** an empty participating family — or an expense nobody shares — is *not* in the ledger; crediting the payer for it would invent money (Σ net ≠ 0).
+- **Uneven only when balanced:** custom shares drive settlement *only* if they sum to the (frozen) `amount`; an in-progress edit safely falls back to the even split.
+- **Family mode → only the head** of a family carries its share; dependents owe 0.
+- **`estimatedAmount` is frozen** — only `amount` ever changes (see AGENTS.md invariants).
+
+**Locked by:** `costs.test.js` (direct, 99% stmts) + `splitEngine.regression.test.js` /
+`splitDelete.regression.test.js` (every mode, a 500-trip property fuzz, delete-flow balance).
+
+> ⚠️ Per the roadmap: **never let AI touch the money inside this engine.** It stays deterministic.
+
+---
+
+## 4. Why a generated report (not just diagrams)
 
 The rules are **pure + deterministic + fixture-backed**, so the most trustworthy view is one drawn
 from the engine itself, not hand-drawn. `scripts/gen-rule-report.js` runs the real `validateTrip()`

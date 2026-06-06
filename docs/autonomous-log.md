@@ -28,6 +28,8 @@
 - 2026-06-04 — lint cleanup (path-to-10 "lint/CI" win): eliminated the ENTIRE react/no-unescaped-entities category — 39 display-text apostrophes/quotes escaped across 13 screens/modals (line-scoped, JSX expressions untouched). Zero behavior change (pure text), 214 tests stay green; eslint 212→173 problems (111→72 errors). Deferred the rule-registry + store-slice refactors (§9.4): too large to do "small" + only partially snapshot-covered → better with the user available
 - 2026-06-05 — lint cleanup (§9.1 highest-ROI / path-to-10): removed dead code across 14 files — unused imports + pure dead local vars (FamilyBudgetAgent memberShare/roomShare/orphaned expenseGroups, pipeline nights, exportPlan CAT_ICONS/now/safeName, plannerAPI SD/SFO imports + context + isArrival, places/PlayTripModal unused catch bindings → optional-catch, + 8 unused imports). Zero behavior change (no functions/handlers/setters/tests touched; react-compiler ref/setState/impure diagnostics left for device review); 325 tests + 25 snapshots green; eslint 175→148 problems (−27 warnings, 0 new)
 
+- 2026-06-05 — chore(lint): dropped 3 unused imports from ItineraryScreen (activityIcons / summariseWarnings / scheduleDay); behavior-neutral, screen lint 10→7, 422 tests green (68e5b66). DEFERRED roadmap item (a) close-time-first ordering — it's a planning-quality tradeoff (drive farther to catch an early-closing venue, or not?) = a product/policy decision, so flagged for the owner rather than decided unattended.
+
 ## 2026-06-05 — refactoring session (autonomous lead, panel-guided)
 Owner handed the lead for ~8h to refactor, going with the panel's recommendation, committing
 frequently for review. Safe mode (panel consensus): extract PURE logic from the big screens

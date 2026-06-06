@@ -8,8 +8,8 @@ import PlayTripModal from '../modals/PlayTripModal';
 import { colors, spacing, radius, typography, shadow, activityColors } from '../theme';
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
-import { fmt, fmtM, getActivityIcon, uid, tripPhase, defaultDayFor, todayISO, nowNextOf } from '../utils/helpers';
-import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost, calcFamilyBalances } from '../utils/costs';
+import { fmt, fmtM, getActivityIcon, uid } from '../utils/helpers';
+import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost } from '../utils/costs';
 import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
 import { planDay, returnJourneyDraft, suggestDayForVenue } from '../utils/autoArrange';
@@ -21,8 +21,7 @@ import { getDietaryWarning } from '../utils/dietary';
 import { generateDayShareText } from '../utils/dayShare';
 import { computeTripHealth } from '../utils/tripHealth';
 import { tripCheckStatus } from '../utils/tripCheckStatus';
-import { buildStatusPill } from '../utils/tripStatus';
-import { DAY_SLOTS, ACT_ICON, SEV_RANK, PILL_TONE, DAY_PILL, HEALTH_DOT, SLOT_MEAL, MEAL_LABEL, NIGHT_PLAN_OPTIONS, NIGHT_PLAN_META } from '../utils/itineraryConfig';
+import { DAY_SLOTS, ACT_ICON, SEV_RANK, DAY_PILL, HEALTH_DOT, SLOT_MEAL, MEAL_LABEL, NIGHT_PLAN_OPTIONS, NIGHT_PLAN_META } from '../utils/itineraryConfig';
 import { bookingUrl } from '../utils/booking';
 import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
@@ -405,14 +404,8 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
 
   const day = trip.days[currentDay] || trip.days[0];
 
-  // Trip lifecycle: phase + the calendar "today" day index (active trips only), used
-  // by the status pill and the phase-aware day chips.
-  const phase    = tripPhase(trip);
-  const todayIdx = phase === 'active' ? defaultDayFor(trip) : -1;
-  const statusPill = buildStatusPill(trip, phase, todayIdx, todayISO());
-  // Live-trip "Today" lens: are we viewing today, and what's now/next.
-  const isToday = phase === 'active' && currentDay === todayIdx;
-  const nowMin  = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
+  // Phase-1 planner: no live "today / active day" tracking inside a trip — you pick any day
+  // and plan it. (Active trips are surfaced on the Home screen instead.)
 
   // Where you woke today (Day 1 → origin; else last night's hotel / friends-camping
   // address / home). Drives the first-stop travel leg for ANY day, not just Day 1.
@@ -696,20 +689,14 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     );
   };
 
-  // Direct-status setters for swipe actions (toggle off if already set) + undo toast.
+  // Toggle an activity's done state (the card checkbox) + undo toast. 'Did not do' was retired
+  // from the Phase-1 planner UI; the engine still understands 'skipped' for any existing data.
   const setDone = (act) => {
     const prev = act.status ?? null;
     const next = prev === 'done' ? null : 'done';
     markActivityStatus(trip.id, act.id, next);
     showUndo(next === 'done' ? 'Marked as done' : 'Marked as not done',
              next === 'done' ? 'checkmark-circle' : 'ellipse-outline', act.id, prev);
-  };
-  const setSkipped = (act) => {
-    const prev = act.status ?? null;
-    const next = prev === 'skipped' ? null : 'skipped';
-    markActivityStatus(trip.id, act.id, next);
-    showUndo(next === 'skipped' ? "Marked as didn't do" : 'Status cleared',
-             next === 'skipped' ? 'close-circle' : 'ellipse-outline', act.id, prev);
   };
 
   // Pin/unpin an exact time — a locked stop is a fixed anchor "Plan my day" won't move.
@@ -810,40 +797,21 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-        {/* Trip status pill — before / during / after (📅 In 8 days · 🟢 Day 2 of 3 · today · ✓ Trip complete) */}
-        {statusPill && (
-          <View style={[styles.statusPill, { backgroundColor: PILL_TONE[statusPill.tone].bg }]}
-            accessibilityRole="text" accessibilityLabel={statusPill.text.replace(/^[^\w]+/, '')}>
-            <Text style={[styles.statusPillText, { color: PILL_TONE[statusPill.tone].fg }]}>{statusPill.text}</Text>
-          </View>
-        )}
-
-        {/* Live trip, but you've navigated off today → one tap back to now */}
-        {phase === 'active' && !isToday && (
-          <TouchableOpacity style={styles.jumpToday} onPress={() => setCurrentDay(todayIdx)} activeOpacity={0.8}
-            accessibilityRole="button" accessibilityLabel={`Jump to today, Day ${todayIdx + 1}`}>
-            <Text style={styles.jumpTodayText}>↩ Jump to today · Day {todayIdx + 1}</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Day Navigation — during an active trip, today is dotted and past days dimmed */}
+        {/* Day Navigation — pick any day to plan it (no live "today" tracking in the planner) */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayNav} contentContainerStyle={{ paddingHorizontal: spacing.xxl }}>
           {trip.days.map((d, i) => {
             const dc = calcDayCostForTrip(d, trip);
-            const isToday = i === todayIdx;
-            const isPast  = phase === 'active' && i < todayIdx;
             const healthDot = HEALTH_DOT[healthByDay[i]];   // undefined for clean/empty/tip → calm
             return (
               <TouchableOpacity
                 key={d.date}
-                style={[styles.dayBtn, i === currentDay && styles.dayBtnActive, isPast && styles.dayBtnPast]}
+                style={[styles.dayBtn, i === currentDay && styles.dayBtnActive]}
                 onPress={() => setCurrentDay(i)}
               >
                 {healthDot && <View style={[styles.dayHealthDot, { backgroundColor: healthDot }]} />}
                 <Text style={[styles.dayBtnLabel, i === currentDay && styles.dayBtnLabelActive]}>{d.label}</Text>
                 <Text style={[styles.dayBtnDate, i === currentDay && { color: colors.primary }]}>{fmt(d.date)}</Text>
                 {dc > 0 && <Text style={styles.dayCost}>{fmtM(dc)}</Text>}
-                {isToday && <View style={styles.todayDot} />}
               </TouchableOpacity>
             );
           })}
@@ -950,51 +918,6 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             </View>
           </View>
         )}
-
-        {/* Live "Today" orientation — now / next, only while the trip is happening */}
-        {isToday && day && (() => {
-          const { now, next, empty } = nowNextOf(day, nowMin);
-          let text;
-          if (empty) text = 'Nothing planned for today yet — add a stop or just wing it.';
-          else if (next && now) text = `Now: ${now.name}  ·  Next: ${next.name} at ${next.time}`;
-          else if (next) text = `Up next: ${next.name} at ${next.time}`;
-          else text = `That's today's plan done — log any spend so tonight's split stays live.`;
-          return (
-            <View style={styles.todayBanner} accessibilityRole="text" accessibilityLabel={`Today. ${text}`}>
-              <Text style={styles.todayBannerText} numberOfLines={2}>🟢 {text}</Text>
-            </View>
-          );
-        })()}
-
-        {/* During-trip running tally — the moat, LIVE. Each family's net (paid − owed)
-            so the split stays present while you spend, not just at settle-up. Read-only. */}
-        {isToday && (() => {
-          const spent = (trip.expenses || []).filter(e => !e.excluded).reduce((s, e) => s + (e.amount || 0), 0);
-          if (spent <= 0) return null;
-          const fb = calcFamilyBalances(trip);
-          const allSquare = fb.every(x => Math.abs(x.net) < 0.5);
-          return (
-            <View style={styles.tallyBanner} accessibilityRole="summary"
-              accessibilityLabel={`${Math.round(spent)} dollars logged so far. ${allSquare ? 'Everyone is square.' : fb.map(x => `${x.family.name} ${x.net >= 0 ? 'up' : 'owes'} ${Math.abs(Math.round(x.net))}`).join('. ')}`}>
-              <Text style={styles.tallyTitle}>💰 ${Math.round(spent)} logged so far</Text>
-              {allSquare ? (
-                <Text style={styles.tallySquare}>✓ Everyone&apos;s square</Text>
-              ) : (
-                <View style={styles.tallyRow}>
-                  {fb.map(x => {
-                    const up = x.net >= 0;
-                    return (
-                      <Text key={x.family.id}
-                        style={[styles.tallyChip, { backgroundColor: up ? '#dcfce7' : '#fef3c7', color: up ? '#15803d' : '#b45309' }]}>
-                        {x.family.name} {up ? '+' : '−'}${Math.abs(Math.round(x.net))}
-                      </Text>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-          );
-        })()}
 
         {/* Inline Trip Check for THIS day — ONE calm summary pill (positive-first),
             not a wall of red chips. Tap to open the full checker. */}
@@ -1281,7 +1204,6 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                             reorderSlotActivities(trip.id, currentDay, newOrder.map(a => a.id));
                           }}
                           onMarkDone={() => setDone(act)}
-                          onMarkSkipped={() => setSkipped(act)}
                           onEdit={() => openEdit(act)}
                           onDelete={() => deleteWithUndo(act)}
                           onMoveRequest={() => setMovingAct(act)}
@@ -1553,7 +1475,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   );
 }
 
-function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onMarkSkipped, onEdit, onDelete, onMoveRequest, onSlotMove, onToggleLock, onExploreNearby }) {
+function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onEdit, onDelete, onMoveRequest, onSlotMove, onToggleLock, onExploreNearby }) {
   const status    = act.status ?? null;
   const isDone    = status === 'done';
   const isSkipped = status === 'skipped';
@@ -1620,13 +1542,9 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
     Linking.openURL(thumbAction.url).catch(() => {});
   };
 
-  // Swipe actions are PHASE-AWARE: while a trip is still being PLANNED, "Done / Did Not Do"
-  // are meaningless (you can't have done a future stop) — so the swipe leads with Move +
-  // Delete. Once the trip is happening (active) or over (past), the swipe is the status
-  // pad (Done / Did Not Do / Delete). Delete stays the far-right cell in every phase, so
-  // the one shared action never moves under your thumb.
-  const phase    = tripPhase(trip);
-  const planning = phase === 'upcoming' || phase === 'undated';
+  // Swipe actions are phase-agnostic: this is a planner, so you re-arrange a day whether the
+  // trip is upcoming or already underway — the swipe is always Move + Delete. Done/not-done is
+  // the checkbox on the card itself (no separate "Did Not Do").
   // One Move entry point (consolidates the old day-icon + hidden long-press): choose day or slot.
   const moveChooser = () => {
     close();
@@ -1848,8 +1766,15 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
             )}
           </TouchableOpacity>
 
-          {/* Bottom action row — edit & move only; delete is via swipe */}
+          {/* Bottom action row — done checkbox, edit & move; delete is via swipe */}
           <View style={styles.actInlineActions}>
+            {act.type !== 'note' && (
+              <TouchableOpacity onPress={onMarkDone} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}
+                accessibilityRole="checkbox" accessibilityState={{ checked: isDone }}
+                accessibilityLabel={isDone ? `Mark ${act.name || 'activity'} not done` : `Mark ${act.name || 'activity'} done`}>
+                <Icon name={isDone ? 'checkmark-circle' : 'ellipse-outline'} size={18} color={isDone ? colors.success : colors.subtle} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
               <Icon name="create-outline" size={16} color={colors.subtle} />
             </TouchableOpacity>
@@ -1880,36 +1805,18 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
         </View>
         </View>{/* end actCard */}
 
-        {/* ── Action buttons (revealed when card scrolls left) — PHASE-AWARE ── */}
+        {/* ── Action buttons (revealed when card scrolls left) — always Move + Delete ── */}
         <View style={styles.actCardActions}>
-          {planning ? (
-            // Planning: Move is the verb you actually use; Done/Did-Not-Do are meaningless.
-            <TouchableOpacity
-              style={[styles.actCardAction, { backgroundColor: '#64748b' }]}
-              onPress={moveChooser}
-            >
-              <Icon name="calendar" size={19} color="#fff" />
-              <Text style={styles.actCardActionLabel}>Move</Text>
-            </TouchableOpacity>
-          ) : (
-            <>
-              <TouchableOpacity
-                style={[styles.actCardAction, { backgroundColor: '#22c55e' }]}
-                onPress={() => { close(); onMarkDone(); }}
-              >
-                <Icon name="checkmark" size={20} color="#fff" />
-                <Text style={styles.actCardActionLabel}>Done</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actCardAction, { backgroundColor: '#f97316' }]}
-                onPress={() => { close(); onMarkSkipped(); }}
-              >
-                <Icon name="close" size={20} color="#fff" />
-                <Text style={styles.actCardActionLabel}>Did Not Do</Text>
-              </TouchableOpacity>
-            </>
-          )}
-          {/* Delete — always the far-right cell, in every phase. */}
+          {/* Move is always available — you re-arrange a plan whether the trip is upcoming or
+              already underway. Done/not-done lives on the card checkbox, not here. */}
+          <TouchableOpacity
+            style={[styles.actCardAction, { backgroundColor: '#64748b' }]}
+            onPress={moveChooser}
+          >
+            <Icon name="calendar" size={19} color="#fff" />
+            <Text style={styles.actCardActionLabel}>Move</Text>
+          </TouchableOpacity>
+          {/* Delete — the far-right cell. */}
           <TouchableOpacity
             style={[styles.actCardAction, { backgroundColor: '#ef4444' }]}
             onPress={() => { close(); onDelete(); }}

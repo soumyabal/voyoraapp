@@ -1752,26 +1752,27 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
           </View>
         </View>
 
-        {/* ── Right column: a single done checkbox up top, then reorder ▲▼ ── */}
+        {/* ── Right column: done checkbox pinned to the TOP corner, reorder ▲▼ grouped below ── */}
         <View style={styles.reorderCol}>
-          {act.type !== 'note' && (
+          {act.type !== 'note' ? (
             <TouchableOpacity onPress={onMarkDone} hitSlop={{ top: 8, bottom: 6, left: 8, right: 8 }} activeOpacity={0.6}
-              style={styles.cardCheckbox}
               accessibilityRole="checkbox" accessibilityState={{ checked: isDone }}
               accessibilityLabel={isDone ? `Mark ${act.name || 'activity'} not done` : `Mark ${act.name || 'activity'} done`}>
               <Icon name={isDone ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={isDone ? colors.success : colors.subtle} />
             </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={onMoveUp} disabled={isFirst}
-            hitSlop={{ top: 6, bottom: 4, left: 6, right: 6 }} activeOpacity={0.5}
-            style={[styles.reorderBtn, isFirst && styles.reorderBtnDisabled]}>
-            <Text style={styles.reorderBtnText}>▲</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onMoveDown} disabled={isLast}
-            hitSlop={{ top: 4, bottom: 6, left: 6, right: 6 }} activeOpacity={0.5}
-            style={[styles.reorderBtn, isLast && styles.reorderBtnDisabled]}>
-            <Text style={styles.reorderBtnText}>▼</Text>
-          </TouchableOpacity>
+          ) : <View />}
+          <View style={styles.reorderArrows}>
+            <TouchableOpacity onPress={onMoveUp} disabled={isFirst}
+              hitSlop={{ top: 6, bottom: 4, left: 6, right: 6 }} activeOpacity={0.5}
+              style={[styles.reorderBtn, isFirst && styles.reorderBtnDisabled]}>
+              <Text style={styles.reorderBtnText}>▲</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onMoveDown} disabled={isLast}
+              hitSlop={{ top: 4, bottom: 6, left: 6, right: 6 }} activeOpacity={0.5}
+              style={[styles.reorderBtn, isLast && styles.reorderBtnDisabled]}>
+              <Text style={styles.reorderBtnText}>▼</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         </View>{/* end actCard */}
 
@@ -2391,12 +2392,12 @@ const styles = StyleSheet.create({
 
   // Reorder buttons (▲▼ on card right side)
   reorderCol: {
-    justifyContent: 'center',
+    justifyContent: 'space-between',   // checkbox pinned top, arrows grouped at the bottom
     alignItems: 'center',
     paddingHorizontal: spacing.xs,
-    gap: 2,
+    paddingVertical: spacing.sm,
   },
-  cardCheckbox: { marginBottom: 6 },
+  reorderArrows: { alignItems: 'center', gap: 2 },
   reorderBtn: {
     paddingHorizontal: 4,
     paddingVertical: 2,

@@ -19,6 +19,7 @@ import { colors, spacing, radius, typography } from '../../theme';
  *   inputStyle     object   — extra styles merged onto the input
  *   containerStyle object   — extra styles merged onto the wrapper
  *   autoFocus      bool
+ *   maxLength      number   — optional char cap (undefined = no limit)
  */
 export default function FormField({
   label,
@@ -33,6 +34,7 @@ export default function FormField({
   inputStyle,
   containerStyle,
   autoFocus = false,
+  maxLength,
 }) {
   return (
     <View style={[styles.container, containerStyle]}>
@@ -49,6 +51,7 @@ export default function FormField({
         secureTextEntry={secureTextEntry}
         autoCapitalize={autoCapitalize}
         autoFocus={autoFocus}
+        maxLength={maxLength}
         textAlignVertical={multiline ? 'top' : 'center'}
       />
     </View>

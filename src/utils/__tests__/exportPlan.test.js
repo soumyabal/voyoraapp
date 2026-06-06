@@ -6,7 +6,7 @@
  * NEVER contains the Google API key or a Places photo URL (no key leak in a file
  * that gets shared). See the "make exciting / no photos" decision.
  */
-import { buildHTML, buildDayHTML, buildSettlementHTML } from '../exportPlan';
+import { buildHTML, buildDayHTML, buildSettlementHTML, tripPdfName } from '../exportPlan';
 
 const trip = {
   name: 'Coast Trip', emoji: '🏖️', destination: 'San Diego, CA',
@@ -77,6 +77,61 @@ describe('buildDayHTML (day PDF)', () => {
   });
 
   test('NO key leak in a shared file', () => noLeak(html));
+});
+
+// ─── PDF filename (compact underscores) ────────────────────────────────────────
+describe('tripPdfName', () => {
+  const t = {
+    name: 'Bali Family Escape',
+    startDate: '2026-07-12', endDate: '2026-07-19',
+    focus: ['Family', 'Beaches'],
+  };
+
+  test('plan: name + dates (end as MM-DD same year) + purpose, .pdf', () => {
+    expect(tripPdfName(t, 'plan'))
+      .toBe('Bali-Family-Escape_2026-07-12_to_07-19_Family-Beaches.pdf');
+  });
+
+  test('settlement: name + Settlement + dates (no purpose)', () => {
+    expect(tripPdfName(t, 'settlement'))
+      .toBe('Bali-Family-Escape_Settlement_2026-07-12_to_07-19.pdf');
+  });
+
+  test('day: name + day label + that day’s date', () => {
+    expect(tripPdfName(t, 'day', { label: 'Day 2', date: '2026-07-13' }))
+      .toBe('Bali-Family-Escape_Day-2_2026-07-13.pdf');
+  });
+
+  test('cross-year keeps the full end date', () => {
+    expect(tripPdfName({ ...t, startDate: '2026-12-30', endDate: '2027-01-02', focus: [] }, 'plan'))
+      .toBe('Bali-Family-Escape_2026-12-30_to_2027-01-02.pdf');
+  });
+
+  test('no purpose set → drops the trailing segment cleanly', () => {
+    expect(tripPdfName({ ...t, focus: [] }, 'plan'))
+      .toBe('Bali-Family-Escape_2026-07-12_to_07-19.pdf');
+  });
+
+  test('over-long / messy names are slugged and capped at 50 chars', () => {
+    const long = tripPdfName({
+      name: '  Café Crème: The Spätzle & Smörgåsbord Grand Tour 2026!!!  ',
+      startDate: '2026-05-01', endDate: '2026-05-03', focus: [],
+    }, 'plan');
+    const namePart = long.split('_')[0];
+    expect(namePart.length).toBeLessThanOrEqual(50);
+    expect(namePart).not.toMatch(/^-|-$/);            // no leading/trailing hyphen
+    expect(namePart).toMatch(/^[A-Za-z0-9-]+$/);      // filesystem-safe
+    expect(namePart).toContain('Cafe-Creme');         // accents folded
+  });
+
+  test('single-day trip (start === end) shows one date', () => {
+    expect(tripPdfName({ name: 'Day Trip', startDate: '2026-08-01', endDate: '2026-08-01', focus: [] }, 'plan'))
+      .toBe('Day-Trip_2026-08-01.pdf');
+  });
+
+  test('empty trip never yields a nameless file', () => {
+    expect(tripPdfName({}, 'plan')).toBe('Trip.pdf');
+  });
 });
 
 // ─── Settlement doc (the money artifact) ───────────────────────────────────────

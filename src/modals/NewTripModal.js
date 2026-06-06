@@ -605,6 +605,7 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
                       placeholder="e.g. Bali Family Adventure"
                       placeholderTextColor={colors.muted}
                       autoCapitalize="words"
+                      maxLength={50}
                     />
                   </View>
                   <LocationSearchField

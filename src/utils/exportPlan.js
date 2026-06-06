@@ -609,6 +609,67 @@ export function buildSettlementHTML(trip, travelers = []) {
 </html>`;
 }
 
+// ─── PDF filename ─────────────────────────────────────────────────────────────
+
+// Build a descriptive, filesystem-safe PDF name (compact underscores format):
+//   plan       → Bali-Family-Escape_2026-07-12_to_07-19_Family-Beaches.pdf
+//   settlement → Bali-Family-Escape_Settlement_2026-07-12_to_07-19.pdf
+//   day        → Bali-Family-Escape_Day-2_2026-07-13.pdf
+// expo-print only ever writes a random temp name; we copy → this name before sharing.
+
+function slug(str, max = 50) {
+  let out = String(str ?? '')
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '') // strip accents
+    .replace(/[^A-Za-z0-9]+/g, '-')                    // anything else → hyphen
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (max && out.length > max) out = out.slice(0, max).replace(/-+$/g, '');
+  return out;
+}
+
+function dateRange(start, end) {
+  const s = String(start || '').slice(0, 10); // YYYY-MM-DD
+  const e = String(end || '').slice(0, 10);
+  if (!s && !e) return '';
+  if (!s) return e;
+  if (!e || e === s) return s;
+  const sameYear = s.slice(0, 4) === e.slice(0, 4);
+  return `${s}_to_${sameYear ? e.slice(5) : e}`; // end → MM-DD when same year
+}
+
+export function tripPdfName(trip = {}, kind = 'plan', day = null) {
+  const name  = slug(trip.name, 50) || 'Trip';
+  const dates = dateRange(trip.startDate, trip.endDate);
+  let parts;
+  if (kind === 'settlement') {
+    parts = [name, 'Settlement', dates];
+  } else if (kind === 'day' && day) {
+    parts = [name, slug(day.label, 24), String(day.date || '').slice(0, 10)];
+  } else { // 'plan'
+    const purpose = slug((trip.focus || []).join('-'), 40);
+    parts = [name, dates, purpose];
+  }
+  const base = parts.filter(Boolean).join('_');
+  return `${base || 'Kithova-Trip'}.pdf`;
+}
+
+// Copy the temp PDF expo-print produced to a file with our descriptive name, so the
+// share sheet / Files / email all show it. Degrades gracefully: if expo-file-system
+// is unavailable or anything fails, returns the original temp uri (prior behavior).
+async function renameForShare(uri, fileName) {
+  try {
+    const { File, Paths } = await import('expo-file-system');
+    if (!File || !Paths) return uri;
+    const dest = new File(Paths.cache, fileName);
+    if (dest.exists) dest.delete();
+    new File(uri).copy(dest);
+    return dest.uri || uri;
+  } catch (e) {
+    console.warn('[exportPlan] pdf rename skipped:', e?.message);
+    return uri;
+  }
+}
+
 // ─── Public export functions ──────────────────────────────────────────────────
 
 /**
@@ -643,7 +704,8 @@ export async function exportDayAsPDF(trip, day, dayIndex) {
       return;
     }
 
-    await Sharing.shareAsync(uri, {
+    const shareUri = await renameForShare(uri, tripPdfName(trip, 'day', day));
+    await Sharing.shareAsync(shareUri, {
       mimeType: 'application/pdf',
       dialogTitle: `Share ${day.label} plan`,
       UTI: 'com.adobe.pdf',
@@ -693,7 +755,8 @@ export async function exportTripAsPDF(trip, travelers = []) {
     }
 
     // Open share sheet — user can save to Files, AirDrop, email, etc.
-    await Sharing.shareAsync(uri, {
+    const shareUri = await renameForShare(uri, tripPdfName(trip, 'plan'));
+    await Sharing.shareAsync(shareUri, {
       mimeType: 'application/pdf',
       dialogTitle: `Share ${trip.name} itinerary`,
       UTI: 'com.adobe.pdf',
@@ -736,7 +799,8 @@ export async function exportSettlementAsPDF(trip, travelers = []) {
       return;
     }
 
-    await Sharing.shareAsync(uri, {
+    const shareUri = await renameForShare(uri, tripPdfName(trip, 'settlement'));
+    await Sharing.shareAsync(shareUri, {
       mimeType: 'application/pdf',
       dialogTitle: `Share ${trip.name} settlement`,
       UTI: 'com.adobe.pdf',

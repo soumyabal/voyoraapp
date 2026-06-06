@@ -132,6 +132,7 @@ export default function EditTripModal({ visible, trip, onClose }) {
               onChangeText={setName}
               placeholder="e.g. Bali Family Adventure"
               autoFocus
+              maxLength={50}
             />
             <LocationSearchField
               label="Destination *"

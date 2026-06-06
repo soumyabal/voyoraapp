@@ -66,6 +66,24 @@ describe('updateActivity — the 3-branch expense cascade', () => {
   });
 });
 
+describe('updateActivity — trimming a stay’s nights never moves money (hotel-overlap fix safety)', () => {
+  test('changing only nights leaves the linked expense amount unchanged', () => {
+    const t = makeTrip();                        // 3 members
+    addDinner(t.id, 10);                          // pushes the itinerary
+    S().addActivity(t.id, 0, { type: 'stay', name: 'Hotel A', time: '15:00', nights: 2, costPerPerson: 100 });
+    const stayId = tripById(t.id).days[0].activities.find(a => a.type === 'stay').id;
+    expect(linkedExp(t.id, stayId).amount).toBe(300);   // 100 × 3 members — nights does NOT multiply
+
+    // Exactly what the "Trim to N nights" Trip Check fix calls:
+    S().updateActivity(t.id, stayId, { nights: 1 });
+
+    const after = linkedExp(t.id, stayId);
+    expect(after.amount).toBe(300);                       // unchanged — money path untouched
+    expect(after.estimatedAmount).toBe(300);
+    expect(tripById(t.id).days[0].activities.find(a => a.type === 'stay').nights).toBe(1);  // nights DID change
+  });
+});
+
 describe('deleteActivity', () => {
   test('removes the activity AND its linked expense (when pushed)', () => {
     const t = makeTrip();

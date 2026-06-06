@@ -15,6 +15,7 @@ import {
   calcTripItineraryTotal, calcBalances, calcSettlements,
 } from '../utils/costs';
 import { summariseExpenses, unconfirmedSplitItems } from '../utils/expenses';
+import { exportSettlementAsPDF } from '../utils/exportPlan';
 
 // Expense category emoji (stored in exp.category) → Icon name + tint
 const CAT_ICON = { '🏨': 'hotel', '✈️': 'plane', '🍽️': 'food', '🎯': 'activity', '💊': 'medkit-outline', '🚗': 'transport' };
@@ -374,6 +375,18 @@ export default function SplitwiseScreen({ trip }) {
                 );
               })
             )}
+
+            {/* Share the settlement (who-owes-whom + per-family net + expenses) as a PDF —
+                the money artifact a captain sends the group to settle up. */}
+            <TouchableOpacity
+              style={styles.shareSettleBtn}
+              onPress={() => exportSettlementAsPDF(trip)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Share the settlement as a PDF"
+            >
+              <Text style={styles.shareSettleText}>📄  Share settlement (PDF)</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -865,6 +878,8 @@ const styles = StyleSheet.create({
   unconfItem:   { flex: 1, ...typography.caption, color: colors.body },
   unconfResolve:{ ...typography.caption, color: colors.accent, fontWeight: '800' },
   unconfMore:   { ...typography.caption, color: colors.subtle, marginTop: 2 },
+  shareSettleBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.accentSoft, borderRadius: radius.md, paddingVertical: spacing.md, marginTop: spacing.lg },
+  shareSettleText: { ...typography.smallBold, color: colors.accent },
 
   // Sticky footer
   stickyFooter: {

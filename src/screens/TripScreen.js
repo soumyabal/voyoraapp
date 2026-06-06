@@ -103,7 +103,7 @@ export default function TripScreen({ navigation }) {
       { text: '🔄  Switch Planning Mode',   onPress: () => setShowModeModal(true) },
       { text: '📋  Duplicate',              onPress: handleDuplicate },
       { text: '📤  Share',                  onPress: handleShare },
-      { text: '📄  Export as PDF',          onPress: handleExportPDF },
+      { text: '📄  Export Trip Plan (PDF)',  onPress: handleExportPDF },
       { text: '🗑️  Delete Trip',            onPress: handleDelete, style: 'destructive' },
       { text: 'Cancel',                     style: 'cancel' },
     ]);

@@ -6,7 +6,7 @@
  * NEVER contains the Google API key or a Places photo URL (no key leak in a file
  * that gets shared). See the "make exciting / no photos" decision.
  */
-import { buildHTML, buildDayHTML } from '../exportPlan';
+import { buildHTML, buildDayHTML, buildSettlementHTML } from '../exportPlan';
 
 const trip = {
   name: 'Coast Trip', emoji: '🏖️', destination: 'San Diego, CA',
@@ -74,6 +74,56 @@ describe('buildDayHTML (day PDF)', () => {
     expect(html).toMatch(/route-url[^>]*>https:\/\/www\.google\.com\/maps\/dir\//); // the URL is the link TEXT
     expect(html).toContain('1 Beach Rd');            // address as plain text
     expect(html).not.toContain('maps/search/?api=1&query='); // no per-address anchors
+  });
+
+  test('NO key leak in a shared file', () => noLeak(html));
+});
+
+// ─── Settlement doc (the money artifact) ───────────────────────────────────────
+const settleTrip = {
+  name: 'Cabin Trip', emoji: '🏔️', destination: 'Tahoe, CA',
+  startDate: '2099-07-01', endDate: '2099-07-03',
+  bgColors: ['#10b981', '#34d399'],
+  splitMode: 'individual',
+  families: [
+    { id: 'f1', name: 'Aye', color: '#6366f1', members: [{ id: 'm1', name: 'Avery' }] },
+    { id: 'f2', name: 'Bee', color: '#ec4899', members: [{ id: 'm2', name: 'Bo' }] },
+  ],
+  days: [],
+  // Avery paid $100 split across both → Bo owes Avery $50.
+  expenses: [
+    { id: 'e1', name: 'Cabin', category: '🏨', amount: 100, paidBy: 'm1', participatingFamilies: ['f1', 'f2'], participatingMembers: null, excluded: false },
+  ],
+};
+
+describe('buildSettlementHTML (settlement PDF)', () => {
+  const html = buildSettlementHTML(settleTrip);
+
+  test('renders the who-owes-whom transfer (Bo → Avery $50)', () => {
+    expect(html).toContain('Who pays whom');
+    expect(html).toContain('class="settle-row"');
+    expect(html).toContain('Bo');
+    expect(html).toContain('Avery');
+    expect(html).toContain('$50');
+  });
+
+  test('renders each family’s net (Aye +$50, Bee −$50)', () => {
+    expect(html).toContain('Each family');
+    expect(html).toContain('Aye');
+    expect(html).toContain('Bee');
+    expect(html).toMatch(/\+\$50/);   // Aye is up $50
+  });
+
+  test('lists the expense with its payer', () => {
+    expect(html).toContain('Cabin');
+    expect(html).toContain('Paid by Avery');
+    expect(html).toMatch(/Total:\s*\$100/);
+  });
+
+  test('all-settled + no-expenses copy when there is nothing to settle', () => {
+    const empty = buildSettlementHTML({ ...settleTrip, expenses: [] });
+    expect(empty).toContain('All settled');
+    expect(empty).toContain('No expenses recorded');
   });
 
   test('NO key leak in a shared file', () => noLeak(html));

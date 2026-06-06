@@ -10,6 +10,7 @@
 
 import { Alert } from 'react-native';
 import { getAllMembers, fmt, fmtM } from './helpers';
+import { calcBalances, calcSettlements, calcFamilyBalances } from './costs';
 import { googleMapsDayShareUrl } from './mapsRoute';
 import { coverTagline, countdownLine, dayVibe, closingNote } from './tripCopy';
 import { APP_NAME } from '../config';
@@ -38,7 +39,11 @@ const ACT_ICONS = {
 
 // ─── HTML builder ─────────────────────────────────────────────────────────────
 
-export function buildHTML(trip, travelers = []) {
+// The TRIP PLAN doc — itinerary + group + the per-family budget ESTIMATE (planning forecast).
+// The actual expense list + the who-owes-whom settlement live in the dedicated Settlement doc
+// (buildSettlementHTML), so the widely-shared plan never forces sensitive money onto it. Pass
+// { includeExpenses: true } for a combined "everything" export.
+export function buildHTML(trip, travelers = [], { includeExpenses = false } = {}) {
   const allMembers   = getAllMembers(trip);
   const totalDays    = trip.days?.length || 0;
   const totalActs    = trip.days?.flatMap(d => d.activities).length || 0;
@@ -217,9 +222,9 @@ export function buildHTML(trip, travelers = []) {
       </p>`;
   }
 
-  // ── Expenses HTML ──────────────────────────────────────────────────────────
+  // ── Expenses HTML (opt-in — lives in the Settlement doc by default) ──────────
   let expensesHTML = '';
-  if (trip.expenses?.length) {
+  if (includeExpenses && trip.expenses?.length) {
     const visible = trip.expenses.filter(e => !e.excluded);
     if (visible.length) {
       const rows = visible.map(exp => {
@@ -474,6 +479,136 @@ export function buildDayHTML(trip, day, dayIndex) {
 </html>`;
 }
 
+// ─── Settlement / expenses HTML builder ───────────────────────────────────────
+
+/**
+ * buildSettlementHTML(trip, travelers)
+ *
+ * The SETTLEMENT doc — the money artifact a captain shares to settle up (the viral-loop
+ * artifact). Renders the **who-owes-whom** minimal transfers (calcSettlements), the **per-family
+ * net** (calcFamilyBalances: paid − owed), and the expense list (with payer). Every figure comes
+ * straight from the deterministic split engine in costs.js — so the PDF agrees with the in-app
+ * Split tab exactly. No photos / no API keys → safe to share.
+ */
+export function buildSettlementHTML(trip, travelers = []) {
+  const memberName = {};
+  getAllMembers(trip).forEach(m => { memberName[m.id] = m.name; });
+
+  const settlements = calcSettlements(calcBalances(trip));
+  const famBalances = calcFamilyBalances(trip);
+  const visibleExp  = (trip.expenses || []).filter(e => !e.excluded);
+  const grandTotal  = visibleExp.reduce((s, e) => s + (e.amount || 0), 0);
+
+  const css = `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; font-size: 13px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { max-width: 700px; margin: 0 auto; padding: 0 0 28px; }
+    .pad  { padding: 22px 32px 0; }
+    .cover { color: #fff; padding: 34px 32px 26px; background-color: #6366f1; background-image: linear-gradient(135deg, var(--c1), var(--c2)); }
+    .cover-brand { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; opacity: 0.85; margin-bottom: 6px; }
+    .cover-title { font-size: 28px; font-weight: 800; line-height: 1.1; margin-bottom: 6px; }
+    .cover-dest  { font-size: 13px; opacity: 0.92; }
+    .section-title { font-size: 11px; font-weight: 800; color: #6b7280; letter-spacing: 1px; text-transform: uppercase; margin: 22px 0 10px; }
+    .moat-intro { font-size: 12px; color: #6b7280; line-height: 1.5; margin: -4px 0 12px; }
+    /* Who owes whom */
+    .settle-row { display: flex; align-items: center; gap: 10px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px 14px; margin-bottom: 6px; font-size: 14px; }
+    .settle-from { font-weight: 700; }
+    .settle-to { font-weight: 700; }
+    .settle-amt { margin-left: auto; font-weight: 800; color: #047857; }
+    .all-settled { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px; font-weight: 700; color: #047857; }
+    /* Per-family balance */
+    .bal-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .bal-table th { background: #1a1a2e; color: #fff; padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 700; }
+    .bal-table td { padding: 8px 12px; border-bottom: 1px solid #f3f4f6; }
+    .bal-table .net { font-weight: 800; text-align: right; }
+    .fam-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+    /* Expenses */
+    .expense-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f3f4f6; font-size: 12px; }
+    .exp-cat { font-size: 16px; width: 24px; }
+    .exp-name { color: #1a1a2e; font-weight: 600; }
+    .exp-families { font-size: 10px; color: #6b7280; margin-top: 1px; }
+    .exp-amount { font-weight: 700; color: #1a1a2e; }
+    .grand { text-align: right; font-size: 13px; font-weight: 800; color: #1a1a2e; padding: 10px 0; }
+    .disclaimer { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; margin: 18px 0 0; font-size: 11px; color: #1e40af; line-height: 1.5; }
+    .footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid #e5e7eb; font-size: 10px; color: #9ca3af; display: flex; justify-content: space-between; }
+    .footer-brand { color: #6366f1; font-weight: 700; }
+  `;
+
+  const settleHTML = settlements.length
+    ? settlements.map(s =>
+        `<div class="settle-row"><span class="settle-from">${escHtml(s.from.name)}</span> → <span class="settle-to">${escHtml(s.to.name)}</span><span class="settle-amt">${fmtM(s.amount)}</span></div>`).join('')
+    : '<div class="all-settled">✓ All settled — no transfers needed.</div>';
+
+  const famHTML = famBalances.map(b => {
+    const up = b.net >= 0;
+    return `<tr>
+      <td><span class="fam-dot" style="background:${b.family.color || '#6b7280'}"></span>${escHtml(b.family.name)}</td>
+      <td>${fmtM(b.paid)}</td>
+      <td>${fmtM(b.owed)}</td>
+      <td class="net" style="color:${up ? '#10b981' : '#ef4444'}">${up ? '+' : ''}${fmtM(b.net)}</td>
+    </tr>`;
+  }).join('');
+
+  const expHTML = visibleExp.length
+    ? visibleExp.map(exp => {
+        const payer = memberName[exp.paidBy] || '—';
+        const famNames = (exp.participatingFamilies || [])
+          .map(fid => trip.families.find(f => f.id === fid)?.name || fid).join(', ');
+        return `<div class="expense-row">
+          <div class="exp-cat">${exp.category || '💰'}</div>
+          <div style="flex:1;">
+            <div class="exp-name">${escHtml(exp.name)}</div>
+            <div class="exp-families">Paid by ${escHtml(payer)}${famNames ? ` · ${escHtml(famNames)}` : ''}</div>
+          </div>
+          <div class="exp-amount">${fmtM(exp.amount || 0)}</div>
+        </div>`;
+      }).join('')
+    : '<p style="color:#9ca3af;font-size:12px;">No expenses recorded yet.</p>';
+
+  const [c1, c2] = Array.isArray(trip.bgColors) && trip.bgColors.length >= 2 ? trip.bgColors : ['#6366f1', '#8b5cf6'];
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escHtml(trip.name)} — Settlement</title>
+  <style>${css}</style>
+</head>
+<body>
+<div class="page" style="--c1:${c1};--c2:${c2};">
+  <div class="cover" style="background-color:${c1};background-image:linear-gradient(135deg,${c1},${c2});">
+    <div class="cover-brand">${APP_NAME} · Settlement</div>
+    <div class="cover-title">${escHtml(trip.name)}</div>
+    <div class="cover-dest">📍 ${escHtml(trip.destination)} · 📅 ${fmt(trip.startDate)} – ${fmt(trip.endDate)}</div>
+  </div>
+  <div class="pad">
+    <div class="section-title">💸 Who pays whom</div>
+    <p class="moat-intro">The fewest transfers that settle everyone up — fair per family, not just averaged.</p>
+    ${settleHTML}
+
+    <div class="section-title">⚖️ Each family's balance</div>
+    <table class="bal-table">
+      <thead><tr><th>Family</th><th>Paid</th><th>Owes</th><th style="text-align:right">Net</th></tr></thead>
+      <tbody>${famHTML}</tbody>
+    </table>
+
+    <div class="section-title">🧾 Expenses (${visibleExp.length})</div>
+    ${expHTML}
+    ${visibleExp.length ? `<div class="grand">Total: ${fmtM(grandTotal)}</div>` : ''}
+
+    <div class="disclaimer"><strong>ℹ️ Heads-up:</strong> totals reflect what's been entered in ${APP_NAME}. Confirm amounts with your group before paying.</div>
+
+    <div class="footer">
+      <div><span class="footer-brand">${APP_NAME}</span> · Fair per-family settlement</div>
+      <div>${escHtml(trip.name)}</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+}
+
 // ─── Public export functions ──────────────────────────────────────────────────
 
 /**
@@ -566,6 +701,48 @@ export async function exportTripAsPDF(trip, travelers = []) {
 
   } catch (err) {
     console.error('[exportPlan]', err);
+    Alert.alert('Export failed', `Could not generate PDF: ${err.message}`);
+  }
+}
+
+/**
+ * exportSettlementAsPDF(trip, travelers)
+ *
+ * The money artifact — who-owes-whom + per-family net + expenses. Shared from the Split tab,
+ * after the trip, with the families settling up. Same engine as the in-app Split tab.
+ */
+export async function exportSettlementAsPDF(trip, travelers = []) {
+  if (!trip) return;
+  try {
+    let Print, Sharing;
+    try {
+      Print   = await import('expo-print');
+      Sharing = await import('expo-sharing');
+    } catch {
+      Alert.alert(
+        'Package not installed',
+        'Run this in your terminal first:\n\nnpx expo install expo-print expo-sharing\n\nThen restart Expo Go.',
+        [{ text: 'OK' }],
+      );
+      return;
+    }
+
+    const html = buildSettlementHTML(trip, travelers);
+    const { uri } = await Print.printToFileAsync({ html, base64: false });
+
+    const canShare = await Sharing.isAvailableAsync();
+    if (!canShare) {
+      Alert.alert('Sharing not available', 'PDF was saved but sharing is not supported on this device.');
+      return;
+    }
+
+    await Sharing.shareAsync(uri, {
+      mimeType: 'application/pdf',
+      dialogTitle: `Share ${trip.name} settlement`,
+      UTI: 'com.adobe.pdf',
+    });
+  } catch (err) {
+    console.error('[exportPlan:settlement]', err);
     Alert.alert('Export failed', `Could not generate PDF: ${err.message}`);
   }
 }

@@ -201,3 +201,130 @@ Triggered by a real user report ("a not-started trip showed me Day 2"). Root cau
 - Server push (another family edited the trip, price drops) = Phase-2 backend.
 
 **Build order:** (1) ✓ date-derived phase + landing day [done] → (2) status pill (`📅 In 8 days` / `🟢 Day 2 of 3 · today` / `✓ Trip complete`) + phase-aware day chips → (3) the **"Today" screen** with one-tap per-family expense logging (the daily-open driver) → (4) the **settle-up notification** (local) + the post-trip recap → (5) pre-trip booking nudges. No backend for any of it.
+
+---
+
+## 12. The fundable thesis — *plan → split → remember* (investor narrative)
+
+> **⚠️ Illustrative model for fundraising.** Every figure below is an **assumption shown with its
+> math** so it's defensible and editable — not verified data. Replace `[SOURCE]` and the ranges
+> with sourced/validated numbers before pitching. The *structure* (bottoms-up unit economics +
+> the viral CAC divisor) is the durable part; the inputs are yours to harden.
+
+### 12.1 The pitch in one line
+**Kithova is the only app built for the messiest trips on earth — multiple families, multiple
+cities, shared lodging.** We start by solving the one problem nobody else does (splitting group
+costs *fairly, per family*), then own the whole trip lifecycle: **plan it → split it → remember it.**
+Wedge first, platform second.
+
+### 12.2 The problem (big, unsolved, growing)
+A multi-family trip today is run across **four apps that don't talk**: coordinated in WhatsApp,
+planned in Wanderlog, split in Splitwise, remembered in Photos. The result:
+- **Money is unfair or awkward.** Every splitter divides *per person* — but accommodation splits
+  by *rooms* and transit by *family size*. No tool models the family unit. Someone eats the math
+  or eats the cost.
+- **The trip evaporates.** Three months later it lives only in a dead WhatsApp thread and in
+  Apple/Google "memories" that are organized by *date and face* — they cannot answer *"the Smoky
+  Mountains trip with the Garcias, and who owed what."*
+
+### 12.3 Why us — the moat (what's hard to copy)
+- **One data spine:** `families × days × places × money × photos` on a single model. Splitwise has
+  money-without-context; Photos has photos-without-context; Wanderlog has plan-then-silence. Only
+  Kithova has all three.
+- **Switching cost / lock-in:** once a family's trips (plan + settlement + photos) live here,
+  leaving *loses the archive.* Competitors each hold one slice; we hold the whole trip.
+- **Trust:** the split/settlement engine is **deterministic — AI never touches the money** (locked
+  by golden-snapshot tests). For a money product, that trust *is* the product.
+- **The unfair growth math (see 12.6):** the share-out is per-family, so every trip markets us to
+  *several* households at once — CAC is divided by families-per-trip.
+
+### 12.4 Market sizing (bottoms-up beats top-down hand-waving)
+*Top-down sanity check:* US leisure travel ≈ `$[X00]B/yr` `[SOURCE]`; group/multi-party travel a
+large, under-tooled slice. *Bottoms-up (the number we'd actually defend):*
+
+| | Definition (assumptions to validate) | Illustrative |
+|---|---|---|
+| **TAM** | US group/multi-family leisure **trips**/yr | `~20M trips` `[validate]` |
+| **SAM** | Organizer-led trips that involve shared lodging + cost-splitting (our ICP) | `~8M trips` (≈40% of TAM) |
+| **SOM (yr 3)** | Trips we realistically capture via communities + the share loop | `~0.3–0.5M trips` (≈4–6% of SAM) |
+
+ICP = the **trip captain**: family-reunion / multi-family Disney·cabin·beach / destination-wedding /
+youth-sports & church-group organizers. Each captured trip ≈ **3 families / ~10–12 people**.
+
+### 12.5 Business model (free core, money downstream of value)
+- **Free forever:** plan + family/member profiles + the split + settlement + Trip Check. *This is
+  the viral loop — never gated.*
+- **Revenue, in sequence:**
+  1. **Affiliate lodging — the big lever** (turns on at Phase 3 with *real* pricing). The
+     multi-room group basket is worth **~3× a solo booking**; affiliate APIs (Booking.com / Expedia
+     TAAP / Travelpayouts) are **free to access — they pay us** (gated by *approval*, i.e. a shipped
+     app + traffic, **not money**). Commission ~4–6% of booking value, **free to the user.**
+  2. **Per-trip Pro / AI** (~$6.99) — AI planning, AI discovery, advanced reports. Low-frequency
+     usage (1–3 trips/yr) favors *per-trip* over a subscription.
+  3. **Premium memories tier** (later) — durable cloud archive + richer recap videos.
+
+### 12.6 Unit economics (illustrative, per *completed* group trip)
+> A "completed" trip = ≥2 families that reached a settlement (the north-star — it forces the whole
+> moat to fire and is the artifact a captain shares).
+
+| Lever | Assumption | Per-trip |
+|---|---|---|
+| Affiliate lodging | avg group lodging `$2,500` × `5%` commission × `25%` book-through | **~$31** |
+| Per-trip Pro/AI | `$6.99` × `10%` attach | **~$0.70** |
+| **Blended mature ARPU / completed trip** | | **~$30–40** |
+
+**The CAC unfair advantage:** the settlement recap is shared to the *other families on the trip*.
+One completed trip exposes **~3 other households** to a working share-link → a built-in CAC divisor
+no solo-traveler app has. Combined with near-zero-CAC channels (organizer-community infiltration +
+the "how to split group travel costs" SEO surface), blended CAC stays low.
+
+**LTV (illustrative):** captain does ~`1.5` trips/yr × `~$35` ARPU × ~`2`-yr retention ≈ **~$100+**
+per captain → target **LTV:CAC > 3:1**, improving as the share loop compounds.
+
+### 12.7 Illustrative 3-year trajectory
+*Affiliate (the revenue engine) only turns on with real pricing in Phase 3, so revenue trails
+adoption by design — Year 1 is about proving the loop, not monetizing it.*
+
+| | Completed trips/yr | Blended ARPU | Revenue | What it proves |
+|---|--:|--:|--:|---|
+| **Y1 — TestFlight → App Store** | `~10K` | `~$0` (pre-monetization) | `~$0` | the wedge + the share loop fire |
+| **Y2 — affiliate ON** | `~120K` | `~$15` (ramping) | **`~$1.8M`** | monetization works; K-driven growth |
+| **Y3 — scale** | `~400K` | `~$35` | **`~$14M`** | repeatable, capital-efficient growth |
+
+*(Conservative / Base / Upside SOM at maturity: `50K×$20 ≈ $1M` / `300K×$40 ≈ $12M` / `1M×$50 ≈ $50M`.)*
+
+### 12.8 The ask & use of funds
+**Seed: `$[1.0–1.5M]`, ~18–24 months runway.** It buys the one true ship-blocker and the lifecycle
+platform:
+- **Phase-2 backend** (one milestone): auth + **keys server-side** + catalog DB + **collaboration**
+  (every member contributes expenses & photos, not just the captain).
+- **Light, reference-based memories** (tag library photos to a day/place; host only the *shared
+  recap*, not everyone's camera roll → minimal storage COGS + privacy exposure).
+- **Affiliate approval + integration** (Phase 3) to switch on the revenue engine.
+- Growth into the **Year-2 traction gates** (12.10) that unlock a Series A.
+
+### 12.9 Risks investors will probe — and our answers
+- **"Google/Apple Photos will crush the memories play."** We don't compete on storage (free,
+  automatic, infinite-feeling). Memories only matter *because they sit on the money+plan spine* —
+  and we **reference** the user's library rather than re-hosting it. Different game.
+- **"Splitwise just adds per-family splitting."** It can copy the formula, not the *lifecycle*
+  (plan + context + memories) or the group-travel ICP. Our wedge is the whole trip, not one screen.
+- **"Storage cost / privacy (kids in photos)."** Reference-not-rehost; host only the shared recap;
+  privacy-first; keys move server-side in Phase 2. COGS stays bounded.
+- **"Behavior change — will members install & contribute?"** We ride the **proven settlement
+  share-link** (recipient → new captain), not a cold "upload your photos" ask. Memories enrich the
+  loop; they don't gate it.
+- **"Revenue depends on real pricing / affiliate approval."** Sequenced deliberately: prove the
+  free loop first; affiliate is *additive* and approval-gated, not capital-gated.
+
+### 12.10 What this round proves (traction gates → Series A)
+North-star = **completed multi-family trips reaching settlement.** Watch, in order:
+1. **Settlement rate** per trip (do people actually split, not just plan?).
+2. **Virality (K):** share-outs sent → recipients who become captains.
+3. **Repeat captains** (2nd trip) and **W4 retention** (does the archive pull them back?).
+4. **(Phase 3)** Book-tap rate → first commission events.
+
+**One-line close:** *Kithova already built the hard, trustworthy moat nobody else builds — fair
+multi-family money. This round turns that wedge into the place every group keeps its whole trip:
+plan, money, and memories, forever — with a share loop that is simultaneously the product, the
+growth engine, and the revenue path.*

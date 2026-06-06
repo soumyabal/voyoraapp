@@ -426,29 +426,35 @@ function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearc
   const ref = useRef(null);
   const lastFit = useRef(-1);
   const readyRef = useRef(false);   // don't push (or consume fitToken) until the map has loaded
+  const centeredKey = useRef(null); // last explore-nearby centre applied (so we centre once per place)
   const withCoords = places.filter(p => p.lat != null && p.lng != null);
   // `a` = added to the trip (grey + ✓), `s` = seen on the web (grey) → fade what's
   // handled so the bright pins are the options still worth a look.
   const pts = withCoords.map((p, i) => ({ i, lat: p.lat, lng: p.lng, t: p.activityType, r: p.rating, a: addedNames?.has(p.name) ? 1 : 0, s: seenNames?.has(p.name) ? 1 : 0 }));
   const ptsJSON = JSON.stringify(pts);
   const html = React.useMemo(() => buildMapHTML(), []);
-  // Re-fit the view only when fitToken advanced (city/area/text change); a layer
-  // toggle changes the pins but not the token, so the map holds its position.
+  // Explore-nearby centre target as a stable key, so we centre exactly once per place.
+  const centerKey = centerOn && centerOn.lat != null ? `${centerOn.lat},${centerOn.lng}` : null;
+  // Centre on the explored place as soon as the map is ready, and again whenever the target
+  // changes. Kept INDEPENDENT of the fit/points logic below so a load-timing race can never
+  // skip it (this is the bug that broke "explore nearby" — centring rode on the fit token).
+  const applyCenter = () => {
+    if (!readyRef.current || !centerKey || centeredKey.current === centerKey) return;
+    centeredKey.current = centerKey;
+    ref.current?.injectJavaScript(`window.centerOn&&window.centerOn(${centerOn.lat},${centerOn.lng},15);true;`);
+  };
+  // Fit to the result cluster on a city/area/text change — but NOT while we're centring on a
+  // specific place (explore-nearby owns the camera then, via applyCenter).
   const push = () => {
     if (!readyRef.current) return;
-    // Consume the fit token once we can act — points to fit, OR an explicit
-    // centre (explore-nearby) which doesn't need points. An early empty push
-    // (opening straight into the map before results load) otherwise burns the
-    // token and the results arrive with no re-fit.
-    const hasCenter = !!centerOn && centerOn.lat != null;
-    const wantFit = fitToken !== lastFit.current && (pts.length > 0 || hasCenter);
+    const wantFit = !centerKey && fitToken !== lastFit.current && pts.length > 0;
     if (wantFit) lastFit.current = fitToken;
-    const doCenter = wantFit && hasCenter;                 // centre on the place, don't fit to the cluster
-    const centerJS = doCenter ? `window.centerOn&&window.centerOn(${centerOn.lat},${centerOn.lng},14);` : '';
-    ref.current?.injectJavaScript(`window.setData&&window.setData(${ptsJSON},${(wantFit && !doCenter) ? 1 : 0});${centerJS}true;`);
+    ref.current?.injectJavaScript(`window.setData&&window.setData(${ptsJSON},${wantFit ? 1 : 0});true;`);
   };
-  const onReady = () => { readyRef.current = true; push(); };
+  const onReady = () => { readyRef.current = true; push(); applyCenter(); };
   useEffect(() => { push(); }, [ptsJSON, fitToken]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!centerKey) centeredKey.current = null; applyCenter(); }, [centerKey]);
   // Tapping a carousel card → centre + zoom the map on that place. `n` is a
   // nonce so re-tapping the SAME card re-centres.
   useEffect(() => {

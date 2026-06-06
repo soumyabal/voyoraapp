@@ -21,6 +21,7 @@ import { getDietaryWarning } from '../utils/dietary';
 import { generateDayShareText } from '../utils/dayShare';
 import { computeTripHealth } from '../utils/tripHealth';
 import { tripCheckStatus } from '../utils/tripCheckStatus';
+import { NestableScrollContainer, NestableDraggableFlatList, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { DAY_SLOTS, ACT_ICON, SEV_RANK, DAY_PILL, HEALTH_DOT, SLOT_MEAL, MEAL_LABEL, NIGHT_PLAN_OPTIONS, NIGHT_PLAN_META } from '../utils/itineraryConfig';
 import { bookingUrl } from '../utils/booking';
 import { exportDayAsPDF } from '../utils/exportPlan';
@@ -776,7 +777,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         onPlayTrip={() => setShowPlayTrip(true)}
       />
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <NestableScrollContainer style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
         {/* Day Navigation — pick any day to plan it (no live "today" tracking in the planner) */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayNav} contentContainerStyle={{ paddingHorizontal: spacing.xxl }}>
@@ -1149,43 +1150,35 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                       <Text style={styles.slotEmptyText}>Nothing planned for {slot.label.toLowerCase()} · tap to add</Text>
                     </TouchableOpacity>
                   ) : !isCollapsed ? (
-                    <FlatList
+                    <NestableDraggableFlatList
                       data={slotActs}
                       keyExtractor={(act) => act.id}
-                      scrollEnabled={false}
-                      renderItem={({ item: act, index }) => (
-                        <>
-                        {index > 0 && <TravelConnector from={slotActs[index - 1]} to={act} />}
-                        <ActivityCard
-                          activity={act}
-                          trip={trip}
-                          dayDate={day.date}
-                          originStop={index > 0 ? slotActs[index - 1] : prevSlotLast}
-                          isHighlighted={highlightedActIds.includes(act.id)}
-                          isFirst={index === 0}
-                          isLast={index === slotActs.length - 1}
-                          onMoveUp={() => {
-                            if (index === 0) return;
-                            const newOrder = [...slotActs];
-                            [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
-                            reorderSlotActivities(trip.id, currentDay, newOrder.map(a => a.id));
-                          }}
-                          onMoveDown={() => {
-                            if (index === slotActs.length - 1) return;
-                            const newOrder = [...slotActs];
-                            [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
-                            reorderSlotActivities(trip.id, currentDay, newOrder.map(a => a.id));
-                          }}
-                          onMarkDone={() => setDone(act)}
-                          onEdit={() => openEdit(act)}
-                          onDelete={() => deleteWithUndo(act)}
-                          onMoveRequest={() => setMovingAct(act)}
-                          onSlotMove={() => openSlotMove(act)}
-                          onToggleLock={() => toggleLock(act)}
-                          onExploreNearby={() => exploreNearby(act)}
-                        />
-                        </>
-                      )}
+                      activationDistance={12}
+                      onDragEnd={({ data }) => reorderSlotActivities(trip.id, currentDay, data.map(a => a.id))}
+                      renderItem={({ item: act, getIndex, drag, isActive }) => {
+                        const index = getIndex() ?? 0;
+                        return (
+                          <ScaleDecorator>
+                            {index > 0 && <TravelConnector from={slotActs[index - 1]} to={act} />}
+                            <ActivityCard
+                              activity={act}
+                              trip={trip}
+                              dayDate={day.date}
+                              originStop={index > 0 ? slotActs[index - 1] : prevSlotLast}
+                              isHighlighted={highlightedActIds.includes(act.id)}
+                              onDragStart={drag}
+                              isDragging={isActive}
+                              onMarkDone={() => setDone(act)}
+                              onEdit={() => openEdit(act)}
+                              onDelete={() => deleteWithUndo(act)}
+                              onMoveRequest={() => setMovingAct(act)}
+                              onSlotMove={() => openSlotMove(act)}
+                              onToggleLock={() => toggleLock(act)}
+                              onExploreNearby={() => exploreNearby(act)}
+                            />
+                          </ScaleDecorator>
+                        );
+                      }}
                     />
                   ) : null}
                 </View>
@@ -1259,7 +1252,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             return null;
           })()}
         </View>
-      </ScrollView>
+      </NestableScrollContainer>
 
       {/* ── Discover FAB — single primary action, bottom-right ── */}
       <TouchableOpacity
@@ -1448,7 +1441,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   );
 }
 
-function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onEdit, onDelete, onMoveRequest, onSlotMove, onToggleLock, onExploreNearby }) {
+function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted, onDragStart, isDragging, onMarkDone, onEdit, onDelete, onMoveRequest, onSlotMove, onToggleLock, onExploreNearby }) {
   const status    = act.status ?? null;
   const isDone    = status === 'done';
   const isSkipped = status === 'skipped';
@@ -1553,6 +1546,7 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
             isDone        && styles.actCardDone,
             isSkipped     && styles.actCardSkipped,
             isHighlighted && styles.actCardHighlighted,
+            isDragging    && styles.actCardDragging,
           ]}
         >
         {/* ── Leading thumbnail: place photo · tinted type icon — ALWAYS shown, even when
@@ -1592,6 +1586,8 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
           <TouchableOpacity
             style={styles.actBody}
             activeOpacity={1}
+            onLongPress={onDragStart}
+            delayLongPress={220}
           >
             {/* Eyebrow — time · duration (transport shows arrival), quiet metadata */}
             {!dimmed && (
@@ -1752,7 +1748,8 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
           </View>
         </View>
 
-        {/* ── Right column: done checkbox pinned to the TOP corner, reorder ▲▼ grouped below ── */}
+        {/* ── Right column: done checkbox pinned to the TOP corner, drag handle below
+            (press & hold the handle — or long-press the card — to reorder) ── */}
         <View style={styles.reorderCol}>
           {act.type !== 'note' ? (
             <TouchableOpacity onPress={onMarkDone} hitSlop={{ top: 8, bottom: 6, left: 8, right: 8 }} activeOpacity={0.6}
@@ -1761,18 +1758,12 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
               <Icon name={isDone ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={isDone ? colors.success : colors.subtle} />
             </TouchableOpacity>
           ) : <View />}
-          <View style={styles.reorderArrows}>
-            <TouchableOpacity onPress={onMoveUp} disabled={isFirst}
-              hitSlop={{ top: 6, bottom: 4, left: 6, right: 6 }} activeOpacity={0.5}
-              style={[styles.reorderBtn, isFirst && styles.reorderBtnDisabled]}>
-              <Text style={styles.reorderBtnText}>▲</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onMoveDown} disabled={isLast}
-              hitSlop={{ top: 4, bottom: 6, left: 6, right: 6 }} activeOpacity={0.5}
-              style={[styles.reorderBtn, isLast && styles.reorderBtnDisabled]}>
-              <Text style={styles.reorderBtnText}>▼</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity onLongPress={onDragStart} delayLongPress={200}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.5}
+            style={styles.dragHandle}
+            accessibilityRole="button" accessibilityLabel="Press and hold to reorder this stop">
+            <Text style={styles.dragHandleText}>⇅</Text>
+          </TouchableOpacity>
         </View>
         </View>{/* end actCard */}
 
@@ -2397,7 +2388,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
   },
-  reorderArrows: { alignItems: 'center', gap: 2 },
+  dragHandle: { padding: 4, alignItems: 'center' },
+  dragHandleText: { fontSize: 18, color: colors.muted, lineHeight: 20 },
   reorderBtn: {
     paddingHorizontal: 4,
     paddingVertical: 2,

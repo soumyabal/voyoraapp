@@ -10,7 +10,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, Modal, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Switch, Alert,
+  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Switch,
 } from 'react-native';
 
 // ─── Dietary / wake-time constants (shared with TravelersScreen) ──

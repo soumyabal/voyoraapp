@@ -38,7 +38,8 @@ export default function AuthModal({ visible, onClose, defaultTab = 'signup' }) {
     if (err) { setError(err); return; }
     setError(''); setLoading(true);
     await new Promise(r => setTimeout(r, 700));
-    tab === 'signup' ? signUp(name.trim(), email.trim().toLowerCase()) : signIn(email.trim().toLowerCase());
+    if (tab === 'signup') signUp(name.trim(), email.trim().toLowerCase());
+    else signIn(email.trim().toLowerCase());
     setLoading(false);
     handleClose();
   };

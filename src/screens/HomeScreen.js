@@ -25,7 +25,6 @@ import AddProfileModal from '../modals/AddProfileModal';
 import { colors, spacing, radius, typography, shadow, gradients } from '../theme';
 import { RELEASE_FLAGS } from '../config';
 import { avatarColor, getAllMembers, fmt } from '../utils/helpers';
-import InfoBanner from '../components/ui/InfoBanner';
 import Icon from '../components/ui/Icon';
 import PressableScale from '../components/ui/PressableScale';
 import KithovaWordmark from '../components/ui/KithovaWordmark';

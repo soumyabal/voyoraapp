@@ -39,7 +39,6 @@ function buildSmartResponse(userText, trip, profiles) {
   const suggestions = analyzeItinerary(trip, profiles);
   const msg = userText.toLowerCase();
   const allMembers = trip.families.flatMap(f => f.members);
-  const warnings = suggestions.filter(s => s.severity !== 'info');
 
   // Conversational "yes / fix it / do all / apply all" — acknowledge and prompt action buttons
   if (

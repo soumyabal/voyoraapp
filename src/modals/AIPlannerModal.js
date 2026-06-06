@@ -149,7 +149,6 @@ export default function AIPlannerModal({ visible, trip, travelers, onClose }) {
 
   function getQuestionAnswer(text, tripCtx, plan) {
     const lower = text.toLowerCase();
-    const dest  = tripCtx?.destination?.split(',')[0] || 'your destination';
     const days  = tripCtx?.days?.length || 0;
     const acts  = (plan || []).flatMap(d => d).length;
 

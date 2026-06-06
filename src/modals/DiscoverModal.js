@@ -510,6 +510,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const dayWd = weekdayOf(trip?.days?.[dayIndex ?? 0]?.date);
 
   const [viewMode,   setViewMode]   = useState('list'); // 'list' | 'map'
+  const [filtersOpen, setFiltersOpen] = useState(false); // map mode: is the filter panel expanded?
   const [mapCenter,  setMapCenter]  = useState(null);   // {lat,lng} of the map view
   const [mapMoved,   setMapMoved]   = useState(false);  // user panned → show "Search this area"
   const [areaSearch, setAreaSearch] = useState(null);   // committed map area; sticky scope for searches
@@ -929,7 +930,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             </View>
           </View>
 
-          <DestinationHero city={destination || activeCity} />
+          {/* Hero is browse chrome — List mode only; Map mode lets the map own the screen. */}
+          {viewMode !== 'map' && <DestinationHero city={destination || activeCity} />}
 
           <View style={s.searchRow}>
             <Icon name="search" size={16} color={colors.subtle} style={{marginRight:spacing.xs}} />
@@ -941,7 +943,9 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             />
           </View>
 
-          {/* Prominent location bar — where you're searching + tap to change city */}
+          {/* Prominent location bar — List mode only (Map mode keeps the city in the search
+              placeholder + the "Near" chip, so the map stays dominant). */}
+          {viewMode !== 'map' && (
           <TouchableOpacity style={s.locBar} onPress={() => setCityPickerOpen(true)} activeOpacity={0.7}>
             <Icon name="location" size={18} color={colors.accent} />
             <View style={{ flex: 1 }}>
@@ -951,6 +955,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             <Text style={s.locBarChange}>Change</Text>
             <Icon name="forward" size={14} color={colors.accent} />
           </TouchableOpacity>
+          )}
 
           {/* "Explore nearby" scope — shown when opened from an activity */}
           {!!nearLabel && (
@@ -963,10 +968,41 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             </View>
           )}
 
+          {/* Map mode: a slim toolbar — count · Filters · List/Map. The map owns the screen;
+              filters live behind the button and expand on demand (Redfin-style). */}
+          {viewMode === 'map' && (() => {
+            const filterCount = activeFilters.length + LAYERS.filter(L => !layers[L.key]).length;
+            return (
+              <View style={s.mapToolbar}>
+                <Text style={s.resultCount}>{results.length} place{results.length !== 1 ? 's' : ''}{loading ? ' · …' : ''}</Text>
+                <View style={s.mapToolbarRight}>
+                  {!searchText.trim() && (
+                    <TouchableOpacity style={[s.filtersBtn, (filtersOpen || filterCount > 0) && s.filtersBtnOn]}
+                      onPress={() => setFiltersOpen(o => !o)} activeOpacity={0.85}>
+                      <Text style={[s.filtersBtnText, (filtersOpen || filterCount > 0) && { color: '#fff' }]}>
+                        Filters{filterCount ? ` (${filterCount})` : ''} {filtersOpen ? '▴' : '▾'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  <View style={s.viewToggle}>
+                    {[{ k: 'list', ic: 'list' }, { k: 'map', ic: 'map' }].map(v => (
+                      <TouchableOpacity key={v.k} style={[s.viewToggleBtn, viewMode === v.k && s.viewToggleBtnOn]}
+                        onPress={() => setViewMode(v.k)} activeOpacity={0.8}>
+                        <Icon name={v.ic} size={15} color={viewMode === v.k ? '#fff' : colors.subtle} />
+                        <Text style={[s.viewToggleText, viewMode === v.k && { color: '#fff' }]}>{v.k === 'list' ? 'List' : 'Map'}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            );
+          })()}
+
           {/* Map layers — independent See / Eat / Stay toggles. Each carries its
               type colour (= the map-pin legend); turn on any mix. They narrow BROWSE
-              only, so they're hidden during a typed search (which is always literal). */}
-          {!searchText.trim() && (
+              only, so they're hidden during a typed search. In Map mode they live behind
+              the Filters button and expand on demand. */}
+          {(viewMode !== 'map' || filtersOpen) && !searchText.trim() && (
           <View style={s.focusBar}>
             {LAYERS.map(L => {
               const on = layers[L.key];
@@ -982,7 +1018,7 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
           </View>
           )}
 
-          {!searchText.trim() && layers.eat && (
+          {(viewMode !== 'map' || filtersOpen) && !searchText.trim() && layers.eat && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} style={s.chipsScroll}>
               {FILTER_OPTS.map(f => {
                 const on = activeFilters.includes(f.key);
@@ -995,8 +1031,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
             </ScrollView>
           )}
 
-          {/* Results count + List/Map toggle (stays put while re-searching) */}
-          {!error && results.length > 0 && (
+          {/* Results count + List/Map toggle — List mode only (Map mode has its own slim toolbar above) */}
+          {viewMode !== 'map' && !error && results.length > 0 && (
             <View style={s.resultsBar}>
               <View style={s.resultLeft}>
                 <Text style={s.resultCount}>{results.length} place{results.length !== 1 ? 's' : ''}{loading ? ' · searching…' : ''}</Text>
@@ -1315,6 +1351,11 @@ const s = StyleSheet.create({
   searchAreaBtn:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:colors.ink,borderRadius:radius.full,paddingHorizontal:spacing.lg,paddingVertical:spacing.sm,...shadow.lg},
   searchAreaText:{color:'#fff',fontWeight:'800',fontSize:13},
   resultsBar:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:spacing.xxl,paddingVertical:spacing.xs},
+  mapToolbar:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:spacing.xxl,paddingTop:spacing.xs,paddingBottom:spacing.sm},
+  mapToolbarRight:{flexDirection:'row',alignItems:'center',gap:spacing.sm},
+  filtersBtn:{flexDirection:'row',alignItems:'center',backgroundColor:colors.surface2,borderRadius:radius.full,paddingHorizontal:spacing.md,paddingVertical:6},
+  filtersBtnOn:{backgroundColor:colors.accent},
+  filtersBtnText:{fontSize:12,fontWeight:'800',color:colors.subtle},
   resultLeft:{flexDirection:'row',alignItems:'center',gap:spacing.md,flexShrink:1},
   resultCount:{...typography.caption,color:colors.muted},
   resetSeen:{...typography.caption,color:colors.accent,fontWeight:'700'},

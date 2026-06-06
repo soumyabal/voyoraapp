@@ -494,6 +494,31 @@ exports[`validateTrip — golden snapshots (characterization) stayLifecycle: ful
 ]
 `;
 
+exports[`validateTrip — golden snapshots (characterization) stayOverhang: full warnings array is stable 1`] = `
+[
+  {
+    "dayIndex": 0,
+    "hint": "Trim Lake Resort to 1 night so each night is booked once.",
+    "icon": "🏨",
+    "message": "Lake Resort is booked 2 nights, but the trip only has 1 night from check-in.",
+    "severity": "warning",
+    "title": "Hotel booked past your trip",
+    "trimStayId": "h",
+    "trimToNights": 1,
+    "type": "hotel_overlap",
+  },
+  {
+    "dayIndex": 1,
+    "hint": "Add your hotel check-out and the journey home (flight, train, or drive).",
+    "icon": "🧳",
+    "message": "Day 2 (2026-06-13) is your last day but has no check-out or trip home.",
+    "severity": "info",
+    "title": "No way home planned",
+    "type": "lastday_missing_checkout",
+  },
+]
+`;
+
 exports[`validateTrip — golden snapshots (characterization) tiringLong: full warnings array is stable 1`] = `
 [
   {
@@ -688,6 +713,11 @@ exports[`validateTrip — invariants that must survive any refactor summary coun
     "errors": 0,
     "infos": 2,
     "warnings": 0,
+  },
+  "stayOverhang": {
+    "errors": 0,
+    "infos": 1,
+    "warnings": 1,
   },
   "tiringLong": {
     "errors": 0,

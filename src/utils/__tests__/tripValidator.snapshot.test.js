@@ -200,6 +200,11 @@ const FIXTURES = {
     day('Day 2', '2026-06-13', [A('h2', 'stay', '15:00', { name: 'The Baywatch Resort', nights: 1, lat: 0, lng: 0 })]),
     day('Day 3', '2026-06-14', [A('tour', 'activity', '10:00', { durationMins: 60 })]),
   ]),
+  // A single hotel booked for more nights than the trip has → hotel_overlap (trip-end branch).
+  stayOverhang: tripOf([
+    day('Day 1', FRI, [A('h', 'stay', '15:00', { name: 'Lake Resort', nights: 2, lat: 0, lng: 0 })]),
+    day('Day 2', '2026-06-13', [A('tour', 'activity', '10:00', { durationMins: 60 })]),
+  ]),
 };
 
 describe('validateTrip — golden snapshots (characterization)', () => {
@@ -274,6 +279,9 @@ describe('validateTrip — invariants that must survive any refactor', () => {
     expect(ho.severity).toBe('warning');
     expect(ho.trimToNights).toBe(1);
     expect(ho.trimStayId).toBe('h1');
+    const so = one('stayOverhang', 'hotel_overlap');
+    expect(so.severity).toBe('warning');
+    expect(so.trimToNights).toBe(1);
   });
 
   test('summary counts are locked per fixture (survives jest -u)', () => {

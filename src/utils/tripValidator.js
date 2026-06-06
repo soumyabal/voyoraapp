@@ -1049,6 +1049,8 @@ function ruleCheckOutBy(trip) {
 function ruleHotelOverlap(trip) {
   const warnings = [];
   const days = trip?.days || [];
+  const lastNightIdx = days.length - 2;   // you don't sleep the last day (you head home)
+  if (lastNightIdx < 0) return warnings;
   const stays = [];
   days.forEach((d, i) => (d.activities || []).forEach(a => {
     if (a.type === 'stay' && a.status !== 'skipped') stays.push({ stay: a, dayIndex: i });
@@ -1058,15 +1060,22 @@ function ruleHotelOverlap(trip) {
     const { stay, dayIndex } = stays[k];
     const nights = Math.max(1, stay.nights || 1);
     const next = stays.slice(k + 1).find(s => s.dayIndex > dayIndex);
-    if (!next || next.dayIndex >= dayIndex + nights) continue;  // no later hotel inside this booking
-    const trimTo = next.dayIndex - dayIndex;                    // nights actually slept before the switch
+    // The most nights this booking can validly cover: until the next hotel checks in,
+    // AND never past the trip's last sleepable night.
+    const tillNextHotel = next ? next.dayIndex - dayIndex : Infinity;
+    const tillTripEnd   = lastNightIdx - dayIndex + 1;
+    const trimTo = Math.min(tillNextHotel, tillTripEnd);
+    if (trimTo < 1 || nights <= trimTo) continue;              // fits (or starts on the last day)
+    const byNextHotel = next && tillNextHotel <= tillTripEnd;  // which limit is binding
     const over = nights - trimTo;
     warnings.push({
       type:     'hotel_overlap',
       severity: 'warning',
       icon:     '🏨',
-      title:    'Hotel booked past your next check-in',
-      message:  `${stay.name} is booked ${nights} nights, but you check into ${next.stay.name} on ${days[next.dayIndex]?.label || `Day ${next.dayIndex + 1}`} — so ${over === 1 ? 'a night is' : `${over} nights are`} booked at both hotels.`,
+      title:    byNextHotel ? 'Hotel booked past your next check-in' : 'Hotel booked past your trip',
+      message:  byNextHotel
+        ? `${stay.name} is booked ${nights} nights, but you check into ${next.stay.name} on ${days[next.dayIndex]?.label || `Day ${next.dayIndex + 1}`} — so ${over === 1 ? 'a night is' : `${over} nights are`} booked at both hotels.`
+        : `${stay.name} is booked ${nights} nights, but the trip only has ${trimTo} night${trimTo !== 1 ? 's' : ''} from check-in.`,
       hint:     `Trim ${stay.name} to ${trimTo} night${trimTo !== 1 ? 's' : ''} so each night is booked once.`,
       dayIndex,
       trimStayId:   stay.id,

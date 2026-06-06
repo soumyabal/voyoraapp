@@ -14,7 +14,7 @@ import { colors, spacing, radius, typography, shadow, activityColors } from '../
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
 import ConfettiBurst from '../components/ui/ConfettiBurst';
-import { fmt, fmtM, uid } from '../utils/helpers';
+import { fmt, fmtM, uid, checkOutOf } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost } from '../utils/costs';
 import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
@@ -1189,6 +1189,48 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             })()
           )}
 
+          {/* Checkout day — you leave last night's hotel this morning. Offer a calm, polite
+              prompt to drop a 15-min checkout stop AT the hotel, so the day's route starts
+              from the right place (routing anchor). Hidden once a checkout exists. */}
+          {day && (() => {
+            const co = currentDay > 0 ? lodgingForNight(trip, currentDay - 1) : null;
+            const hotel = (co?.stay && co.isLastNight) ? co.stay : null;
+            if (!hotel) return null;
+            if ((day.activities || []).some(a => a.checkout && a.status !== 'skipped')) return null;
+            const time = checkOutOf(hotel);
+            const askAddCheckout = () => Alert.alert(
+              `Leaving ${hotel.name}`,
+              `Add a 15-minute checkout so this day's route starts from the hotel? Standard checkout is ${time} — you can change the time on the card.`,
+              [
+                { text: 'Not now', style: 'cancel' },
+                { text: `Add checkout (${time})`, onPress: () => {
+                  const id = uid();
+                  addActivity(trip.id, currentDay, {
+                    id, type: 'activity', subtype: 'misc', checkout: true,
+                    time, durationMins: 15,
+                    name: `Check out of ${hotel.name}`, detail: 'Pack up and head out',
+                    costPerPerson: 0, costMode: 'per_person', costAmount: 0,
+                    address: hotel.address || '', url: hotel.url || '',
+                    lat: hotel.lat ?? null, lng: hotel.lng ?? null,
+                    note: null, status: null,
+                  });
+                  showUndoAction('Checkout added', 'hotel', () => deleteActivity(trip.id, id));
+                } },
+              ],
+            );
+            return (
+              <TouchableOpacity
+                style={styles.checkoutBanner} onPress={askAddCheckout} activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`Checkout day, leaving ${hotel.name}. Add a checkout stop.`}
+              >
+                <Text style={styles.checkoutBannerIcon}>🧳</Text>
+                <Text style={styles.checkoutBannerText} numberOfLines={2}>Checkout day · leaving {hotel.name}</Text>
+                <Text style={styles.checkoutBannerAdd}>Add checkout →</Text>
+              </TouchableOpacity>
+            );
+          })()}
+
           {/* Where the group sleeps tonight — DERIVED from the one check-in stay,
               never an editable row (so the booking cost can't be duplicated). */}
           {day && (() => {
@@ -2285,6 +2327,11 @@ const styles = StyleSheet.create({
   lodgeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.smartSoft },
   lodgeChipText: { ...typography.caption, color: colors.smartDeep, fontWeight: '700' },
   lodgeChipMuted: { ...typography.caption, color: colors.subtle },
+  // Checkout-day prompt — informational indigo (matches the lodging family), never amber.
+  checkoutBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.smartSoft, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.sm },
+  checkoutBannerIcon: { fontSize: 15 },
+  checkoutBannerText: { flex: 1, ...typography.smallBold, color: colors.smartDeep },
+  checkoutBannerAdd: { ...typography.smallBold, color: colors.smart },
   // Uncovered-night invitation — calm/neutral, NOT amber (it's a question, not a warning)
   lodgeChipAsk: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.smartSoft, borderWidth: 1, borderColor: colors.smart, borderStyle: 'dashed' },
   lodgeAskEmoji: { fontSize: 13 },

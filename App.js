@@ -1,7 +1,9 @@
+// eslint-disable-next-line import/no-duplicates -- load-bearing: gesture-handler requires this bare side-effect import to be the FIRST line of the app; the named import below is intentionally separate.
 import 'react-native-gesture-handler';
 import React, { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+// eslint-disable-next-line import/no-duplicates -- see note above; this named import is distinct from the required top-of-file side-effect import.
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import AppNavigator from './src/navigation/AppNavigator';

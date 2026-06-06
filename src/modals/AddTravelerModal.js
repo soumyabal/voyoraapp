@@ -12,8 +12,6 @@ const familyChipOptions = (trip) => trip.families.map(f => ({ value: f.id, label
 const needsOptions     = NEEDS_OPTIONS.map(n => ({ value: n, label: n }));
 const interestsOptions = INTERESTS_OPTIONS.map(n => ({ value: n, label: n }));
 
-const PACE_LABELS = { relaxed: '🐢 Relaxed', moderate: '🚶 Moderate', packed: '🏃 Packed' };
-
 export default function AddTravelerModal({ visible, trip, defaultFamId, onClose }) {
   const { addTraveler, travelers, createTraveler } = useStore();
 

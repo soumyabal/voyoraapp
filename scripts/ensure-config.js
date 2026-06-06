@@ -16,7 +16,6 @@ module.exports = async function ensureConfig() {
   const example = path.join(__dirname, '..', 'src', 'config.example.js');
   if (!fs.existsSync(cfg) && fs.existsSync(example)) {
     fs.copyFileSync(example, cfg);
-    // eslint-disable-next-line no-console
     console.log('[ensure-config] src/config.js was missing — created it from config.example.js');
   }
 };

@@ -12,7 +12,7 @@
  * apply the produced settlements and prove everyone lands at 0.
  */
 import {
-  memberExpenseShare, famExpenseShare, calcBalances, calcSettlements,
+  memberExpenseShare, calcBalances, calcSettlements,
   calcFamilyBalances, unevenActive, getEffectiveMembers,
 } from '../costs';
 import { getAllMembers } from '../helpers';
@@ -217,13 +217,11 @@ describe('property fuzz: Σ net === 0 for any trip shape', () => {
   const genTrip = () => {
     const nFams = int(1, 4);
     const families = [];
-    let mc = 0;
     for (let i = 0; i < nFams; i++) {
       const nMem = int(0, 3); // 0 → empty family on purpose
       const members = [];
       for (let k = 0; k < nMem; k++) members.push(M(`m${i}_${k}`));
       families.push(F(`f${i}`, `Fam${i}`, members));
-      mc += nMem;
     }
     const allM = families.flatMap(f => f.members);
     const allF = families.map(f => f.id);

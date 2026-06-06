@@ -56,8 +56,8 @@ export function buildHTML(trip, travelers = [], { includeExpenses = false } = {}
     * { box-sizing: border-box; margin: 0; padding: 0; }
     /* print-color-adjust: keep hero/table/pill backgrounds when rendered to PDF */
     body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #1a1a2e; background: #fff; font-size: 13px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .page { max-width: 800px; margin: 0 auto; padding: 0 0 32px; }
-    .pad { padding: 22px 32px 0; }
+    .page { max-width: 800px; margin: 0 auto; padding: 0; }
+    .pad { padding: 22px 32px 16px; }
 
     /* Cover hero — rich trip color (solid fallback + gradient where it renders) */
     .cover { color: #fff; padding: 40px 32px 30px; background-color: #6366f1; background-image: linear-gradient(135deg, var(--c1), var(--c2)); }
@@ -120,13 +120,13 @@ export function buildHTML(trip, travelers = [], { includeExpenses = false } = {}
     .exp-families { font-size: 10px; color: #6b7280; }
 
     /* Footer */
-    .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 10px; color: #9ca3af; display: flex; justify-content: space-between; }
+    .footer { margin-top: 20px; padding-top: 14px; border-top: 1px solid #e5e7eb; font-size: 10px; color: #9ca3af; display: flex; justify-content: space-between; page-break-inside: avoid; }
     .footer-brand { color: #6366f1; font-weight: 700; }
 
     /* Excitement extras */
     .moat-intro { font-size: 12px; color: #6b7280; line-height: 1.5; margin: 2px 0 12px; }
     .day-vibe   { font-size: 11px; color: #6366f1; font-style: italic; margin: 2px 0 8px; }
-    .closing    { text-align: center; font-size: 14px; font-weight: 700; color: #6366f1; margin: 30px 0 6px; }
+    .closing    { text-align: center; font-size: 14px; font-weight: 700; color: #6366f1; margin: 22px 0 4px; page-break-inside: avoid; }
   `;
 
   // ── Families HTML ──────────────────────────────────────────────────────────

@@ -570,8 +570,16 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
       const ret = day.activities.find(a => a.type === 'transport' && a.status !== 'skipped' && a.fromLat != null && a.fromLng != null);
       if (ret) endAnchor = { lat: ret.fromLat, lng: ret.fromLng };
     }
+    // Checkout morning? If last night was the final night of a stay, hand planDay the
+    // hotel + check-out time so it drops in a locked 15-min Check-out anchor (unless one
+    // already exists) and keeps the getaway day light. Same covering-stay logic as the banner.
+    const coLod = currentDay > 0 ? lodgingForNight(trip, currentDay - 1) : null;
+    const coHotel = (coLod?.stay && coLod.isLastNight) ? coLod.stay : null;
+    const checkout = coHotel
+      ? { name: coHotel.name, time: checkOutOf(coHotel), lat: coHotel.lat ?? null, lng: coHotel.lng ?? null }
+      : undefined;
     const r = planDay(day.activities, {
-      dayRole, date: day.date, anchor, endAnchor, pace: trip.pace, families: trip.families, origin: trip.origin,
+      dayRole, date: day.date, anchor, endAnchor, pace: trip.pace, families: trip.families, origin: trip.origin, checkout,
     });
 
     // Stable end-state: nothing moved → calm acknowledgement, never a re-prompt.
@@ -603,6 +611,8 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
       if (r.overflow.length)   bits.push(`${r.overflow.length} may not fit a ${trip.pace} day`);
       const tight = r.unresolved.filter(u => u.reason === 'tight').length;
       if (tight) bits.push(`${tight} locked time${tight > 1 ? 's' : ''} still tight`);
+      const heavy = r.unresolved.filter(u => u.reason === 'checkout_heavy').length;
+      if (heavy) bits.push(`${heavy} far for a checkout day`);
       showUndoAction(bits.length ? `Day planned · ${bits.join(' · ')}` : 'Day planned ✓', 'sparkles', undo);
     };
 
@@ -628,6 +638,8 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     if (r.overflow.length) residual.push(`${r.overflow.length} may not fit your ${trip.pace} pace`);
     const tightN = r.unresolved.filter(u => u.reason === 'tight').length;
     if (tightN) residual.push(`${tightN} locked time${tightN > 1 ? 's' : ''} can't move (still tight)`);
+    const heavyN = r.unresolved.filter(u => u.reason === 'checkout_heavy').length;
+    if (heavyN) residual.push(`${heavyN} stop${heavyN > 1 ? 's' : ''} far for a checkout day — consider an earlier day`);
     const note = residual.length ? `\n\n⚠️  ${residual.join(' · ')}` : '';
 
     const n = changeRows.length;

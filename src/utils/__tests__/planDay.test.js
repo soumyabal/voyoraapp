@@ -116,6 +116,58 @@ describe('planDay — a locked stop is intent, not overflow', () => {
   });
 });
 
+describe('planDay — checkout-day intelligence', () => {
+  const at = (id, time, lat, lng, extra = {}) =>
+    ({ id, type: 'activity', name: id, time, durationMins: 60, lat, lng, ...extra });
+
+  test('inserts a locked Check-out anchor at the hotel time when the caller asks', () => {
+    const acts = [at('A', '11:00', 0, 0)];
+    const r = planDay(acts, {
+      date: FRI, pace: 'moderate', dayRole: 'departure', anchor: { lat: 0, lng: 0 },
+      checkout: { name: 'Grand Hotel', time: '10:00', lat: 0, lng: 0 },
+    });
+    const co = r.scheduled.find((a) => a.checkout);
+    expect(co).toBeTruthy();
+    expect(co.time).toBe('10:00');                 // at the hotel's check-out time
+    expect(co.timeLocked).toBe(true);              // fixed anchor
+    expect(r.changes.some((c) => c.actId === co.id && c.from == null)).toBe(true); // shown as a new add
+  });
+
+  test('does not add a second check-out if one already exists (idempotent)', () => {
+    const existing = { id: 'checkout-x', checkout: true, type: 'activity', timeLocked: true, name: 'Check out', time: '10:00', lat: 0, lng: 0, durationMins: 15 };
+    const r = planDay([existing, at('A', '11:00', 0, 0)], {
+      date: FRI, pace: 'moderate', dayRole: 'departure', anchor: { lat: 0, lng: 0 },
+      checkout: { name: 'Grand Hotel', time: '10:00', lat: 0, lng: 0 },
+    });
+    expect(r.scheduled.filter((a) => a.checkout)).toHaveLength(1);
+  });
+
+  test('the check-out anchor does not eat a sightseeing slot (not counted as capacity)', () => {
+    // relaxed cap = 3; exactly 3 sights + a checkout → checkout must not push a sight to overflow.
+    const acts = ['A', 'B', 'C'].map((id, i) => at(id, `${9 + i * 2}:00`, 0, 0));
+    const r = planDay(acts, {
+      date: FRI, pace: 'relaxed', dayRole: 'departure', anchor: { lat: 0, lng: 0 },
+      checkout: { name: 'Hotel', time: '10:00', lat: 0, lng: 0 },
+    });
+    expect(r.overflow).toHaveLength(0);
+    expect(r.summary.scheduledCount).toBe(3);      // the checkout is not a "scheduled" sight
+  });
+
+  test('a far stop on the departure day is flagged checkout_heavy (move it earlier)', () => {
+    const acts = [at('Near', '10:00', 0.01, 0.01), at('Far', '13:00', 1, 1)]; // ~157 km away
+    const r = planDay(acts, { date: FRI, pace: 'moderate', dayRole: 'departure', anchor: { lat: 0, lng: 0 } });
+    const heavy = r.unresolved.filter((u) => u.reason === 'checkout_heavy').map((u) => u.actId);
+    expect(heavy).toContain('Far');
+    expect(heavy).not.toContain('Near');
+  });
+
+  test('checkout_heavy only applies to the departure day, not a normal day', () => {
+    const acts = [at('Far', '13:00', 1, 1)];
+    const r = planDay(acts, { date: FRI, pace: 'moderate', dayRole: 'normal', anchor: { lat: 0, lng: 0 } });
+    expect(r.unresolved.some((u) => u.reason === 'checkout_heavy')).toBe(false);
+  });
+});
+
 describe('planDay — unpadded times sort chronologically (not as strings)', () => {
   test('a single-digit-hour time orders before a two-digit one (no "9:30 after 10:00")', () => {
     // Manually-entered "9:30" used to localeCompare AFTER "10:00" → mis-sequenced + drift.

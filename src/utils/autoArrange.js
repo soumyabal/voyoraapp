@@ -757,6 +757,29 @@ export function comfortPass(activities, opts = {}) {
   return { adjusted, changes, unresolved };
 }
 
+// One-way travel (min) from the day's start anchor beyond which a stop makes a
+// CHECK-OUT (departure) day too heavy — ~2.5 h round-trip. Flagged, never dropped.
+const FAR_CHECKOUT_MIN = 75;
+
+// Checkout-day: if the caller says a stay's coverage ends this morning (opts.checkout =
+// { name, time, lat, lng }) and the day has no check-out stop yet, prepend a short,
+// time-locked Check-out anchor at the hotel's check-out time + location. Locked → it
+// anchors the morning and the rest of the day routes around it. Uses the same `checkout`
+// flag the manual "Add checkout" banner sets, so it's idempotent across both paths.
+function withCheckoutStop(activities, opts) {
+  const co = opts.checkout;
+  const list = activities || [];
+  if (!co || !co.time || list.some(a => a.checkout && a.status !== 'skipped')) return list;
+  return [{
+    id: `checkout-${opts.date || 'day'}`,
+    checkout: true, subtype: 'misc', type: 'activity', timeLocked: true,
+    name: co.name ? `Check out of ${co.name}` : 'Hotel check-out',
+    detail: 'Pack up and head out',
+    time: co.time, durationMins: 15, costPerPerson: 0, costMode: 'per_person', costAmount: 0,
+    lat: co.lat ?? null, lng: co.lng ?? null, status: null,
+  }, ...list];
+}
+
 /**
  * planDay — one-tap, deterministic, DAY-SCOPED "Plan my day".
  *
@@ -766,12 +789,13 @@ export function comfortPass(activities, opts = {}) {
  * items to other days, never silently drops — over-capacity / unresolvable-closed
  * items stay on the day and are merely *reported*.
  *
- *   opts = { dayRole, date, anchor, pace, families, origin }
+ *   opts = { dayRole, date, anchor, pace, families, origin,
+ *            checkout?: { name, time, lat, lng } }   // departure-morning check-out
  *   returns {
  *     scheduled,   // the re-timed day — write this
  *     changed,     // did any (id,time) actually move? → drives "already optimized" (no re-prompt)
  *     overflow:   [{ actId, name, reason:'capacity' }],            // beyond the pace cap
- *     unresolved: [{ actId, name, reason:'closed', verifyUrl }],   // closed & re-timing can't fix
+ *     unresolved: [{ actId, name, reason:'closed', verifyUrl }],   // closed/heavy & re-timing can't fix
  *     summary: { scheduledCount, overflowCount, unresolvedCount },
  *   }
  */
@@ -781,7 +805,9 @@ export function planDay(activities, opts = {}) {
   // the day into a clean route+time sequence (preserveOrder:false) — honoring LOCKED stops as
   // fixed anchors the rest flows around — then shifts times to fit. The user can re-drag after
   // (the preview lists every change for Apply/Discard). Pass preserveOrder:true to opt out.
-  const comfort = comfortPass(scheduleDay(activities, { ...opts, preserveOrder: opts.preserveOrder ?? false }), opts);
+  // On a check-out morning we first drop in a locked Check-out anchor (see withCheckoutStop).
+  const input = withCheckoutStop(activities, opts);
+  const comfort = comfortPass(scheduleDay(input, { ...opts, preserveOrder: opts.preserveOrder ?? false }), opts);
   const scheduled = comfort.adjusted;
 
   // Convergence fingerprint: a good day re-planned yields the same (id,time) set →
@@ -811,7 +837,7 @@ export function planDay(activities, opts = {}) {
   const cap = PACE_CAP[opts.pace] || PACE_CAP.moderate;
   const substantial = scheduled.filter((a) =>
     a.status !== 'skipped' && a.type !== 'note' && a.type !== 'stay' &&
-    a.type !== 'food' && a.type !== 'transport');
+    a.type !== 'food' && a.type !== 'transport' && !a.checkout);
   // Overflow is a CAPACITY signal about SCHEDULED stops — an unscheduled (no-fit-hours)
   // stop has no time and is reported separately below, so exclude it here (no double-count).
   const overflow = substantial.filter((a) => a.time).slice(cap)
@@ -851,7 +877,17 @@ export function planDay(activities, opts = {}) {
     .filter((a) => a.time && timeToMin(a.time) + Math.max(BUFFER_MIN, estimateDuration(a)) > DAY_END_MIN)
     .filter((a) => !comfort.unresolved.some((u) => u.actId === a.id))
     .map((a) => ({ actId: a.id, name: a.name, reason: 'day_full' }));
-  const unresolved = [...closed, ...noFitHours, ...comfort.unresolved, ...lateRunovers];
+  // Checkout-day too-heavy: on a departure morning, a stop a long way from where you wake
+  // (the hotel) means a big detour on your getaway day — flag it (move to an earlier day),
+  // never schedule a 3-hour round trip before heading home. Reported, not dropped.
+  const checkoutHeavy = (opts.dayRole === 'departure' && opts.anchor)
+    ? substantial
+        .filter((a) => a.time && a.lat != null && a.lng != null)
+        .map((a) => ({ a, leg: travelLeg(opts.anchor, a) }))
+        .filter(({ leg }) => leg && leg.min >= FAR_CHECKOUT_MIN)
+        .map(({ a, leg }) => ({ actId: a.id, name: a.name, reason: 'checkout_heavy', travelMin: Math.round(leg.min) }))
+    : [];
+  const unresolved = [...closed, ...noFitHours, ...comfort.unresolved, ...lateRunovers, ...checkoutHeavy];
 
   return {
     scheduled,

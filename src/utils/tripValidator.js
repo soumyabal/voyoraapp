@@ -1040,6 +1040,42 @@ function ruleCheckOutBy(trip) {
   return warnings;
 }
 
+// ── Trip rule: a hotel booked PAST your next check-in (double-booked nights) ──
+// lodgingForNight shows per-night coverage (the latest check-in wins), but the room
+// COST is billed per stay as rate × nights — so a stay whose `nights` run past a LATER
+// hotel's check-in double-books those nights (and double-bills the room, and mislabels
+// "Night x of n"). On a hotel change, the earlier hotel should check out when the next
+// one checks in. Real + data-backed → 'warning', carrying a one-tap trim fix.
+function ruleHotelOverlap(trip) {
+  const warnings = [];
+  const days = trip?.days || [];
+  const stays = [];
+  days.forEach((d, i) => (d.activities || []).forEach(a => {
+    if (a.type === 'stay' && a.status !== 'skipped') stays.push({ stay: a, dayIndex: i });
+  }));
+  stays.sort((a, b) => a.dayIndex - b.dayIndex);
+  for (let k = 0; k < stays.length; k++) {
+    const { stay, dayIndex } = stays[k];
+    const nights = Math.max(1, stay.nights || 1);
+    const next = stays.slice(k + 1).find(s => s.dayIndex > dayIndex);
+    if (!next || next.dayIndex >= dayIndex + nights) continue;  // no later hotel inside this booking
+    const trimTo = next.dayIndex - dayIndex;                    // nights actually slept before the switch
+    const over = nights - trimTo;
+    warnings.push({
+      type:     'hotel_overlap',
+      severity: 'warning',
+      icon:     '🏨',
+      title:    'Hotel booked past your next check-in',
+      message:  `${stay.name} is booked ${nights} nights, but you check into ${next.stay.name} on ${days[next.dayIndex]?.label || `Day ${next.dayIndex + 1}`} — that double-books ${over} night${over !== 1 ? 's' : ''} and the room cost.`,
+      hint:     `Trim ${stay.name} to ${trimTo} night${trimTo !== 1 ? 's' : ''} so each night is booked once.`,
+      dayIndex,
+      trimStayId:   stay.id,
+      trimToNights: trimTo,
+    });
+  }
+  return warnings;
+}
+
 // ── Trip rule: last day has no check-out / way home ──────────────
 function ruleLastDayCheckout(trip) {
   const warnings = [];
@@ -1126,6 +1162,7 @@ const TRIP_RULES = [
   ruleEmptyDays,
   ruleUnbookedNights,
   ruleCheckOutBy,
+  ruleHotelOverlap,
   ruleLastDayCheckout,
   ruleLongJourney,
 ];

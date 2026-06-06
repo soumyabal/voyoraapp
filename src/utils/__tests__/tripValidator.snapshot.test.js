@@ -193,6 +193,13 @@ const FIXTURES = {
   unreachable: tripOf([
     day('Day 1', FRI, [A('far', 'activity', '08:30', { name: 'Far Stop', durationMins: 120, lat: 0, lng: 5 })]),
   ], { origin: { label: 'Home City', lat: 0, lng: 0 } }),
+  // Hotel change mid-trip: first hotel booked 2 nights but a 2nd hotel checks in on
+  // night 2 → hotel_overlap=warning, with a one-tap trim fix to 1 night.
+  hotelChange: tripOf([
+    day('Day 1', FRI, [A('h1', 'stay', '15:00', { name: 'Great Wolf Lodge', nights: 2, lat: 0, lng: 0 })]),
+    day('Day 2', '2026-06-13', [A('h2', 'stay', '15:00', { name: 'The Baywatch Resort', nights: 1, lat: 0, lng: 0 })]),
+    day('Day 3', '2026-06-14', [A('tour', 'activity', '10:00', { durationMins: 60 })]),
+  ]),
 };
 
 describe('validateTrip — golden snapshots (characterization)', () => {
@@ -263,6 +270,10 @@ describe('validateTrip — invariants that must survive any refactor', () => {
     expect(has('stayLifecycle', 'check_out_by').length).toBeGreaterThanOrEqual(1);
     one('stayLifecycle', 'lastday_missing_checkout');
     expect(one('unreachable', 'first_stop_unreachable').severity).toBe('info');
+    const ho = one('hotelChange', 'hotel_overlap');
+    expect(ho.severity).toBe('warning');
+    expect(ho.trimToNights).toBe(1);
+    expect(ho.trimStayId).toBe('h1');
   });
 
   test('summary counts are locked per fixture (survives jest -u)', () => {

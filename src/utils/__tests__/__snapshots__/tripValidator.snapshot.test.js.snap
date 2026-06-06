@@ -227,6 +227,40 @@ exports[`validateTrip — golden snapshots (characterization) fullDayVenue: full
 ]
 `;
 
+exports[`validateTrip — golden snapshots (characterization) hotelChange: full warnings array is stable 1`] = `
+[
+  {
+    "dayIndex": 2,
+    "hint": "Arrange a late check-out with the hotel if your morning runs long.",
+    "icon": "🧳",
+    "message": "You check out of The Baywatch Resort this morning — be packed and out by 11:00.",
+    "severity": "info",
+    "title": "Check-out this morning",
+    "type": "check_out_by",
+  },
+  {
+    "dayIndex": 0,
+    "hint": "Trim Great Wolf Lodge to 1 night so each night is booked once.",
+    "icon": "🏨",
+    "message": "Great Wolf Lodge is booked 2 nights, but you check into The Baywatch Resort on Day 2 — that double-books 1 night and the room cost.",
+    "severity": "warning",
+    "title": "Hotel booked past your next check-in",
+    "trimStayId": "h1",
+    "trimToNights": 1,
+    "type": "hotel_overlap",
+  },
+  {
+    "dayIndex": 2,
+    "hint": "Add your hotel check-out and the journey home (flight, train, or drive).",
+    "icon": "🧳",
+    "message": "Day 3 (2026-06-14) is your last day but has no check-out or trip home.",
+    "severity": "info",
+    "title": "No way home planned",
+    "type": "lastday_missing_checkout",
+  },
+]
+`;
+
 exports[`validateTrip — golden snapshots (characterization) longJourney: full warnings array is stable 1`] = `
 [
   {
@@ -604,6 +638,11 @@ exports[`validateTrip — invariants that must survive any refactor summary coun
     "errors": 0,
     "infos": 0,
     "warnings": 2,
+  },
+  "hotelChange": {
+    "errors": 0,
+    "infos": 2,
+    "warnings": 1,
   },
   "longJourney": {
     "errors": 1,

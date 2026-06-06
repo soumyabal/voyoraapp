@@ -5,6 +5,26 @@
 
 ---
 
+## Lint baseline / React Compiler readiness (from the June 2026 lint-to-zero pass)
+
+Lint is now **0 errors** (was 97). The React Compiler rules from `eslint-plugin-react-hooks`
+v7 fire even though the compiler is OFF; the false positives are suppressed per-file and
+`set-state-in-effect` is `warn` centrally. Follow-ups:
+
+- [ ] **Migrate modals off the `set-state-in-effect` "seed form on open" idiom.** ~20 modals
+      do `useEffect(() => { if (visible) setX(initial…) }, [visible, initial])`. The clean fix
+      is the **key-prop remount** pattern (`<EditFooModal key={initial?.id ?? 'new'} … />` from
+      the parent + `useState(initial?.x)` initializers — delete the effect). Do it
+      **opportunistically** when a modal is already open for other work + device-tested — NOT a
+      risky 20-file sweep. Tracked because it's the last real React-Compiler blocker if we ever
+      enable the compiler. — `*Modal.js` + parents
+- [ ] **Clean remaining ~87 advisory warnings incrementally** (import/first in tests,
+      exhaustive-deps, scaffolding vars like `setIsRefining`/`handleApplyFix`/`resolveCity`/
+      `PACE_LABELS`/the unused `pv` stylesheet). Left in place because they read as intended
+      scaffolding — confirm dead before deleting.
+- [ ] **Timezone handling.** Distances are now US miles (`formatMi`); timezone-aware times/dates
+      were explicitly deferred. Revisit before non-US launch or multi-timezone trips.
+
 ## Add-a-stop flow (from the June 2026 entry-point review)
 
 - [ ] **Smarter default SLOT for the header "Manual" button.** It always opens to

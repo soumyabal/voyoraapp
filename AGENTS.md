@@ -186,6 +186,8 @@ tripValidator.js      Trip Check rules engine + estimateDuration, lodgingForNigh
 autoArrange.js        scheduleDay() (per-day) + autoArrange() (basket → days). Anchors each day
                       via dayRouteAnchor. "One engine PLACES, the same engine CHECKS."
 geo.js                travelLeg() / haversineKm() — FREE straight-line distance + time estimate.
+                      Math is in KM internally; formatMi() converts at the display boundary
+                      (US-first: ft / mi). Timezone handling is deferred.
 hours.js              Opening-hours model (weekdayOf, dayIntervals, isOpenAt, hoursLabel).
 slots.js              Day slots (Morning/Afternoon/Evening/Night) + suggested-time math.
 expenses.js           activityToExpense / rebuildItineraryExpenses (itinerary → Splitwise).
@@ -226,7 +228,15 @@ src/data/sampleData.js Seed trips/travelers/groups for first launch
   mode, a 500-trip property fuzz, delete-flow balance), and `tripValidator.snapshot.test.js`
   (FULL validateTrip output — every rule has a fixture, locks the rule registry). Run: `npm test`.
 - **Lint/format:** `npm run lint` (eslint 9 flat, eslint-config-expo) / `npm run format` (prettier).
-  Non-blocking baseline (~420 findings) to clean incrementally.
+  **0 errors**; ~87 advisory **warnings** remain (import/first in tests, exhaustive-deps, dead
+  scaffolding vars) — non-blocking, clean incrementally. NOTE on the React Compiler rules
+  (`eslint-plugin-react-hooks` v7 ships them at `error`, but the compiler itself is OFF — no
+  babel plugin, no `app.json` experiment — so they gate NOTHING at build/runtime/App-Store):
+  the genuine ones were fixed (3 misnamed `use*` store actions → `spend*`; one TDZ reorder),
+  the RN-`Animated`/expo-audio false positives carry per-file `eslint-disable` headers with a
+  `--` justification, and `react-hooks/set-state-in-effect` is downgraded to `warn` centrally
+  in `eslint.config.js` (the modal "seed form on open" idiom; migrate to key-remount
+  opportunistically — see backlog). Don't blanket-disable; keep new code clean.
 - **Stability:** ErrorBoundary in `App.js`; AsyncStorage is **versioned + migrated** (no data wipe
   on upgrade).
 

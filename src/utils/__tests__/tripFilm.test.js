@@ -142,3 +142,62 @@ describe('pickSoundtrack', () => {
     expect(got.size).toBeGreaterThan(1);
   });
 });
+
+describe('buildTripFilm — multi-photo day reel', () => {
+  const P = (n) => `https://places.googleapis.com/v1/places/${n}/photos/x/media?key=OLD`;
+  const tripWith = (activities) => ({
+    name: 'T', destination: 'Bali', emoji: '🌴',
+    families: [{ id: 'A', members: [{ id: 'a1' }] }],
+    days: [{ label: 'Day 1', date: '2026-07-10', activities }],
+  });
+
+  test('a day with several photo stops → chapter card + extra photo slides', () => {
+    const f = buildTripFilm(tripWith([
+      act('p1', 'Temple', 'activity', P(1)),
+      act('p2', 'Beach', 'activity', P(2)),
+      act('p3', 'Market', 'activity', P(3)),
+    ]));
+    const day = f.filter((s) => s.type === 'day');
+    expect(day).toHaveLength(3);                 // opener + 2 extra (PER_DAY_PHOTOS = 3)
+    expect(day[0].title).toBeTruthy();           // opener keeps the vibe line
+    expect(day[0].photoUrl).toBe(P(1));
+    expect(day[1].title).toBeNull();             // extras are photo-forward (no title)
+    expect(day[1].photoUrl).toBe(P(2));
+    expect(day[1].photoName).toBe('Beach');
+    expect(day[2].photoUrl).toBe(P(3));
+  });
+
+  test('per-day cap (3) — a 5-photo day yields at most 3 day slides', () => {
+    const f = buildTripFilm(tripWith([1, 2, 3, 4, 5].map((n) => act(`p${n}`, `S${n}`, 'activity', P(n)))));
+    expect(f.filter((s) => s.type === 'day')).toHaveLength(3);
+  });
+
+  test('a day with ≤1 photo behaves as before — a single day card', () => {
+    const f = buildTripFilm(tripWith([act('p1', 'Solo', 'activity', P(1)), act('p2', 'NoPic', 'food')]));
+    const day = f.filter((s) => s.type === 'day');
+    expect(day).toHaveLength(1);
+    expect(day[0].photoUrl).toBe(P(1));
+  });
+
+  test('transport photos are never used as reel slides', () => {
+    const f = buildTripFilm(tripWith([act('t', 'Flight', 'transport', P(9)), act('p1', 'Temple', 'activity', P(1))]));
+    const day = f.filter((s) => s.type === 'day');
+    expect(day).toHaveLength(1);
+    expect(day[0].photoUrl).toBe(P(1));
+  });
+
+  test('overall cap — photo-heavy multi-day trip stays ≤ 10 day slides', () => {
+    const heavy = (label) => ({ label, date: '2026-07-10', activities: [1, 2, 3].map((n) => act(`${label}-${n}`, `${label}${n}`, 'activity', P(n))) });
+    const big = {
+      name: 'Big', destination: 'X', emoji: '🌍',
+      families: [{ id: 'A', members: [{ id: 'a1' }] }],
+      days: [heavy('D1'), heavy('D2'), heavy('D3'), heavy('D4')],   // 4×3 = 12 → capped
+    };
+    expect(buildTripFilm(big).filter((s) => s.type === 'day').length).toBeLessThanOrEqual(10);
+  });
+
+  test('deterministic with photos', () => {
+    const t = tripWith([act('p1', 'A', 'activity', P(1)), act('p2', 'B', 'activity', P(2))]);
+    expect(buildTripFilm(t)).toEqual(buildTripFilm(t));
+  });
+});

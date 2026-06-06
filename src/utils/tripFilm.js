@@ -35,12 +35,22 @@ const DAY_GRADS = [GRADS.terracotta, GRADS.indigo, GRADS.green, GRADS.amber];
 
 const substantial = (a) => a.status !== 'skipped' && a.type !== 'note';
 
-// The first stop on a day that carries a cached place photo → { url, name } (or null).
-// Transport rows are skipped (a flight/drive photo isn't a "place"); the rest keep day order.
-function dayPhoto(d) {
-  const a = (d.activities || []).find((x) => substantial(x) && x.type !== 'transport' && x.photo);
-  return a ? { url: a.photo, name: a.name || null } : null;
+// A day's cached place photos, in day order → [{ url, name }]. Transport rows are skipped
+// (a flight/drive photo isn't a "place").
+function dayPhotos(d) {
+  return (d.activities || [])
+    .filter((x) => substantial(x) && x.type !== 'transport' && x.photo)
+    .map((x) => ({ url: x.photo, name: x.name || null }));
 }
+// The first such photo on a day (or null) — used for the cover + each day's chapter card.
+function dayPhoto(d) {
+  return dayPhotos(d)[0] || null;
+}
+
+// How many of a day's photos the reel shows (the chapter card + up to PER_DAY_PHOTOS-1 extra
+// photo slides), and an overall cap so a photo-heavy trip can't balloon into a 40-slide film.
+const PER_DAY_PHOTOS = 3;
+const MAX_DAY_SLIDES = 10;
 
 // A day's emoji = its dominant activity type (a little visual variety per chapter).
 function dayEmoji(d) {
@@ -121,11 +131,24 @@ export function buildTripFilm(trip) {
       title: `${plannedDays.length} ${plannedDays.length === 1 ? 'day' : 'days'} mapped out`,
       subtitle: stops ? `${stops} ${stops === 1 ? 'stop' : 'stops'} along the way` : (place || null),
     });
-    // ── DAY chapters (capped) ── each a vibe line over that day's own place photo (gradient if none)
+    // ── DAY chapters (capped) ── each day opens with a vibe line over its first place photo
+    // (gradient if none), then a short reel of that day's other cached photos — so a well-
+    // photographed day plays back like a montage, not a single card. Capped per day + overall.
+    let daySlides = 0;
     plannedDays.slice(0, 4).forEach((d, k) => {
       const i = days.indexOf(d);
-      const ph = dayPhoto(d);
-      slides.push({ type: 'day', grad: DAY_GRADS[k % DAY_GRADS.length], kicker: `DAY ${i + 1}`, emoji: dayEmoji(d), photoUrl: ph?.url || null, photoName: ph?.name || null, title: dayVibe(d, i) });
+      const grad = DAY_GRADS[k % DAY_GRADS.length];
+      const photos = dayPhotos(d).slice(0, PER_DAY_PHOTOS);
+      // chapter opener: the vibe line over the day's first photo (or a gradient card)
+      if (daySlides < MAX_DAY_SLIDES) {
+        slides.push({ type: 'day', grad, kicker: `DAY ${i + 1}`, emoji: dayEmoji(d), photoUrl: photos[0]?.url || null, photoName: photos[0]?.name || null, title: dayVibe(d, i) });
+        daySlides++;
+      }
+      // extra photo-forward slides for the day's other stops (captioned by place name)
+      for (let p = 1; p < photos.length && daySlides < MAX_DAY_SLIDES; p++) {
+        slides.push({ type: 'day', grad, kicker: `DAY ${i + 1}`, photoUrl: photos[p].url, photoName: photos[p].name, title: null });
+        daySlides++;
+      }
     });
     // ── THE MOAT ── the fair per-family split (only meaningful for 2+ families)
     if (famN >= 2) {

@@ -27,7 +27,7 @@ import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
 
 const SCREEN_W       = Dimensions.get('window').width;
-const CARD_ACTIONS_W = 240;                        // 4 × 60px action buttons (Up · Down · Move · Delete)
+const CARD_ACTIONS_W = 216;                        // Move · Delete action buttons
 const CARD_W         = SCREEN_W - 48;              // SCREEN_W - 2 × spacing.xxl (24)
 
 // Static lookup tables (day slots, icons, pill tones, meal map, night-plan options/meta)
@@ -1517,18 +1517,17 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
   // Swipe actions are phase-agnostic: this is a planner, so you re-arrange a day whether the
   // trip is upcoming or already underway — the swipe is always Move + Delete. Done/not-done is
   // the checkbox on the card itself (no separate "Did Not Do").
-  // One Move entry point (consolidates the old day-icon + hidden long-press): choose day or slot.
+  // One Move entry point for ALL repositioning: reorder within this slot (up/down — only
+  // offered when there's room to move), or relocate to another day / time slot.
   const moveChooser = () => {
     close();
-    Alert.alert(
-      `Move “${act.name || 'this stop'}”`,
-      'Where to?',
-      [
-        { text: '📅  Another day', onPress: onMoveRequest },
-        { text: '🕒  A different time slot', onPress: onSlotMove },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    );
+    const options = [];
+    if (!isFirst) options.push({ text: '⬆️  Move up', onPress: onMoveUp });
+    if (!isLast)  options.push({ text: '⬇️  Move down', onPress: onMoveDown });
+    options.push({ text: '📅  Another day', onPress: onMoveRequest });
+    options.push({ text: '🕒  A different time slot', onPress: onSlotMove });
+    options.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert(`Move “${act.name || 'this stop'}”`, 'Where to?', options);
   };
 
   return (
@@ -1764,26 +1763,10 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
         </View>
         </View>{/* end actCard */}
 
-        {/* ── Action buttons (revealed when card scrolls left): Up · Down · Move · Delete ──
-            Up/Down reorder within the slot (replacing the old in-card ▲▼); Move relocates to
-            another day/slot; Delete is the far-right cell. Plain touchables — no gesture libs. */}
+        {/* ── Action buttons (revealed when card scrolls left): Move · Delete ──
+            Move opens a menu with up/down reorder + relocate to another day/slot.
+            Plain touchables — no gesture libs. */}
         <View style={styles.actCardActions}>
-          <TouchableOpacity
-            disabled={isFirst}
-            style={[styles.actCardAction, { backgroundColor: '#6c5ce7' }, isFirst && styles.actCardActionOff]}
-            onPress={onMoveUp}
-          >
-            <Text style={styles.actCardActionArrow}>▲</Text>
-            <Text style={styles.actCardActionLabel}>Up</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            disabled={isLast}
-            style={[styles.actCardAction, { backgroundColor: '#6c5ce7' }, isLast && styles.actCardActionOff]}
-            onPress={onMoveDown}
-          >
-            <Text style={styles.actCardActionArrow}>▼</Text>
-            <Text style={styles.actCardActionLabel}>Down</Text>
-          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actCardAction, { backgroundColor: '#64748b' }]}
             onPress={moveChooser}
@@ -2487,8 +2470,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 2,
   },
-  actCardActionArrow: { color: '#fff', fontSize: 18, fontWeight: '900', lineHeight: 20 },
-  actCardActionOff: { opacity: 0.4 },
   swipeHintText: {
     fontSize: 9,
     color: colors.muted,

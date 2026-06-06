@@ -125,7 +125,7 @@ function TravelersTab() {
               { text: 'Cancel', style: 'cancel' },
             ]);
             return (
-              <TouchableOpacity key={tv.id} style={tt.travelerCard} onPress={openActions} activeOpacity={0.75}>
+              <PressableScale key={tv.id} style={tt.travelerCard} onPress={openActions} haptic="light" scaleTo={0.98}>
                 <View style={tt.travelerRow}>
                   <View style={[tt.avatar, { backgroundColor: avatarColor(tv.name) }]}>
                     <Text style={tt.avatarText}>{tv.emoji || tv.name[0]}</Text>
@@ -150,7 +150,7 @@ function TravelersTab() {
                 {(tv.interests || []).length > 0 && (
                   <Text style={tt.interests}>Loves: {tv.interests.join(' · ')}</Text>
                 )}
-              </TouchableOpacity>
+              </PressableScale>
             );
           })
         )}
@@ -939,13 +939,13 @@ const tt = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
     marginBottom: spacing.md,
   },
-  sectionTitle: { ...typography.h4, color: colors.text },
-  sectionSub: { ...typography.small, color: colors.muted, marginTop: 2 },
+  sectionTitle: { ...typography.h3, color: colors.ink },
+  sectionSub: { ...typography.small, color: colors.subtle, marginTop: 2 },
   addBtn: {
-    borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.sm,
-    paddingHorizontal: 12, paddingVertical: 6,
+    backgroundColor: colors.accentSoft, borderRadius: radius.full,
+    paddingHorizontal: 14, paddingVertical: 7,
   },
-  addBtnText: { ...typography.smallBold, color: colors.primary },
+  addBtnText: { ...typography.smallBold, color: colors.accent },
 
   emptyCard: {
     backgroundColor: colors.surface, borderRadius: radius.xl,
@@ -972,6 +972,7 @@ const tt = StyleSheet.create({
   avatar: {
     width: 40, height: 40, borderRadius: 20,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    ...shadow.sm,
   },
   avatarText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   travelerName: { ...typography.bodyBold, color: colors.text },

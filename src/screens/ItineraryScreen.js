@@ -1663,8 +1663,8 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
             {!dimmed && (
               <View style={styles.actTags}>
                 {displayCostAmt > 0 && (
-                  <View style={[styles.costBadge, isPerFamily && { backgroundColor: '#f0eeff', borderColor: '#c4b5fd' }, isTotal && { backgroundColor: '#dcfce7', borderColor: '#a7f3d0' }]}>
-                    <Text style={[styles.costBadgeText, isPerFamily && { color: '#7c3aed' }, isTotal && { color: '#065f46' }]}>
+                  <View style={[styles.costBadge, isPerFamily && { backgroundColor: colors.smartSoft }, isTotal && { backgroundColor: colors.successSoft }]}>
+                    <Text style={[styles.costBadgeText, isPerFamily && { color: colors.smart }, isTotal && { color: colors.success }]}>
                       ~${displayCostAmt}{displayCostLbl}
                     </Text>
                   </View>
@@ -1680,8 +1680,8 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
                   </View>
                 )}
                 {!!act.access && (
-                  <View style={[styles.costBadge, { backgroundColor: colors.greenLight, borderColor: '#b2dfdb' }]}>
-                    <Text style={[styles.costBadgeText, { color: colors.green }]}>* {act.access}</Text>
+                  <View style={[styles.costBadge, { backgroundColor: colors.successSoft }]}>
+                    <Text style={[styles.costBadgeText, { color: colors.success }]}>* {act.access}</Text>
                   </View>
                 )}
               </View>
@@ -2601,7 +2601,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     backgroundColor: colors.accentSoft,
     borderWidth: 1,
-    borderColor: '#f0c9b5',
+    borderColor: colors.hairline,
   },
   costBadgeText: { fontSize: 11, fontWeight: '800', color: colors.accent },
   durationBadge: {

@@ -137,7 +137,42 @@ both the memories moat and the live split.**
   passive group listener.
 - **Sequencing:** Phase 4 exploration, *after* the core loop is proven — high upside, real unknowns.
 
-## 6. The ask & use of funds
+## 6. Why this can win — and the risks we're not hiding
+
+### Why it can be a category disruptor
+- **A structural wedge, not a feature gap.** Per-family splitting (rooms × family size) is something
+  Splitwise's per-person data model *structurally* doesn't do — a decade in, with a roommates/couples
+  ICP, they haven't built it. That's the kind of gap disruptors exploit.
+- **We replace a spreadsheet.** Groups plan in Excel *because nothing purpose-built exists* — serving
+  people the incumbents ignore with a "good-enough-then-better" tool is textbook disruption.
+- **A combination nobody owns:** plan + split + remember on one spine. Each incumbent holds one slice;
+  none holds the whole *group* trip → consolidation + switching cost.
+- **Virality with a CAC divisor:** the settlement share-out markets to *several families per trip* — a
+  structural growth edge solo-traveler apps can't copy.
+- **Trust as a wedge:** deterministic, **AI-free money** while everyone else bolts on flaky AI.
+- **Unusual execution quality for the stage:** deterministic engines, golden-snapshot tests — a real
+  foundation, not a demo.
+
+### The risks we're not hiding (and our answer)
+| Risk | Honest read | Our answer |
+|---|---|---|
+| **Distribution is the whole game** | the graveyard is full of *better* planners (Google killed Google Trips). The wedge + viral loop are **hypotheses until validated.** | bet the company on *one* organizer community + the share loop + SEO; prove the loop before scaling spend |
+| **Low frequency** (1–3 group trips/yr) | structurally caps engagement & retention | the **memories archive + between-trip re-engagement** + the shareable recap fight frequency |
+| **Scope creep** (plan+split+memories+AI+marketplace+WhatsApp) | sprawl kills more startups than competition | **ruthless sequencing** — layers are *earned by traction*, not launch scope; the wedge ships first |
+| **Fast-follow** (Splitwise adds per-family) | possible | defense is the **combination + ICP focus + switching cost**, not any one feature — defensible, not unassailable |
+
+### The proof we're watching (it converts "promising" → "fundable")
+**Settlement-screen rate** (do families actually *split*, not just plan?) + an early **K-factor**
+signal (recipients of the recap who start their *own* trips) from even ~20–50 real beta trips. That
+single result is worth more than any projection in this doc.
+
+**Honest bottom line:** the bet isn't whether the product is good — the foundation is real. It's
+**distribution + frequency + sequencing discipline.** Win the narrow wedge, prove the share loop,
+stay disciplined about the layers, and this is a genuine shot at *owning multi-family travel* — a
+valuable category nobody owns. We don't need to "disrupt travel planning" broadly to win, and we
+won't pretend we will.
+
+## 7. The ask & use of funds
 **Seed ~$1.0–1.5M, 18–24 months.** Buys: **Phase-2 backend** (auth · keys server-side · catalog DB ·
 collaboration), **reference-based memories storage**, **AI planning** behind the Pro tier, and
 **affiliate integration** (Phase 3) — i.e. it turns on *all three* revenue streams and reaches the

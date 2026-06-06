@@ -85,6 +85,7 @@ diff only intended files. Target: ItineraryScreen.js (3022 lines) + DiscoverModa
   distance routing then a bounded comfortClosePass that pulls earlier-closing stops forward ONLY
   within a 2 km comfort budget (never detours). No-op without close-times → all snapshots unchanged.
   +7 tests; 429 green (8278eaa). The aggressive "detour to catch a closing" mode stays deferred.
+- 2026-06-06 — lint cleanup: cleared 6 genuine eslint warnings (90→84, still 0 errors) — unused test import/var, an orphaned PACE_LABELS const, a stale eslint-disable, and documented App.js's intentional gesture-handler double-import. Left all possible-WIP scaffolding (unused store actions/state/handlers) per the don't-delete-scaffolding rule. 510 tests green, snapshots byte-identical (fd76e49). Deterministic priority queue (a–f) now exhausted; remaining roadmap items are UI/device or backend.
 
 ## 2026-06-04 — test-user bug fixes (user driving)
 - 2026-06-04 — Bug1: 24/7 places (bridge/lighthouse) no longer show "Closed" — Google's no-close period was recorded Sunday-only; compactHours now expands 24/7 to all 7 days + handles cross-midnight; store v4→v5 migration repairs existing trips. ✓ device-verified (19b84aa)

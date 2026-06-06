@@ -568,7 +568,7 @@ function buildGenericPlan(trip, travelers, options = {}) {
     const allThemes = [
       [
         act({ type: 'food',     time: '08:00', name: 'Breakfast', detail: 'Hotel or local café', access: 'Accessible', costPerPerson: scale(12) }),
-        act({ type: 'activity', time: '09:30', name: `${dest} highlights tour`, detail: 'Guided tour of top local landmarks', access: profile.hasWheelchair ? 'Fully accessible route confirmed' : 'Moderate walking, ~2–3 km', costPerPerson: scale(profile.hasKids ? 18 : 25) }),
+        act({ type: 'activity', time: '09:30', name: `${dest} highlights tour`, detail: 'Guided tour of top local landmarks', access: profile.hasWheelchair ? 'Fully accessible route confirmed' : 'Moderate walking, ~1–2 mi', costPerPerson: scale(profile.hasKids ? 18 : 25) }),
         act({ type: 'food',     time: '13:00', name: 'Lunch', detail: profile.vegetarianCount > 0 ? 'Café with vegetarian and vegan options' : 'Local restaurant', access: 'Accessible', costPerPerson: scale(18) }),
         act({ type: 'activity', time: '15:00', name: 'Local museum or gallery', detail: "Explore history, art or culture — check what's showing", access: 'Wheelchair accessible, audio guides available', costPerPerson: scale(12) }),
         act({ type: 'food',     time: '19:30', name: 'Dinner', detail: 'Recommended local restaurant — book ahead for groups', access: 'Accessible, advance booking', costPerPerson: scale(32) }),

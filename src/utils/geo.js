@@ -29,7 +29,8 @@ export function haversineKm(a, b) {
 
 /**
  * Travel estimate between two located stops.
- * Returns { km, min, mode } where km is the straight-line distance (for display),
+ * Returns { km, min, mode } where km is the straight-line distance (format for display
+ * with formatMi),
  * min is the estimated door-to-door minutes, mode is 'walk' | 'drive'. null when
  * either stop has no coordinates (we can't know — callers fall back to a buffer).
  */
@@ -47,9 +48,15 @@ export function travelLeg(a, b) {
   return { km, min: Math.max(5, Math.round((road / kmh) * 60)), mode: 'drive' };
 }
 
-/** "850 m" / "3.2 km" — compact distance label. */
-export function formatKm(km) {
+// km is the internal math unit everywhere (haversine, travelLeg, thresholds). The DISPLAY,
+// however, is US-first miles. Convert only at the formatting boundary — keep the math in km.
+const KM_PER_MI = 1.60934;
+
+/** "320 ft" / "0.5 mi" / "345 mi" — compact US distance label. Input is km. */
+export function formatMi(km) {
   if (km == null) return '';
-  if (km < 1) return `${Math.round(km * 1000)} m`;
-  return `${km.toFixed(1)} km`;
+  const mi = km / KM_PER_MI;
+  if (mi < 0.1) return `${Math.round((mi * 5280) / 10) * 10} ft`;  // sub-tenth-mile → rounded feet
+  if (mi < 10)  return `${mi.toFixed(1)} mi`;
+  return `${Math.round(mi)} mi`;                                    // long legs → whole miles
 }

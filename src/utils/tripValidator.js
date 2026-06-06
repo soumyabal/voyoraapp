@@ -38,7 +38,7 @@
  *  11. Dietary conflict — food activity name contains meat/alcohol keywords vs group dietary profile
  */
 
-import { travelLeg, formatKm } from './geo';
+import { travelLeg, formatMi } from './geo';
 import { weekdayOf, isOpenAt, hoursLabel, dayIntervals } from './hours';
 import { checkOutOf } from './helpers';
 
@@ -489,7 +489,7 @@ function ruleTravelTime(ctx) {
       severity: 'info',
       icon:     leg.mode === 'walk' ? '🚶' : '🚗',
       title:    'Tight travel time',
-      message:  `"${next.act.name}" starts ${formatDuration(gap)} after "${curr.act.name}" ends, but they're ~${formatKm(leg.km)} apart (~${leg.min} min ${leg.mode}).`,
+      message:  `"${next.act.name}" starts ${formatDuration(gap)} after "${curr.act.name}" ends, but they're ~${formatMi(leg.km)} apart (~${leg.min} min ${leg.mode}).`,
       // Don't suggest a CLOSED time — if it can't start that late, point to another day.
       hint:     fitsLater
         ? `Start "${next.act.name}" around ${sug} or later, or add the drive between them.`
@@ -933,7 +933,7 @@ function ruleFirstStopUnreachable(trip) {
       title:    longHaul ? 'Day 1 looks like a travel day' : 'First stop is early for the drive',
       // Long-haul ⇒ don't claim "~17 h drive" (it's a flight); frame it as a travel day.
       message:  longHaul
-        ? `${day.label}'s first stop is at ${first.time}, but you're starting ~${Math.round(leg.km)} km away in ${fromLabel} — that's a full travel day to get there.`
+        ? `${day.label}'s first stop is at ${first.time}, but you're starting ~${formatMi(leg.km)} away in ${fromLabel} — that's a full travel day to get there.`
         : `${day.label}'s first stop is at ${first.time}, but it's ~${hours}h from ${fromLabel} — you'd arrive around ${formatEndTime(arrival)}.`,
       hint:     suggestHotel
         ? "Plan it as a travel day — and add a hotel check-in for when you arrive. If your times already account for the trip there, ignore this."

@@ -14,7 +14,7 @@ import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost } f
 import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
 import { planDay, returnJourneyDraft, suggestDayForVenue } from '../utils/autoArrange';
-import { travelLeg, formatKm } from '../utils/geo';
+import { travelLeg, formatMi } from '../utils/geo';
 import { weekdayOf, hoursLabel, weeklyHoursLabel, dayIntervals } from '../utils/hours';
 import { refreshPhotoKey } from '../utils/places';
 import { getSuggestedTime, minToTime, getSlotKey, timeToMin } from '../utils/slots';
@@ -36,7 +36,7 @@ const WD_SHORT       = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];  // we
 // now live in utils/itineraryConfig — imported at the top of this file.
 
 // ── Travel leg between two consecutive stops ──────────────────────
-// The intuitive distance cue: a little "🚗 12 min · 5.0 km" connector between
+// The intuitive distance cue: a little "🚗 12 min · 3.1 mi" connector between
 // cards (Wanderlog/Google-Trips style). Turns RED when the next stop starts
 // before you could realistically get there — the same call the Trip Check rule
 // makes, so the inline cue and the warning always agree.
@@ -55,7 +55,7 @@ function TravelConnector({ from, to }) {
     <View style={styles.legRow}>
       <View style={[styles.legDot, tight && styles.legDotTight]} />
       <Text style={[styles.legText, tight && styles.legTextTight]} numberOfLines={1}>
-        {leg.mode === 'walk' ? '🚶' : '🚗'} {leg.min} min · {formatKm(leg.km)}{gapNote}
+        {leg.mode === 'walk' ? '🚶' : '🚗'} {leg.min} min · {formatMi(leg.km)}{gapNote}
       </Text>
     </View>
   );
@@ -79,8 +79,8 @@ function OriginConnector({ origin, to }) {
       <View style={styles.legDot} />
       <Text style={styles.legText} numberOfLines={1}>
         {farAway
-          ? `🧭 ${formatKm(leg.km)} to your first stop`
-          : `${leg.mode === 'walk' ? '🚶' : '🚗'} ${leg.min} min · ${formatKm(leg.km)} to your first stop`}
+          ? `🧭 ${formatMi(leg.km)} to your first stop`
+          : `${leg.mode === 'walk' ? '🚶' : '🚗'} ${leg.min} min · ${formatMi(leg.km)} to your first stop`}
       </Text>
     </View>
   );

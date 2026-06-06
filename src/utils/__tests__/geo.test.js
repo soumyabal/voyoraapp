@@ -2,7 +2,7 @@
  * geo.test.js — the free distance/travel engine. Pins haversine accuracy and the
  * walk/drive travel model that the distance-aware Trip Check rule relies on.
  */
-import { haversineKm, travelLeg, formatKm } from '../geo';
+import { haversineKm, travelLeg, formatMi } from '../geo';
 
 describe('haversineKm', () => {
   test('same point is 0', () => {
@@ -35,9 +35,14 @@ describe('travelLeg', () => {
   });
 });
 
-describe('formatKm', () => {
-  test('sub-km in metres, else one decimal km', () => {
-    expect(formatKm(0.85)).toBe('850 m');
-    expect(formatKm(3.2)).toBe('3.2 km');
+describe('formatMi', () => {
+  test('sub-tenth-mile in feet, short legs one decimal, long legs whole miles', () => {
+    expect(formatMi(0.1)).toBe('330 ft');   // 0.062 mi → rounded feet
+    expect(formatMi(0.85)).toBe('0.5 mi');  // 0.528 mi
+    expect(formatMi(3.2)).toBe('2.0 mi');   // 1.99 mi
+    expect(formatMi(556)).toBe('345 mi');   // long haul → whole miles
+  });
+  test('null → empty string', () => {
+    expect(formatMi(null)).toBe('');
   });
 });

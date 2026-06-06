@@ -88,6 +88,8 @@ Sequencing logic: subscriptions need the **backend** (Phase 2); affiliate needs 
   loop → target **LTV:CAC > 3:1**.
 
 ## 5. A novel acquisition idea — the WhatsApp / **@kithova** companion *(explore + IP clearance)*
+*Full mechanics + the premium "import your WhatsApp trip" feature → [`design-whatsapp-ingest.md`](design-whatsapp-ingest.md).*
+
 **The barrier to memories + member participation is behavior change:** "install our app and upload
 your photos." Groups already live in **WhatsApp**, cross-platform, every trip.
 

@@ -1,6 +1,6 @@
 # Kithova — assumptions to validate (before pitching)
 
-Every number in [`product-roadmap.md` §12](product-roadmap.md), [`pitch-onepager.md`](pitch-onepager.md),
+Every number in [`business-case.md`](business-case.md), [`pitch-onepager.md`](pitch-onepager.md),
 and [`state-of-kithova.md` §5](state-of-kithova.md) is an **illustrative assumption**. This is the
 list to harden — what each value is, **what it swings**, and **where to get a defensible figure.**
 
@@ -67,7 +67,7 @@ You don't need all of it — you need **the wedge proven + the loop showing sign
    guess) A2/A6/A7.
 
 ## How to keep this honest
-- Replace each `[X]`/range in §12 + the one-pager with the sourced figure **and a footnote citation**.
+- Replace each `[X]`/range in business-case.md + the one-pager with the sourced figure **and a footnote citation**.
 - Keep the bottoms-up model (A6×A7×A8 …) — it's far more defensible than a top-down "1% of a huge
   TAM" claim.
 - Re-run the numbers after the beta; update the living doc. Under-promise the projections; over-index

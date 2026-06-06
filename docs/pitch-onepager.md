@@ -1,7 +1,7 @@
 # Kithova — one-pager
 
-*The condensed cut of [product-roadmap.md §12](product-roadmap.md). **Numbers are illustrative
-assumptions — validate/source before sending.***
+*The condensed cut of [business-case.md](business-case.md) (revenue model, tiers, appendix).
+**Numbers are illustrative assumptions — validate/source before sending.***
 
 ---
 

@@ -1,9 +1,10 @@
 # Kithova — State & Vision (the living doc)
 
 > **This is the living source of truth for "where are we / where are we going."** Update it as
-> things ship. The deeper references are [`product-roadmap.md`](product-roadmap.md) (GTM, phases,
-> the §12 fundraising model) and [`rule-engine.md`](rule-engine.md) (how the engines work). When
-> this doc and the roadmap disagree, **this doc wins** (the roadmap is older).
+> things ship. The deeper references are [`business-case.md`](business-case.md) (revenue model,
+> tiers, funding) and [`rule-engine.md`](rule-engine.md) (how the engines work); the older
+> [`product-roadmap.md`](product-roadmap.md) holds GTM/phase detail. When this doc and the roadmap
+> disagree, **this doc wins** (the roadmap is older).
 >
 > Last updated: keep current. Stack: React Native 0.81 · Expo 54 · Zustand (local/persisted) ·
 > deterministic engines · Google Places. No backend yet (by design — Phase 1 is local-only).
@@ -61,7 +62,7 @@ key → Apple Developer enrollment → EAS build → TestFlight. (All non-code o
   (b) the eventual one-shot **settle-up** nudge after the trip ends. The per-activity live engine
   (`now/next`, today-chips, status pill inside the itinerary) is retired.
 - **➕ Memories / lifecycle thesis added** — the "plan → split → **remember**" expansion is now the
-  fundable story (see [`product-roadmap.md` §12](product-roadmap.md) + [`pitch-onepager.md`](pitch-onepager.md)).
+  fundable story (see [`business-case.md`](business-case.md) + [`pitch-onepager.md`](pitch-onepager.md)).
   Memories are a **retention + switching-cost layer on the money/plan spine**, not a new wedge and
   not a Google-Photos competitor.
 - **🔤 Rebrand Voyara → Kithova** in progress: app + visual identity done; doc/folder/storage-key
@@ -84,7 +85,7 @@ revenue** — each a known, sequenced step, not a research risk.
 
 ## 5. Market analysis — how big, and the pains we kill
 
-### 5.1 How big (bottoms-up; full model in §12)
+### 5.1 How big (bottoms-up; full model in business-case.md)
 - **US group/multi-family leisure trips ≈ 20M/yr** *(assumption to validate)* → SAM (shared-lodging,
   organizer-led) ≈ **8M trips** → realistic Yr-3 SOM ≈ **0.3–0.5M trips**.
 - Top-down sanity: US leisure travel is a **multi-hundred-billion-dollar** market `[source to add]`;
@@ -145,6 +146,6 @@ revenue** — each a known, sequenced step, not a research risk.
 4. **Stage 4 (growth + AI):** AI refine / fill-empty-day **re-validated through the deterministic
    spine** (never the money), dietary-aware discovery.
 
-**Funding:** see [`product-roadmap.md` §12](product-roadmap.md) (full model) +
+**Funding:** see [`business-case.md`](business-case.md) (full model + revenue streams) +
 [`pitch-onepager.md`](pitch-onepager.md) (the cold-send cut). Seed ~$1.0–1.5M buys Stage 2–3 and the
 traction gates to a Series A. *(All figures illustrative — validate before pitching.)*

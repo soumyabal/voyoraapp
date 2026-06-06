@@ -70,6 +70,11 @@ diff only intended files. Target: ItineraryScreen.js (3022 lines) + DiscoverModa
   included/skipped, included-only totals) → utils/expenses.js + 3 tests. Presentational glue only —
   the split/settlement money math (costs.js) untouched. SplitwiseScreen −8 lines; 416 tests green
   (a854463). EXTRACTION QUEUE EXHAUSTED — next run is the Play My Trip multi-photo feature.
+- 2026-06-05 — FEATURE: Play My Trip fuller per-day photo reel — each planned day opens with its
+  vibe card then a short reel of that day's OTHER cached act.photo stops (cap 3/day, 10 overall;
+  no live fetch; transport skipped; gradient fallback). Pure in tripFilm.js; PlayTripModal
+  unchanged; +6 tests; 422 green; snapshots byte-identical (3ed4091). ⚠️ needs owner on-device check.
+  SESSION COMPLETE — loop stopped (no further wakeups scheduled).
 
 ## 2026-06-04 — test-user bug fixes (user driving)
 - 2026-06-04 — Bug1: 24/7 places (bridge/lighthouse) no longer show "Closed" — Google's no-close period was recorded Sunday-only; compactHours now expands 24/7 to all 7 days + handles cross-midnight; store v4→v5 migration repairs existing trips. ✓ device-verified (19b84aa)

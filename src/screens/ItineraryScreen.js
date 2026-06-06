@@ -557,7 +557,6 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
       showUndoAction('Add a few places (Discover) and I’ll plan your day', 'sparkles', () => {});
       return;
     }
-    const prev = day.activities;
     const isLastDay = currentDay === trip.days.length - 1;
     const dayRole = isLastDay ? 'departure' : 'normal';
     // Anchor to where you wake: Day 1 → trip.origin; later days → last night's hotel.
@@ -600,19 +599,54 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     const noFit = r.unresolved.filter(u => u.reason === 'no_fit_hours');
     const noFitIds = new Set(noFit.map(u => u.actId));
 
+    // Leftovers the user should decide on (after arranging): a stop that can't fit its
+    // hours, is too far for a checkout day, won't fit the day, is closed today, or is
+    // beyond the pace cap. Each becomes one Move / Keep / Remove card so the day can reach
+    // a clean state. 'tight' (a locked-time conflict) is NOT here — only unlocking fixes it.
+    const MOVABLE = new Set(['no_fit_hours', 'checkout_heavy', 'day_full', 'closed']);
+    const seenLeft = new Set();
+    const decisionItems = [
+      ...r.unresolved.filter(u => MOVABLE.has(u.reason)),
+      ...r.overflow,                              // reason: 'capacity'
+    ].filter(u => u.actId && !seenLeft.has(u.actId) && (seenLeft.add(u.actId), true));
+
+    const whyLeftover = (reason) => ({
+      closed:         'is closed today',
+      no_fit_hours:   "won't fit its opening hours today",
+      checkout_heavy: 'is a long way to go on a checkout day',
+      day_full:       "won't fit in this day",
+      capacity:       `is beyond your ${trip.pace} pace for the day`,
+    }[reason] || 'needs another spot');
+
+    // Walk the leftovers one card at a time → Move to the best open day · Keep · Remove.
+    // Ends with a single undo that restores the whole pre-plan state (reorder + any moves).
+    const decideLeftovers = (items, i, undo) => {
+      if (i >= items.length) { showUndoAction('Day planned ✓', 'sparkles', undo); return; }
+      const item = items[i];
+      const venue = r.scheduled.find(a => a.id === item.actId);
+      const title = (item.name || venue?.name || 'This stop').slice(0, 40);
+      const next  = () => decideLeftovers(items, i + 1, undo);
+      const best  = venue ? suggestDayForVenue(trip, venue, { excludeDayIndex: currentDay }).best : null;
+      const bestLabel = best != null ? (trip.days[best]?.label || `Day ${best + 1}`) : null;
+      const buttons = [];
+      if (best != null) buttons.push({ text: `Move to ${bestLabel}`, onPress: () => { moveActivity(trip.id, currentDay, best, item.actId); next(); } });
+      buttons.push({ text: 'Keep', style: 'cancel', onPress: next });
+      buttons.push({ text: 'Remove', style: 'destructive', onPress: () => { deleteActivity(trip.id, item.actId); next(); } });
+      Alert.alert(
+        title,
+        `${title} ${whyLeftover(item.reason)}.${bestLabel ? ` ${bestLabel} has room.` : ' No other day has obvious room — keep it here or remove it.'}`,
+        buttons,
+      );
+    };
+
     const apply = () => {
       markPlanDayNoteSeen();
+      const snap = planSnapshot();               // one undo for the whole operation (reorder + moves)
       setDayActivities(trip.id, currentDay, r.scheduled);
-      const undo = () => setDayActivities(trip.id, currentDay, prev);
-      const bits = [];
-      if (noFit.length) bits.push(`${noFit.length} to move to another day`);
-      const dayFull = r.unresolved.filter(u => u.reason === 'day_full').length;
-      if (dayFull) bits.push(`${dayFull} won't fit in one day`);
-      if (r.overflow.length)   bits.push(`${r.overflow.length} may not fit a ${trip.pace} day`);
+      const undo = () => restoreTripState(trip.id, snap);
+      if (decisionItems.length) { decideLeftovers(decisionItems, 0, undo); return; }
       const tight = r.unresolved.filter(u => u.reason === 'tight').length;
-      if (tight) bits.push(`${tight} locked time${tight > 1 ? 's' : ''} still tight`);
-      const heavy = r.unresolved.filter(u => u.reason === 'checkout_heavy').length;
-      if (heavy) bits.push(`${heavy} far for a checkout day`);
+      const bits = tight ? [`${tight} locked time${tight > 1 ? 's' : ''} still tight`] : [];
       showUndoAction(bits.length ? `Day planned · ${bits.join(' · ')}` : 'Day planned ✓', 'sparkles', undo);
     };
 
@@ -621,38 +655,27 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     const shown = changeRows.slice(0, 6).map(fmtRow).join('\n');
     const more  = changeRows.length > 6 ? `\n…and ${changeRows.length - 6} more` : '';
 
-    // LOUD, separate "won't fit today — move it" block (the owner's ask), naming a day
-    // that genuinely has room when we're confident, else leaving it to the picker.
-    const noFitBlock = noFit.length
-      ? `\n\n🗓️  Won’t fit today — move to another day:\n${noFit.slice(0, 5).map(u => {
-          const venue = r.scheduled.find(a => a.id === u.actId);
-          const best = venue ? suggestDayForVenue(trip, venue, { excludeDayIndex: currentDay }).best : null;
-          const where = best != null ? ` → ${trip.days[best]?.label || `Day ${best + 1}`} has room` : '';
-          return `•  ${u.name}${u.open ? ` (open ${u.open})` : ''}${where}`;
-        }).join('\n')}${noFit.length > 5 ? `\n…and ${noFit.length - 5} more` : ''}`
+    // Leftovers become Move / Keep / Remove cards AFTER applying — just preview the count.
+    const dCount = decisionItems.length;
+    const decideNote = dCount
+      ? `\n\n🗓️  ${dCount} stop${dCount > 1 ? 's' : ''} need${dCount > 1 ? '' : 's'} a quick call — I'll ask Move / Keep / Remove for each after you apply.`
       : '';
-
-    const residual = [];
-    const dayFullN = r.unresolved.filter(u => u.reason === 'day_full').length;
-    if (dayFullN) residual.push(`${dayFullN} stop${dayFullN > 1 ? 's' : ''} won't fit in one day (too far apart)`);
-    if (r.overflow.length) residual.push(`${r.overflow.length} may not fit your ${trip.pace} pace`);
     const tightN = r.unresolved.filter(u => u.reason === 'tight').length;
-    if (tightN) residual.push(`${tightN} locked time${tightN > 1 ? 's' : ''} can't move (still tight)`);
-    const heavyN = r.unresolved.filter(u => u.reason === 'checkout_heavy').length;
-    if (heavyN) residual.push(`${heavyN} stop${heavyN > 1 ? 's' : ''} far for a checkout day — consider an earlier day`);
-    const note = residual.length ? `\n\n⚠️  ${residual.join(' · ')}` : '';
+    const tightNote = tightN
+      ? `\n\n⚠️  ${tightN} locked time${tightN > 1 ? 's' : ''} can't move (still tight) — unlock to let me shift it.`
+      : '';
 
     const n = changeRows.length;
     const lead = n
-      ? `I'll shift ${n} ${n === 1 ? 'time' : 'times'} so the day's travel and opening hours fit. Times are estimates (~):\n\n${shown}${more}`
+      ? `I'll arrange the day and shift ${n} ${n === 1 ? 'time' : 'times'} so travel and opening hours fit. Times are estimates (~):\n\n${shown}${more}`
       : `I’ve arranged the day around what fits.`;
 
     Alert.alert(
       '✨ Plan my day',
-      `${lead}${noFitBlock}${note}`,
+      `${lead}${decideNote}${tightNote}`,
       [
         { text: 'Discard', style: 'cancel' },
-        { text: noFit.length ? 'Apply (move later)' : 'Apply', onPress: apply },
+        { text: dCount ? 'Apply & decide' : 'Apply', onPress: apply },
       ],
     );
   };
@@ -688,7 +711,9 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const toggleLock = (act) => {
     toggleActivityLock(trip.id, act.id);
     showUndoAction(
-      act.timeLocked ? `${act.time} unlocked · free to move` : `🔒 ${act.time} locked · won't be moved`,
+      act.timeLocked
+        ? `${act.time} unlocked · Plan my day can move it`
+        : `🔒 ${act.time} locked · Plan my day keeps this time and arranges the rest around it`,
       act.timeLocked ? 'lock-open-outline' : 'lock-closed',
       () => toggleActivityLock(trip.id, act.id),
     );
@@ -1798,7 +1823,7 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
             </TouchableOpacity>
             {act.time && act.type !== 'note' && act.status !== 'done' && act.status !== 'skipped' && (
               <TouchableOpacity onPress={onToggleLock} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}
-                accessibilityRole="button" accessibilityLabel={act.timeLocked ? 'Unlock this time so auto-arrange can move it' : 'Lock this time'}>
+                accessibilityRole="button" accessibilityLabel={act.timeLocked ? 'Unlock this time so Plan my day can move it' : 'Lock this start time; Plan my day will arrange the other stops around it'}>
                 <Icon name={act.timeLocked ? 'lock-closed' : 'lock-open-outline'} size={15} color={act.timeLocked ? colors.primary : colors.subtle} />
               </TouchableOpacity>
             )}

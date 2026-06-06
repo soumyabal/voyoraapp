@@ -116,7 +116,9 @@ function buildSplash() {
   const png = new PNG({ width: S, height: S });
   png.data.fill(0);                                  // fully transparent
   const buf = png.data;
-  const ringR = 0.16 * S, dotR = 0.056 * S, hubR = 0.045 * S;  // smaller → padded logo under "contain"
+  // Mark nearly fills the canvas (small margin) → the expo-splash-screen plugin's imageWidth
+  // controls the on-screen size predictably.
+  const ringR = 0.30 * S, dotR = 0.105 * S, hubR = 0.082 * S;
   ringDots(ringR).forEach(d => circle(buf, d.x, d.y, dotR, d.rgb, 1));
   circle(buf, C, C, hubR, hex(INK), 1);
   return png;

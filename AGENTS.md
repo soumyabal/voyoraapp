@@ -413,6 +413,19 @@ Each family gets Expense[] with participatingFamilies: [thisFamily.id]
 - **Behavior-neutral means behavior-neutral.** A "cleanup" must be provably so — verify, don't assume. Don't delete functions, handlers, or state that may be intended scaffolding under the guise of removing dead code; when unsure, leave it.
 - **When a change is ambiguous, risky, or irreversible — stop and flag it** rather than guess. Honor the confidentiality/secrets guardrails at the top of this file on every change (never commit `src/config.js`, never move a key into a tracked file, push only to `origin`).
 
+**Field-tested workflow (proven over many shipped changes — work like this):**
+- **The TRIPWIRE — run before EVERY commit:** `npx jest` green AND test count stable-or-grown · golden snapshots byte-identical (NEVER `jest -u`) · the `screensCompile` net green (it babel-transforms every screen/modal, catching JSX/syntax breaks jest's node env can't) · `npx eslint <changed files>` shows NO new errors (watch `no-undef`/`no-unused`) · `git diff --stat` shows ONLY intended files (`src/config.js` must NEVER appear). Commit + push each small increment so the owner can review.
+- **You edit files on the owner's LIVE machine.** Metro hot-reloads as you save, so a half-applied multi-file edit can crash the running app (e.g. an open tag converted before its close). Finish each change to a consistent, compiling state quickly.
+- **UI is unverified until the owner device-checks it.** Build it, then say plainly "needs your on-device check" and list exactly what to look at — jest + compile-net prove logic/parse, NOT look-and-feel. Pure-JS changes: commit then verify. Risky native/gesture UI: hold the commit (or be ready to instantly revert) until confirmed.
+- **Confirm design forks BEFORE building expensive UI** with `AskUserQuestion` + `preview:` ASCII mockups — one question saves a wasted device cycle.
+- **Investigate before editing:** read the real wiring, `grep` every usage of a symbol, and `git log -S "<token>"` to find when something regressed. Don't guess.
+- **Reverting cleanly:** pushed bad commit → `git revert <sha>`; uncommitted mess → `git checkout -- <files>`. Then have the owner `npx expo start -c` + reopen Expo Go (a crashed runtime/cache persists otherwise).
+- **Be honest:** report failures with the output, flag your own mistakes, never claim a UI change works without the device.
+
+**Expo Go + native modules (hard limit — learned the hard way):** the app runs in **Expo Go (SDK 54, reanimated ~4.1)**, whose native binaries are FIXED. **Worklet-based drag/gesture libraries (`react-native-draggable-flatlist`, `react-native-reorderable-list`) crash at load** ("Exception in HostFunction: NativeWorklets" / "runtime not ready") — do NOT add them in Expo Go. Real drag-to-reorder is **parked until an EAS dev build**; reorder ships today via the Move menu (`reorderSlotActivities`, which already accepts an arbitrary new order). Reanimated's high-level animations (LoadingScreen) are fine — it's the low-level worklet runtime these libs hit at module-init that fails.
+
+**API cost model (know before touching Discover):** Google **Places Text Search** + **Place Photos** are billed per call (cached per query×area — don't defeat the cache). The **map is Leaflet + OpenStreetMap tiles (free)** and the destination hero is **Wikipedia (free)** — layout changes there cost nothing. Searches fire ONLY on `[visible, activeCity, areaSearch, layers, activeFilters, searchText]`.
+
 **Theme:** Always `import { colors, spacing, ... } from '../theme'`. Never hardcode hex or px.
 
 **Keyboard in modals:** Use `KeyboardAvoidingView` with `behavior={Platform.OS === 'ios' ? 'padding' : 'height'}` wrapping messages + input. Do NOT use `useKeyboardOffset` for chat/input UIs.

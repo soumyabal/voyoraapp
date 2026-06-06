@@ -6,11 +6,18 @@ import {
 import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography } from '../theme';
 import { FormField, ModalHeader, DateRangePicker, LocationSearchField } from '../components/ui';
-import { fmt } from '../utils/helpers';
+import { fmt, fmtM } from '../utils/helpers';
 import { useKeyboardOffset } from '../utils/useKeyboardOffset';
 
+// Inclusive day count for a 'YYYY-MM-DD' range (8 nights → 9 days). 0 for an invalid range.
+const daysInRange = (s, e) => {
+  if (!s || !e) return 0;
+  const n = Math.floor((new Date(e + 'T00:00:00') - new Date(s + 'T00:00:00')) / 86400000) + 1;
+  return n > 0 ? n : 0;
+};
+
 export default function EditTripModal({ visible, trip, onClose }) {
-  const { updateTrip, duplicateTrip } = useStore();
+  const { updateTrip, duplicateTrip, resizeTripDates } = useStore();
   const kbOffset = useKeyboardOffset();
 
   const [name, setName] = useState('');
@@ -33,50 +40,67 @@ export default function EditTripModal({ visible, trip, onClose }) {
 
   const handleClose = () => onClose();
 
-  // Detect whether the user changed anything that breaks downstream data
+  // Date-range resize math. Changing dates no longer silently leaves stale days OR nukes the
+  // trip — resizeTripDates preserves the first N days and drops only the tail. We warn first
+  // when that shrink would actually delete planned activities / linked expenses.
   const datesChanged = trip && (startDate !== trip.startDate || endDate !== trip.endDate);
-  const destChanged  = trip && destination.trim() !== (trip.destination || '').trim();
-  const hasData      = trip && (
-    trip.days?.some(d => d.activities?.length > 0) ||
-    trip.expenses?.length > 0
-  );
-  const isDestructive = (datesChanged || destChanged) && hasData;
+  const newCount = daysInRange(startDate, endDate);
+  const oldCount = trip?.days?.length || 0;
+  const shrinking = datesChanged && newCount > 0 && newCount < oldCount;
+  // The tail that would be removed (Day newCount+1 … oldCount) and what's on it.
+  const droppedDays  = shrinking ? (trip.days || []).slice(newCount) : [];
+  const droppedActIds = new Set(droppedDays.flatMap(d => (d.activities || []).map(a => a.id)));
+  const droppedActs  = droppedDays.reduce((n, d) => n + (d.activities || []).filter(a => a.type !== 'note').length, 0);
+  const droppedExp   = (trip?.expenses || []).filter(e => e.activityId && droppedActIds.has(e.activityId));
+  const droppedExpSum = droppedExp.reduce((s, e) => s + (e.amount || 0), 0);
+  const losesData    = droppedActs > 0 || droppedExp.length > 0;
+  const lostBits = () => {
+    const b = [];
+    if (droppedActs) b.push(`${droppedActs} ${droppedActs === 1 ? 'activity' : 'activities'}`);
+    if (droppedExp.length) b.push(`${fmtM(droppedExpSum)} in linked expenses`);
+    return b.join(' and ');
+  };
 
+  // No date change → plain field update (days untouched).
   const doSave = () => {
     updateTrip(trip.id, {
-      name: name.trim(),
-      destination: destination.trim(),
+      name: name.trim(), destination: destination.trim(),
       origin: origin && origin.label ? origin : null,
-      startDate,
-      endDate,
+      startDate, endDate,
     });
+    onClose();
+  };
+  // Date change → save scalar fields, then resize days safely (re-date / add empties / drop tail).
+  const doResize = () => {
+    updateTrip(trip.id, {
+      name: name.trim(), destination: destination.trim(),
+      origin: origin && origin.label ? origin : null,
+    });
+    resizeTripDates(trip.id, startDate, endDate);
     onClose();
   };
 
   const handleSave = () => {
     if (!name.trim() || !destination.trim()) return;
 
-    if (isDestructive) {
-      Alert.alert(
-        '⚠️ This will reset your trip',
-        'Changing the date range or destination will reset your trip. Duplicate it instead to keep the original safe.',
-        [
-          {
-            text: 'Duplicate Trip Instead',
-            onPress: () => {
-              duplicateTrip(trip.id);
-              showToast('Duplicate created — find it on the home screen 📋', '✅');
-              onClose();
+    if (datesChanged) {
+      // Only a shrink that DELETES planned data needs the warning — adding/redating is safe.
+      if (shrinking && losesData) {
+        Alert.alert(
+          `Remove Day ${newCount + 1}–${oldCount}?`,
+          `Shrinking to ${newCount} day${newCount === 1 ? '' : 's'} drops Day ${newCount + 1}–${oldCount}, deleting ${lostBits()}. Day 1–${newCount} keep everything. This can’t be undone.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Duplicate first',
+              onPress: () => { duplicateTrip(trip.id); showToast('Duplicate created — find it on the home screen 📋', '✅'); onClose(); },
             },
-          },
-          {
-            text: 'Save Anyway',
-            style: 'destructive',
-            onPress: doSave,
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ],
-      );
+            { text: 'Drop & save', style: 'destructive', onPress: doResize },
+          ],
+        );
+        return;
+      }
+      doResize();
       return;
     }
 
@@ -133,17 +157,23 @@ export default function EditTripModal({ visible, trip, onClose }) {
               </TouchableOpacity>
             </View>
 
-            {/* Inline warning — escalates when destructive changes detected */}
-            {hasData && (
-              <View style={[styles.noteBanner, isDestructive && styles.warnBanner]}>
-                <Text style={styles.noteIcon}>{isDestructive ? '⚠️' : 'ℹ️'}</Text>
-                <Text style={[styles.noteText, isDestructive && styles.warnText]}>
-                  {isDestructive
-                    ? 'Changing the date range or destination will reset the trip. Duplicate it instead.'
-                    : 'Editing dates won\'t change existing itinerary days. Add or remove activities manually.'}
-                </Text>
-              </View>
-            )}
+            {/* Inline guidance — tells you exactly what saving will do to the day range */}
+            {datesChanged && (() => {
+              const warn = shrinking && losesData;
+              const text = warn
+                ? `Saving removes Day ${newCount + 1}–${oldCount} and deletes ${lostBits()}. Day 1–${newCount} are kept. Tip: “Duplicate first” to keep the original safe.`
+                : shrinking
+                  ? `Day ${newCount + 1}–${oldCount} are empty and will be removed.`
+                  : newCount > oldCount
+                    ? `${newCount - oldCount} empty day${newCount - oldCount === 1 ? '' : 's'} will be added — your existing days are kept.`
+                    : 'Dates updated — your days keep their plans.';
+              return (
+                <View style={[styles.noteBanner, warn && styles.warnBanner]}>
+                  <Text style={styles.noteIcon}>{warn ? '⚠️' : 'ℹ️'}</Text>
+                  <Text style={[styles.noteText, warn && styles.warnText]}>{text}</Text>
+                </View>
+              );
+            })()}
           </ScrollView>
         </View>
 

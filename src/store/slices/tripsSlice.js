@@ -24,6 +24,28 @@ export const createTripsSlice = (set, get) => ({
     trips: s.trips.map(t => t.id === tripId ? { ...t, ...updates } : t),
   })),
 
+  // Resize a trip to a new date range, PRESERVING content by day-index. The first N days keep
+  // their activities/night-plans (re-dated + re-labelled); extra days beyond the new range are
+  // dropped; extending appends empty days. Expenses linked to a DROPPED activity are removed;
+  // manual expenses and expenses for surviving activities are kept. (The generic updateTrip
+  // never touches days — this is the one deliberate, data-aware resize path. See EditTripModal,
+  // which warns before a shrink that loses data.)
+  resizeTripDates: (tripId, startDate, endDate) => set(s => ({
+    trips: s.trips.map(t => {
+      if (t.id !== tripId) return t;
+      const dates = [];
+      for (let d = new Date(startDate + 'T00:00:00'); d <= new Date(endDate + 'T00:00:00'); d.setDate(d.getDate() + 1)) {
+        dates.push(d.toISOString().slice(0, 10));
+      }
+      if (!dates.length) return t;   // invalid range → leave the trip untouched
+      const old = t.days || [];
+      const days = dates.map((date, i) => ({ ...(old[i] || { activities: [] }), label: `Day ${i + 1}`, date }));
+      const survivingActIds = new Set(days.flatMap(d => (d.activities || []).map(a => a.id)));
+      const expenses = (t.expenses || []).filter(e => !e.activityId || survivingActIds.has(e.activityId));
+      return { ...t, startDate, endDate, days, expenses };
+    }),
+  })),
+
   duplicateTrip: (tripId) => set(s => {
     const orig = s.trips.find(t => t.id === tripId);
     if (!orig) return s;

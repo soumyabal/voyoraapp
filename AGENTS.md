@@ -377,7 +377,7 @@ Each family gets Expense[] with participatingFamilies: [thisFamily.id]
 2. **`estimatedAmount` is frozen.** Only update `amount`. Never overwrite `estimatedAmount`.
 3. **`costPerPerson` is always per-person.** All cost math multiplies by member count.
 4. **At least one family must always participate** in an expense (`toggleFamilySplit` guard).
-5. **`trip.days[]` is not regenerated when dates change.** `EditTripModal` has a destructive-change guard.
+5. **The generic `updateTrip` never touches `trip.days[]`.** Date-range changes go through **`resizeTripDates(tripId, start, end)`** (store): it preserves the first N days' content by index (re-dated + re-labelled), appends empty days when extending, drops the tail when shrinking, and removes ONLY the dropped days' linked expenses (manual + surviving expenses kept). `EditTripModal` calls it and **warns before a shrink that would delete planned activities / linked expenses** (offering Duplicate-first). Never trim `days` via a raw `updateTrip`.
 6. **Always use `effectiveMember(member, travelers)`** from `helpers.js`. Never read `tripMember.dietary` directly.
 7. **Persisted shape is versioned.** Any change to the saved trip/store shape MUST bump
    `version` + add a `migrate` case in `store/index.js` persist config. `store.test.js` has a

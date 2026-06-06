@@ -135,3 +135,39 @@ describe('settlement (end-to-end money assertion)', () => {
     expect(totalToPayer).toBeCloseTo(20, 1);          // A1 paid 30, owed 10 → net +20
   });
 });
+
+describe('resizeTripDates — shrink/extend safely (the EditTripModal date-change path)', () => {
+  test('shrink drops only the tail days + their linked expenses; keeps the rest + manual', () => {
+    const t = makeTrip();                              // 3 days Jun 12–14
+    S().addActivity(t.id, 0, { type: 'activity', name: 'Keep', time: '10:00', costPerPerson: 5 });
+    S().addActivity(t.id, 2, { type: 'activity', name: 'Drop', time: '10:00', costPerPerson: 5 });
+    S().pushItineraryToSplitwise(t.id);               // → linked expenses for both (activityId set)
+    S().addExpense(t.id, { name: 'Gas', amount: 60 }); // manual (no activityId)
+
+    let cur = tripById(t.id);
+    const keepId = cur.days[0].activities.find(a => a.name === 'Keep').id;
+    const dropId = cur.days[2].activities.find(a => a.name === 'Drop').id;
+    expect(cur.expenses.some(e => e.activityId === dropId)).toBe(true);
+
+    S().resizeTripDates(t.id, '2026-06-12', '2026-06-13'); // 2 days
+
+    cur = tripById(t.id);
+    expect(cur.days).toHaveLength(2);
+    expect(cur.endDate).toBe('2026-06-13');
+    expect(cur.days[0].activities.some(a => a.name === 'Keep')).toBe(true);  // Day 1 preserved
+    expect(cur.expenses.some(e => e.activityId === keepId)).toBe(true);      // its expense kept
+    expect(cur.expenses.some(e => e.activityId === dropId)).toBe(false);     // dropped day's expense gone
+    expect(cur.expenses.some(e => e.name === 'Gas')).toBe(true);            // manual expense kept
+  });
+
+  test('extend appends empty days; existing days are preserved + re-dated', () => {
+    const t = makeTrip();                              // 3 days
+    S().addActivity(t.id, 0, { type: 'activity', name: 'A', time: '10:00', costPerPerson: 0 });
+    S().resizeTripDates(t.id, '2026-06-12', '2026-06-16'); // 5 days
+    const cur = tripById(t.id);
+    expect(cur.days).toHaveLength(5);
+    expect(cur.days[0].activities.some(a => a.name === 'A')).toBe(true);
+    expect(cur.days[4].activities).toEqual([]);
+    expect(cur.days[4].date).toBe('2026-06-16');
+  });
+});

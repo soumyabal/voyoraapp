@@ -7,6 +7,8 @@
  *
  *   <PressableScale style={styles.card} onPress={open} haptic="light">…</PressableScale>
  */
+/* eslint-disable react-hooks/refs -- RN animation idiom: Animated.Value in a useRef, read
+   during render (stable identity, effect-free). Compiler off → false positive. */
 import React, { useRef } from 'react';
 import { Animated, Pressable } from 'react-native';
 import { tapLight, tapMedium, select } from '../../utils/feedback';

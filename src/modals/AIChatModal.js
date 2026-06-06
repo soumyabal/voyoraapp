@@ -9,6 +9,9 @@
  *  3. User types; messages are sent to Claude API (or smart simulation if no key).
  *  4. Subscription gate: 5 free messages → soft upgrade prompt (not a hard block).
  */
+/* eslint-disable react-hooks/purity -- chat messages are stamped with ts: Date.now()
+   inside event handlers (send / executeAction), never during render. The React Compiler
+   is OFF; this is a false positive for the impure-call-in-render rule. */
 
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -37,7 +40,6 @@ function buildSmartResponse(userText, trip, profiles) {
   const msg = userText.toLowerCase();
   const allMembers = trip.families.flatMap(f => f.members);
   const warnings = suggestions.filter(s => s.severity !== 'info');
-  const errors   = suggestions.filter(s => s.severity === 'error');
 
   // Conversational "yes / fix it / do all / apply all" — acknowledge and prompt action buttons
   if (
@@ -280,7 +282,7 @@ function BoldText({ text, style }) {
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export default function AIChatModal({ visible, trip, onClose, initialMessage }) {
-  const { account, chatHistory, addChatMessage, useAIReview, upgradeToPro, travelers, addActivity, injectAIActivities } = useStore();
+  const { account, chatHistory, addChatMessage, spendAIReview, upgradeToPro, travelers, addActivity, injectAIActivities } = useStore();
   const scrollRef = useRef(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -310,14 +312,6 @@ export default function AIChatModal({ visible, trip, onClose, initialMessage }) 
     if (visible) setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   }, [history.length, visible]);
 
-  // Auto-send a triggered message (e.g. from traveler change in People tab)
-  useEffect(() => {
-    if (visible && initialMessage) {
-      const timer = setTimeout(() => send(initialMessage), 800);
-      return () => clearTimeout(timer);
-    }
-  }, [visible, initialMessage]);
-
   const send = async (text) => {
     const content = (text || input).trim();
     if (!content || loading) return;
@@ -332,7 +326,7 @@ export default function AIChatModal({ visible, trip, onClose, initialMessage }) 
     // Add user message
     const userMsg = { id: uid(), role: 'user', content, ts: Date.now() };
     addChatMessage(trip.id, userMsg);
-    if (!isPro) useAIReview();
+    if (!isPro) spendAIReview();
 
     setLoading(true);
     try {
@@ -349,6 +343,15 @@ export default function AIChatModal({ visible, trip, onClose, initialMessage }) 
       setLoading(false);
     }
   };
+
+  // Auto-send a triggered message (e.g. from traveler change in People tab). Declared
+  // AFTER send() so the effect references an already-initialised function (no TDZ).
+  useEffect(() => {
+    if (visible && initialMessage) {
+      const timer = setTimeout(() => send(initialMessage), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [visible, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const executeAction = (action, actionKey) => {
     if (executedActions.has(actionKey)) return;

@@ -12,7 +12,7 @@ const MODES = [
 ];
 
 export default function ChangeModeModal({ visible, trip, onClose }) {
-  const { account, updateTrip, injectAIActivities, useAIPlannerCredit, upgradeToPro } = useStore();
+  const { account, updateTrip, injectAIActivities, spendAIPlannerCredit, upgradeToPro } = useStore();
   const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState(null);
 
@@ -38,7 +38,7 @@ export default function ChangeModeModal({ visible, trip, onClose }) {
       if (!canUseAIPlanner) {
         showToast('Upgrade to Pro for unlimited AI planning', '🔒'); return;
       }
-      useAIPlannerCredit();
+      spendAIPlannerCredit();
       updateTrip(trip.id, { mode: 'ai' });
       injectAIActivities(trip.id);
       showToast('AI itinerary generated! 🤖', '✅');

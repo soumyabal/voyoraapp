@@ -414,7 +414,7 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
   const {
     account, travelers, groups,
     createTrip, addFamilyFull, createTraveler, injectAIActivities,
-    useAIPlannerCredit, upgradeToPro,
+    spendAIPlannerCredit, upgradeToPro,
   } = useStore();
 
   // ── Wizard state ──────────────────────────────────────────────
@@ -520,7 +520,7 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
     });
 
     if (mode === 'ai') {
-      useAIPlannerCredit();
+      spendAIPlannerCredit();
       setGenerating(true);
       setTimeout(() => {
         injectAIActivities(trip.id);

@@ -14,6 +14,9 @@
  *   - Agent greeting auto-generated after the first plan is ready
  *   - Each refinement adds a user bubble then an agent acknowledgement bubble
  */
+/* eslint-disable react-hooks/refs -- RN animation idiom: the PulsingDot/TypingDots/AgentCard
+   Animated.Values live in useRef and are read during render (stable identity, effect-free).
+   React Compiler is OFF — false positive for the refs-in-render rule. */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {

@@ -15,6 +15,10 @@
  * Panel note: the BIG celebration is best earned — a confetti moment on "trip settled /
  * trip complete" INSIDE the app — this launch version is deliberately one-shot + restrained.
  */
+/* eslint-disable react-hooks/refs, react-hooks/purity -- RN imperative-animation idiom:
+   Animated.Value lives in a useRef and is read via .interpolate() during render (stable
+   identity, effect-free); confetti seeds use compute-once Math.random in a ref. React
+   Compiler is OFF — these are false positives for the refs/purity-in-render rules. */
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Animated, Easing } from 'react-native';
 import { StatusBar } from 'expo-status-bar';

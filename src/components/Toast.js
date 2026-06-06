@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/refs -- RN animation idiom: Animated.Value in a useRef, read
+   via .interpolate() during render (stable identity, effect-free). Compiler off → false positive. */
 import React, { useState, useEffect, useRef } from 'react';
 import { Animated, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

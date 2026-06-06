@@ -10,6 +10,8 @@
  *       actionLabel="Undo" onAction={undo} bottom={88} />
  *   )}
  */
+/* eslint-disable react-hooks/refs -- RN animation idiom: Animated.Value in a useRef, read
+   during render (stable identity, effect-free). Compiler off → false positive. */
 import React, { useEffect, useRef } from 'react';
 import { Animated, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, spacing, radius, typography, shadow } from '../../theme';

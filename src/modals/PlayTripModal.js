@@ -10,6 +10,11 @@
  * Deck (cover → who → days → fair-split moat → branded close) comes from buildTripFilm (pure);
  * this file plays it: slow Ken-Burns drift, cross-fades, big type, an original music bed.
  */
+/* eslint-disable react-hooks/refs, react-hooks/immutability -- RN animation idiom: the
+   fade/drift Animated.Values live in useRef and are read via .interpolate() during render;
+   and expo-audio's useAudioPlayer() returns a documented MUTABLE native handle whose setters
+   (player.loop / .volume) are applied inside an effect, not render. React Compiler is OFF —
+   both are false positives. */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, View, Text, Image, Animated, Easing, TouchableOpacity, Dimensions, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';

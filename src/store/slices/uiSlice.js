@@ -47,13 +47,14 @@ export const createUiSlice = (set, get) => ({
     account: { loggedIn: false, name: '', email: '', aiPlannerUsed: false, aiReviewsUsed: 0, plan: 'free' },
   }),
 
-  // Use the 1 free AI trip plan (called when creating a trip with AI mode)
-  useAIPlannerCredit: () => set(s => ({
+  // Use the 1 free AI trip plan (called when creating a trip with AI mode).
+  // NOT a hook — the `spend` prefix avoids the `use*` name that tripped rules-of-hooks.
+  spendAIPlannerCredit: () => set(s => ({
     account: { ...s.account, aiPlannerUsed: true },
   })),
 
-  // Use one of the 3 free AI trip reviews (called when opening AI chat for a trip)
-  useAIReview: () => set(s => ({
+  // Use one of the 3 free AI trip reviews (called when opening AI chat for a trip).
+  spendAIReview: () => set(s => ({
     account: { ...s.account, aiReviewsUsed: Math.min(s.account.aiReviewsUsed + 1, 99) },
   })),
 

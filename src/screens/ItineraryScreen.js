@@ -1,3 +1,8 @@
+/* eslint-disable react-hooks/refs, react-hooks/purity -- two false positives only:
+   showUndoAction stamps a Snackbar nonce with Date.now() inside a handler (purity), and the
+   night-plan onPress closure reaches a ref via pickNightPlan→showUndoAction (refs). Both run on
+   press, never during render; the compiler is OFF and can't see that. Keep new logic clean —
+   this is not a license to read refs in render here. */
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal, Share, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import useStore from '../store';

@@ -27,7 +27,7 @@ import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
 
 const SCREEN_W       = Dimensions.get('window').width;
-const CARD_ACTIONS_W = 216;                        // 3 × 72px action buttons
+const CARD_ACTIONS_W = 240;                        // 4 × 60px action buttons (Up · Down · Move · Delete)
 const CARD_W         = SCREEN_W - 48;              // SCREEN_W - 2 × spacing.xxl (24)
 
 // Static lookup tables (day slots, icons, pill tones, meal map, night-plan options/meta)
@@ -1752,34 +1752,38 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
           </View>
         </View>
 
-        {/* ── Right column: done checkbox pinned to the TOP corner, reorder ▲▼ grouped below ── */}
+        {/* ── Right column: just the done checkbox (reorder ▲▼ now live in the swipe pad) ── */}
         <View style={styles.reorderCol}>
-          {act.type !== 'note' ? (
+          {act.type !== 'note' && (
             <TouchableOpacity onPress={onMarkDone} hitSlop={{ top: 8, bottom: 6, left: 8, right: 8 }} activeOpacity={0.6}
               accessibilityRole="checkbox" accessibilityState={{ checked: isDone }}
               accessibilityLabel={isDone ? `Mark ${act.name || 'activity'} not done` : `Mark ${act.name || 'activity'} done`}>
               <Icon name={isDone ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={isDone ? colors.success : colors.subtle} />
             </TouchableOpacity>
-          ) : <View />}
-          <View style={styles.reorderArrows}>
-            <TouchableOpacity onPress={onMoveUp} disabled={isFirst}
-              hitSlop={{ top: 6, bottom: 4, left: 6, right: 6 }} activeOpacity={0.5}
-              style={[styles.reorderBtn, isFirst && styles.reorderBtnDisabled]}>
-              <Text style={styles.reorderBtnText}>▲</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onMoveDown} disabled={isLast}
-              hitSlop={{ top: 4, bottom: 6, left: 6, right: 6 }} activeOpacity={0.5}
-              style={[styles.reorderBtn, isLast && styles.reorderBtnDisabled]}>
-              <Text style={styles.reorderBtnText}>▼</Text>
-            </TouchableOpacity>
-          </View>
+          )}
         </View>
         </View>{/* end actCard */}
 
-        {/* ── Action buttons (revealed when card scrolls left) — always Move + Delete ── */}
+        {/* ── Action buttons (revealed when card scrolls left): Up · Down · Move · Delete ──
+            Up/Down reorder within the slot (replacing the old in-card ▲▼); Move relocates to
+            another day/slot; Delete is the far-right cell. Plain touchables — no gesture libs. */}
         <View style={styles.actCardActions}>
-          {/* Move is always available — you re-arrange a plan whether the trip is upcoming or
-              already underway. Done/not-done lives on the card checkbox, not here. */}
+          <TouchableOpacity
+            disabled={isFirst}
+            style={[styles.actCardAction, { backgroundColor: '#6c5ce7' }, isFirst && styles.actCardActionOff]}
+            onPress={onMoveUp}
+          >
+            <Text style={styles.actCardActionArrow}>▲</Text>
+            <Text style={styles.actCardActionLabel}>Up</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            disabled={isLast}
+            style={[styles.actCardAction, { backgroundColor: '#6c5ce7' }, isLast && styles.actCardActionOff]}
+            onPress={onMoveDown}
+          >
+            <Text style={styles.actCardActionArrow}>▼</Text>
+            <Text style={styles.actCardActionLabel}>Down</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actCardAction, { backgroundColor: '#64748b' }]}
             onPress={moveChooser}
@@ -2483,6 +2487,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 2,
   },
+  actCardActionArrow: { color: '#fff', fontSize: 18, fontWeight: '900', lineHeight: 20 },
+  actCardActionOff: { opacity: 0.4 },
   swipeHintText: {
     fontSize: 9,
     color: colors.muted,

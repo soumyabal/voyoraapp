@@ -69,15 +69,22 @@ const SAMPLES = [
     day('Day 2', '2026-06-13', []),
     day('Day 3', '2026-06-14', [A('Departure brunch', 'food', '10:00', { durationMins: 60 })]),
   ]),
-  T('A day with no meals planned', [
+  T('A full day with no meal planned', [
     day('Day 1', FRI, [
-      A('Morning hike', 'activity', '08:00', { durationMins: 180 }),
-      A('Afternoon kayak', 'activity', '14:00', { durationMins: 180 }),
+      A('Morning museum', 'activity', '09:00', { durationMins: 120 }),
+      A('Afternoon walk', 'activity', '12:00', { durationMins: 120 }),
+      A('Late gallery', 'activity', '15:00', { durationMins: 90 }),
     ]),
   ]),
-  T('Dietary conflict (vegetarian + steakhouse)', [
-    day('Day 1', FRI, [A('BBQ Steakhouse', 'food', '19:00', { durationMins: 90 })]),
-  ], { families: [{ id: 'f1', name: 'Greens', members: [{ id: 'm1', name: 'Sam', needs: ['🌿 Vegetarian'], dietary: ['🌿 Vegetarian'] }] }] }),
+  T('Dietary conflict — veg & no-alcohol families, meat & cocktail stops', [
+    day('Day 1', FRI, [
+      A('meat', 'food', '13:00', { name: 'BBQ Steakhouse', durationMins: 90 }),
+      A('alco', 'food', '20:00', { name: 'Rooftop Cocktail Bar', durationMins: 90 }),
+    ]),
+  ], { families: [
+    { id: 'fVeg', name: 'Greens', dietary: ['vegetarian'], members: [] },
+    { id: 'fDry', name: 'Sober', dietary: ['no-alcohol'], members: [] },
+  ] }),
   T('Hotel change — first hotel booked past the next check-in', [
     day('Day 1', FRI, [A('Great Wolf Lodge', 'stay', '15:00', { name: 'Great Wolf Lodge', nights: 2, lat: 0, lng: 0 })]),
     day('Day 2', '2026-06-13', [A('The Baywatch Resort', 'stay', '15:00', { name: 'The Baywatch Resort', nights: 1, lat: 0, lng: 0 })]),
@@ -86,17 +93,10 @@ const SAMPLES = [
   T('Day 1 starts far from the trip origin', [
     day('Day 1', FRI, [A('Far Stop', 'activity', '08:30', { durationMins: 120, lat: 0, lng: 5 })]),
   ], { origin: { label: 'Home City', lat: 0, lng: 0 } }),
-  T('A very packed day', [
-    day('Day 1', FRI, [
-      A('Museum', 'activity', '09:00', { durationMins: 90 }),
-      A('Castle', 'activity', '11:00', { durationMins: 90 }),
-      A('Lunch', 'food', '13:00', { durationMins: 60 }),
-      A('Gardens', 'activity', '14:30', { durationMins: 90 }),
-      A('Market', 'activity', '16:30', { durationMins: 90 }),
-      A('Dinner', 'food', '19:00', { durationMins: 90 }),
-      A('Night show', 'activity', '21:00', { durationMins: 90 }),
-    ]),
-  ], { pace: 'moderate' }),
+  T('A very packed day (8 stops, no food)', [
+    day('Day 1', FRI, Array.from({ length: 8 }, (_, k) =>
+      A(`s${k}`, 'activity', `${String(7 + k).padStart(2, '0')}:00`, { name: `Stop ${k + 1}`, durationMins: 30 }))),
+  ]),
   T('The same activity added twice', [
     day('Day 1', FRI, [
       A('d1', 'activity', '10:00', { name: 'City Tour', durationMins: 60 }),
@@ -110,6 +110,51 @@ const SAMPLES = [
     day('Day 1', FRI, [
       A('Sunrise viewpoint', 'activity', '05:00', { durationMins: 90 }),
       A('Late show', 'activity', '23:00', { durationMins: 120 }),
+    ]),
+  ]),
+  T('A few-but-long touring day (tiring)', [
+    day('Day 1', FRI, [
+      A('hk', 'activity', '08:00', { name: 'Full-day excursion', durationMins: 480 }),
+      A('pk', 'activity', '17:00', { name: 'Evening park', durationMins: 180 }),
+    ]),
+  ]),
+  T('Overnight journey (arrives next morning)', [
+    day('Day 1', FRI, [A('tr', 'transport', '22:00', { name: 'Night train', subtype: 'train', arriveTime: '06:00' })]),
+  ]),
+  T('Stop before a late-rising family is up', [
+    day('Day 1', FRI, [A('w', 'activity', '08:00', { name: 'Morning museum', durationMins: 60 })]),
+  ], { families: [{ id: 'fOwl', name: 'Owls', wakeTime: 'late', members: [] }] }),
+  T('A timeless venue that can’t fit its open hours', [
+    day('Day 1', FRI, [
+      A('booked', 'activity', '10:00', { name: 'All-day pass', durationMins: 120 }),
+      A('squeeze', 'activity', undefined, { name: 'Local Gallery', openHours: [{ d: 5, o: 540, c: 1020 }] }),
+    ]),
+  ]),
+  T('Google business status — permanently / temporarily closed', [
+    day('Day 1', FRI, [
+      A('gone', 'activity', '10:00', { name: 'Old Cafe', durationMins: 60, businessStatus: 'CLOSED_PERMANENTLY' }),
+      A('maybe', 'activity', '14:00', { name: 'Renovating Museum', durationMins: 60, businessStatus: 'CLOSED_TEMPORARILY' }),
+    ]),
+  ]),
+  T('A full-day venue with other stops crammed in', [
+    day('Day 1', FRI, [
+      A('pk', 'activity', '09:00', { name: 'Theme Park', durationMins: 480 }),
+      A('o1', 'activity', '10:00', { name: 'Side museum', durationMins: 60 }),
+      A('o2', 'activity', '11:00', { name: 'Cafe stop', durationMins: 60 }),
+    ]),
+  ]),
+  T('A 6h+ journey crammed with other stops', [
+    day('Day 1', FRI, [
+      A('Flight', 'transport', '08:00', { subtype: 'flight', durationMins: 420 }),
+      A('Museum', 'activity', '15:00', { durationMins: 120 }),
+      A('Dinner', 'food', '19:00', { durationMins: 90 }),
+    ]),
+    day('Day 2', '2026-06-13', []),
+  ]),
+  T('Two cities tagged on one day', [
+    day('Day 1', FRI, [
+      A('Louvre', 'activity', '10:00', { durationMins: 120, city: 'Paris' }),
+      A('Basilica', 'activity', '14:00', { durationMins: 60, city: 'Lyon' }),
     ]),
   ]),
 ];

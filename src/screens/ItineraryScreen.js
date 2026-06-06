@@ -1776,14 +1776,17 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
 
           {/* Bottom action row — edit & move; done is the corner checkbox, delete is via swipe */}
           <View style={styles.actInlineActions}>
-            <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
+            <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}
+              accessibilityRole="button" accessibilityLabel={`Edit ${act.name || 'activity'}`}>
               <Icon name="create-outline" size={16} color={colors.subtle} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={moveChooser} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
+            <TouchableOpacity onPress={moveChooser} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}
+              accessibilityRole="button" accessibilityLabel={`Move ${act.name || 'activity'} to another day or time`}>
               <Icon name="calendar-outline" size={15} color={colors.subtle} />
             </TouchableOpacity>
             {act.time && act.type !== 'note' && act.status !== 'done' && act.status !== 'skipped' && (
-              <TouchableOpacity onPress={onToggleLock} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
+              <TouchableOpacity onPress={onToggleLock} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}
+                accessibilityRole="button" accessibilityLabel={act.timeLocked ? 'Unlock this time so auto-arrange can move it' : 'Lock this time'}>
                 <Icon name={act.timeLocked ? 'lock-closed' : 'lock-open-outline'} size={15} color={act.timeLocked ? colors.primary : colors.subtle} />
               </TouchableOpacity>
             )}

@@ -546,10 +546,6 @@ function NextTripSpotlight({ trip, status, onOpen }) {
               {famCount} famil{famCount !== 1 ? 'ies' : 'y'} · {allMembers.length} {allMembers.length !== 1 ? 'people' : 'person'}
             </Text>
           </View>
-          <View style={styles.spotOpen}>
-            <Text style={styles.spotOpenText}>Open</Text>
-            <Icon name="open" size={15} color="#fff" />
-          </View>
         </View>
       </View>
     </PressableScale>

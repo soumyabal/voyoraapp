@@ -776,10 +776,12 @@ export function comfortPass(activities, opts = {}) {
  *   }
  */
 export function planDay(activities, opts = {}) {
-  // PLACE (order + windows), then a comfort sweep so cross-type travel legs are feasible
-  // (the breakfast → far sight gap scheduleDay's per-type passes miss). Plan-my-day KEEPS the
-  // user's order (preserveOrder) and only shifts times to fit — it never reshuffles their plan.
-  const comfort = comfortPass(scheduleDay(activities, { ...opts, preserveOrder: opts.preserveOrder ?? true }), opts);
+  // PLACE (route + windows), then a comfort sweep so cross-type travel legs are feasible
+  // (the breakfast → far sight gap scheduleDay's per-type passes miss). Plan-my-day REORDERS
+  // the day into a clean route+time sequence (preserveOrder:false) — honoring LOCKED stops as
+  // fixed anchors the rest flows around — then shifts times to fit. The user can re-drag after
+  // (the preview lists every change for Apply/Discard). Pass preserveOrder:true to opt out.
+  const comfort = comfortPass(scheduleDay(activities, { ...opts, preserveOrder: opts.preserveOrder ?? false }), opts);
   const scheduled = comfort.adjusted;
 
   // Convergence fingerprint: a good day re-planned yields the same (id,time) set →

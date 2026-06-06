@@ -1555,14 +1555,11 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
             isHighlighted && styles.actCardHighlighted,
           ]}
         >
-        {/* ── Leading thumbnail: place photo · tinted type icon · status ──
-            When live & openable, the whole thumbnail is ONE tap target (hotel →
-            Booking.com, else → website) with a corner badge hint. When done/skipped
-            it's the status glyph (non-interactive). */}
+        {/* ── Leading thumbnail: place photo · tinted type icon — ALWAYS shown, even when
+            done/skipped (done state is the single corner checkbox, not a glyph here). When
+            live & openable it's ONE tap target (hotel → Booking.com, else → website). */}
         <View style={styles.actLead}>
-          {dimmed ? (
-            <Icon name={isDone ? 'checkmark-circle' : 'close-circle'} size={30} color={isDone ? colors.success : colors.danger} />
-          ) : thumbAction ? (
+          {thumbAction ? (
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={handleThumbPress}
@@ -1738,15 +1735,8 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
             )}
           </TouchableOpacity>
 
-          {/* Bottom action row — done checkbox, edit & move; delete is via swipe */}
+          {/* Bottom action row — edit & move; done is the corner checkbox, delete is via swipe */}
           <View style={styles.actInlineActions}>
-            {act.type !== 'note' && (
-              <TouchableOpacity onPress={onMarkDone} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}
-                accessibilityRole="checkbox" accessibilityState={{ checked: isDone }}
-                accessibilityLabel={isDone ? `Mark ${act.name || 'activity'} not done` : `Mark ${act.name || 'activity'} done`}>
-                <Icon name={isDone ? 'checkmark-circle' : 'ellipse-outline'} size={18} color={isDone ? colors.success : colors.subtle} />
-              </TouchableOpacity>
-            )}
             <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.6}>
               <Icon name="create-outline" size={16} color={colors.subtle} />
             </TouchableOpacity>
@@ -1762,8 +1752,16 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
           </View>
         </View>
 
-        {/* ── Reorder buttons (right side) ── */}
+        {/* ── Right column: a single done checkbox up top, then reorder ▲▼ ── */}
         <View style={styles.reorderCol}>
+          {act.type !== 'note' && (
+            <TouchableOpacity onPress={onMarkDone} hitSlop={{ top: 8, bottom: 6, left: 8, right: 8 }} activeOpacity={0.6}
+              style={styles.cardCheckbox}
+              accessibilityRole="checkbox" accessibilityState={{ checked: isDone }}
+              accessibilityLabel={isDone ? `Mark ${act.name || 'activity'} not done` : `Mark ${act.name || 'activity'} done`}>
+              <Icon name={isDone ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={isDone ? colors.success : colors.subtle} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={onMoveUp} disabled={isFirst}
             hitSlop={{ top: 6, bottom: 4, left: 6, right: 6 }} activeOpacity={0.5}
             style={[styles.reorderBtn, isFirst && styles.reorderBtnDisabled]}>
@@ -2398,6 +2396,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     gap: 2,
   },
+  cardCheckbox: { marginBottom: 6 },
   reorderBtn: {
     paddingHorizontal: 4,
     paddingVertical: 2,

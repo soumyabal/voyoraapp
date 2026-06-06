@@ -358,6 +358,11 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
   // Cost
   const [costMode, setCostMode]   = useState('per_person'); // 'per_person' | 'per_family'
   const [costInput, setCostInput] = useState('');
+  // Keep the cost field above the number pad: the decimal-pad has no return key and the
+  // field sits low in the form, so we scroll it into view on focus.
+  const scrollRef = useRef(null);
+  const costYRef  = useRef(0);
+  const revealCost = () => setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, costYRef.current - 90), animated: true }), 60);
 
   // Manual duration override (0 = use auto-estimate)
   const [durationMins, setDurationMins] = useState(0);
@@ -564,6 +569,7 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
           />
 
           <ScrollView
+            ref={scrollRef}
             style={s.scroll}
             contentContainerStyle={s.content}
             keyboardShouldPersistTaps="handled"
@@ -937,12 +943,13 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
             </View>
 
             {/* Cost amount */}
-            <View style={s.costInputWrap}>
+            <View style={s.costInputWrap} onLayout={e => { costYRef.current = e.nativeEvent.layout.y; }}>
               <Text style={s.costCurrency}>$</Text>
               <TextInput
                 style={s.costInput}
                 value={costInput}
                 onChangeText={setCostInput}
+                onFocus={revealCost}
                 placeholder="0"
                 placeholderTextColor={colors.muted}
                 keyboardType="decimal-pad"

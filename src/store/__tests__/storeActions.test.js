@@ -240,4 +240,95 @@ describe('updateExpensePayments — multiple payers (data model + no-leak on del
     expect((e.payments || []).reduce((s, p) => s + p.amount, 0)).toBe(30);        // still sums to the bill
     expect(calcBalances(tripById(t.id)).reduce((s, b) => s + b.net, 0)).toBeCloseTo(0); // no leak
   });
+
+  test('invalid/empty payment lists are a no-op (never clobbers the single payer)', () => {
+    const t = makeTrip();
+    addDinner(t.id, 10);
+    const exp = tripById(t.id).expenses[0];
+    const origPayer = exp.paidBy;
+    S().updateExpensePayments(t.id, exp.id, []);                          // empty
+    S().updateExpensePayments(t.id, exp.id, [{ memberId: 'x', amount: 0 }, { amount: 5 }]); // all junk
+    S().updateExpensePayments(t.id, exp.id, null);                        // not an array
+    const e = tripById(t.id).expenses[0];
+    expect(e.payments).toBeUndefined();   // never written
+    expect(e.paidBy).toBe(origPayer);     // single payer preserved
+  });
+
+  test('zero/negative payment entries are filtered; paidBy = the surviving largest', () => {
+    const t = makeTrip();
+    addDinner(t.id, 10);
+    const exp  = tripById(t.id).expenses[0];
+    const fams = tripById(t.id).families;
+    const a1 = fams[0].members[0].id, b1 = fams[1].members[0].id;
+    S().updateExpensePayments(t.id, exp.id, [
+      { memberId: a1, amount: 20 }, { memberId: b1, amount: -5 }, { memberId: a1, amount: 0 },
+    ]);
+    const e = tripById(t.id).expenses[0];
+    expect(e.payments).toEqual([{ memberId: a1, amount: 20 }]);  // only the positive entry
+    expect(e.paidBy).toBe(a1);
+  });
+});
+
+describe('expense-edit guards (tests-only — locks current behaviour)', () => {
+  test('updateExpenseAmount changes amount but never the FROZEN estimatedAmount', () => {
+    const t = makeTrip();
+    addDinner(t.id, 10);                          // estimatedAmount frozen at 30
+    const exp = tripById(t.id).expenses[0];
+    expect(exp.estimatedAmount).toBe(30);
+    S().updateExpenseAmount(t.id, exp.id, 99);
+    const e = tripById(t.id).expenses[0];
+    expect(e.amount).toBe(99);
+    expect(e.estimatedAmount).toBe(30);           // invariant: estimate is frozen
+  });
+
+  test('toggleExpenseExcluded pulls the expense out of settlement, then restores it', () => {
+    const t = makeTrip();
+    addDinner(t.id, 10);                          // the only expense → drives the ledger
+    const exp = tripById(t.id).expenses[0];
+    const owedNow = () => calcBalances(tripById(t.id)).reduce((s, b) => s + Math.abs(b.net), 0);
+    expect(owedNow()).toBeGreaterThan(0);         // someone owes
+    S().toggleExpenseExcluded(t.id, exp.id);
+    expect(tripById(t.id).expenses[0].excluded).toBe(true);
+    expect(owedNow()).toBeCloseTo(0);             // excluded → out of the ledger
+    S().toggleExpenseExcluded(t.id, exp.id);
+    expect(tripById(t.id).expenses[0].excluded).toBe(false);
+    expect(owedNow()).toBeGreaterThan(0);         // back in
+  });
+
+  test('updateExpenseSplitMode sets the per-expense override', () => {
+    const t = makeTrip();
+    addDinner(t.id, 10);
+    const exp = tripById(t.id).expenses[0];
+    S().updateExpenseSplitMode(t.id, exp.id, 'individual');
+    expect(tripById(t.id).expenses[0].splitMode).toBe('individual');
+    S().updateExpenseSplitMode(t.id, exp.id, 'family');
+    expect(tripById(t.id).expenses[0].splitMode).toBe('family');
+  });
+
+  test('toggleSettlementPaid adds then removes the transfer key', () => {
+    const t = makeTrip();
+    const key = 'm1→m2';
+    expect(tripById(t.id).settledTransfers || []).not.toContain(key);
+    S().toggleSettlementPaid(t.id, key);
+    expect(tripById(t.id).settledTransfers).toContain(key);
+    S().toggleSettlementPaid(t.id, key);
+    expect(tripById(t.id).settledTransfers).not.toContain(key);
+  });
+
+  test('clearPushedItinerary drops itinerary expenses, keeps manual, unflags pushed', () => {
+    const t = makeTrip();
+    addDinner(t.id, 10);                          // itinerary expense + itineraryPushed
+    S().addExpense(t.id, {
+      name: 'Cash tip', amount: 40, category: '💰', paidBy: tripById(t.id).families[0].members[0].id,
+      participatingFamilies: tripById(t.id).families.map(f => f.id), source: 'manual', excluded: false,
+    });
+    expect(tripById(t.id).itineraryPushed).toBe(true);
+    expect(tripById(t.id).expenses.length).toBe(2);
+    S().clearPushedItinerary(t.id);
+    const e = tripById(t.id).expenses;
+    expect(e.length).toBe(1);
+    expect(e[0].name).toBe('Cash tip');           // manual survives
+    expect(e.some(x => x.source === 'itinerary')).toBe(false);
+    expect(tripById(t.id).itineraryPushed).toBe(false);
+  });
 });

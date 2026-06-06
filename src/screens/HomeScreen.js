@@ -502,8 +502,7 @@ function tripStatus(trip) {
   if (trip.archived) return { phase: 'past', label: 'Completed' };
   if (today > end)   return { phase: 'past', label: 'Ended' };
   if (today >= start && today <= end) {
-    const dayNum = Math.floor((today - start) / DAY) + 1;
-    return { phase: 'ongoing', label: `Happening now · Day ${dayNum} of ${trip.days.length}` };
+    return { phase: 'ongoing', label: 'Happening now' };   // Phase-1: no per-day tracking
   }
   const days = Math.round((start - today) / DAY);
   const label = days === 0 ? 'Starts today' : days === 1 ? 'Tomorrow' : `In ${days} days`;
@@ -573,10 +572,14 @@ export default function HomeScreen({ navigation }) {
 
   const TAB_BAR_HEIGHT = 56;
 
-  // Classify trips into upcoming (incl. ongoing) vs past; spotlight = soonest.
+  // Classify trips into active-now / upcoming / past. Active trips get their own Home group
+  // (there can be several — this is a planner, so we don't track which day a trip is on).
   const withStatus = trips.map(t => ({ trip: t, status: tripStatus(t) }));
+  const active = withStatus
+    .filter(x => x.status.phase === 'ongoing')
+    .sort((a, b) => new Date(a.trip.startDate) - new Date(b.trip.startDate));
   const upcoming = withStatus
-    .filter(x => x.status.phase !== 'past')
+    .filter(x => x.status.phase === 'upcoming')
     .sort((a, b) => new Date(a.trip.startDate) - new Date(b.trip.startDate));
   const past = withStatus
     .filter(x => x.status.phase === 'past')
@@ -679,6 +682,22 @@ export default function HomeScreen({ navigation }) {
               </View>
             ) : (
               <>
+                {/* Active now — currently-happening trips, surfaced at the top (can be several) */}
+                {active.length > 0 && (
+                  <>
+                    <Text style={styles.spotCaption}>ACTIVE NOW</Text>
+                    {active.map(({ trip }) => (
+                      <SwipeableTripCard
+                        key={trip.id}
+                        trip={trip}
+                        onPress={() => openTrip(trip.id)}
+                        onComplete={() => updateTrip(trip.id, { archived: !trip.archived })}
+                        onDelete={() => deleteTrip(trip.id)}
+                      />
+                    ))}
+                  </>
+                )}
+
                 {spotlight && (
                   <>
                     <Text style={styles.spotCaption}>NEXT TRIP</Text>

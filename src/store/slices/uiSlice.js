@@ -8,8 +8,6 @@
  * The corresponding state (currentTripId/currentDay/planMode/account/subscription/
  * chatHistory/preferences/planDayNoteSeen) is declared in ../index.js.
  */
-import { defaultDayFor } from '../../utils/helpers';
-
 export const createUiSlice = (set, get) => ({
   // ── GETTERS (computed) ──────────────────────────────────
   getCurrentTrip: () => {
@@ -18,12 +16,8 @@ export const createUiSlice = (set, get) => ({
   },
 
   // ── NAVIGATION ──────────────────────────────────────────
-  // Land on the phase-correct day: upcoming/past → Day 1; active → today's day
-  // (never a stale "Day 2" before the trip has started).
-  setCurrentTrip: (tripId) => set((s) => {
-    const trip = s.trips.find((t) => t.id === tripId);
-    return { currentTripId: tripId, currentDay: trip ? defaultDayFor(trip) : 0 };
-  }),
+  // Phase-1 planner: always open a trip on Day 1 (no live "active day" tracking).
+  setCurrentTrip: (tripId) => set({ currentTripId: tripId, currentDay: 0 }),
   setCurrentDay: (day) => set({ currentDay: day }),
   setPlanMode: (mode) => set({ planMode: mode }),
   markPlanDayNoteSeen: () => set({ planDayNoteSeen: true }),

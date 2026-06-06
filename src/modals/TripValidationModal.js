@@ -13,7 +13,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Modal, View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Linking,
+  StyleSheet, Linking,
 } from 'react-native';
 import { colors, spacing, radius, typography } from '../theme';
 import Icon from '../components/ui/Icon';
@@ -21,8 +21,9 @@ import useStore from '../store';
 import {
   validateTrip, groupWarningsByDay, summariseWarnings,
 } from '../utils/tripValidator';
-import { checkDistances, countLocatedActivityPairs, isCacheFresh } from '../utils/distanceChecker';
-import { RELEASE_FLAGS, GOOGLE_PLACES_API_KEY } from '../config';
+// NOTE: real-distance verification (distanceChecker — Google Distance Matrix, billed) is parked
+// for Phase 3. Trip Check uses FREE straight-line estimates; the opt-in bar was removed to avoid
+// API cost + confusion. utils/distanceChecker.js + RELEASE_FLAGS.distanceWarnings stay for revival.
 
 const SEV = {
   error:   { bg: '#fef2f2', border: '#fecaca', icon: '#ef4444', text: '#991b1b', ic: 'close-circle' },
@@ -36,63 +37,19 @@ function warningKey(w) {
 }
 
 export default function TripValidationModal({ visible, trip, onClose, onNavigate, onIgnore, onClearIgnored }) {
-  const { updateActivity, moveActivity, updateDistanceCache, preferences, setDistanceCheckEnabled } = useStore();
-  const distanceEnabled = preferences?.distanceCheckEnabled ?? false;
-  const [activeFilter,    setActiveFilter]    = useState(null);
-  const [distanceLoading, setDistanceLoading] = useState(false);
-
-  // Distance state sourced from trip.distanceCache (persistent)
-  const cachedDistance  = trip?.distanceCache || null;
-  const cacheIsFresh    = trip ? isCacheFresh(trip) : false;
-  const distanceWarnings = cacheIsFresh ? (cachedDistance?.warnings || []) : [];
-  const pairCount        = trip ? countLocatedActivityPairs(trip) : 0;
-
-  const checkedAgo = cachedDistance?.checkedAt
-    ? (() => {
-        const mins = Math.floor((Date.now() - cachedDistance.checkedAt) / 60000);
-        if (mins < 1)  return 'just now';
-        if (mins < 60) return `${mins} min ago`;
-        const h = Math.floor(mins / 60);
-        return `${h}h ago`;
-      })()
-    : null;
-
-  const runDistanceCheck = async (forceRefresh = false) => {
-    if (!trip || distanceLoading) return;
-    setDistanceLoading(true);
-    try {
-      const result = await checkDistances(trip, { forceRefresh });
-      if (result && !result.fromCache) {
-        updateDistanceCache(trip.id, {
-          fingerprint: result.fingerprint,
-          warnings:    result.warnings,
-          checkedAt:   result.checkedAt,
-        });
-      }
-    } catch (e) {
-      console.warn('[TripValidationModal] distance check failed:', e.message);
-    } finally {
-      setDistanceLoading(false);
-    }
-  };
+  const { updateActivity, moveActivity } = useStore();
+  const [activeFilter, setActiveFilter] = useState(null);
 
   const allWarnings = useMemo(
     () => (trip && visible ? validateTrip(trip) : []),
     [trip, visible],
   );
-
-  const ignoredKeys  = trip?.ignoredWarnings || [];
-
-  // Merge sync + distance warnings (only when enabled + cache fresh)
-  const allMerged = useMemo(
-    () => distanceEnabled ? [...allWarnings, ...distanceWarnings] : allWarnings,
-    [allWarnings, distanceWarnings, distanceEnabled],
-  );
+  const ignoredKeys = trip?.ignoredWarnings || [];
   const warnings = useMemo(
-    () => allMerged.filter(w => !ignoredKeys.includes(warningKey(w))),
-    [allMerged, ignoredKeys],
+    () => allWarnings.filter(w => !ignoredKeys.includes(warningKey(w))),
+    [allWarnings, ignoredKeys],
   );
-  const ignoredCount = allMerged.length - warnings.length;
+  const ignoredCount = allWarnings.length - warnings.length;
 
   // Apply severity filter
   const filtered = useMemo(
@@ -204,70 +161,6 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
             </View>
           )}
         </View>
-
-        {/* Distance check bar — always shown when feature is available */}
-        {RELEASE_FLAGS.distanceWarnings && GOOGLE_PLACES_API_KEY ? (
-          <View style={s.distanceBar}>
-            {!distanceEnabled ? (
-              // OFF state — show enable nudge
-              <>
-                <Icon name="map-outline" size={14} color={colors.muted} />
-                <Text style={[s.distanceBarText, { flex: 1, color: colors.muted }]}>
-                  Distance check off
-                </Text>
-                <TouchableOpacity
-                  style={s.distanceToggleBtn}
-                  onPress={() => setDistanceCheckEnabled(true)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={s.distanceToggleBtnText}>Enable</Text>
-                </TouchableOpacity>
-              </>
-            ) : distanceLoading ? (
-              // ON + loading
-              <>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={[s.distanceBarText, { flex: 1 }]}>Checking travel times…</Text>
-                <TouchableOpacity onPress={() => setDistanceCheckEnabled(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={s.distanceOffText}>Turn off</Text>
-                </TouchableOpacity>
-              </>
-            ) : cacheIsFresh ? (
-              // ON + cached result
-              <>
-                <Text style={[s.distanceBarText, { flex: 1 }]}>
-                  {distanceWarnings.length > 0
-                    ? `🗺️ ${distanceWarnings.length} travel time issue${distanceWarnings.length !== 1 ? 's' : ''}`
-                    : '🗺️ Travel times OK'}
-                  {checkedAgo ? `  ·  ${checkedAgo}` : ''}
-                </Text>
-                <TouchableOpacity onPress={() => runDistanceCheck(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={s.distanceRefresh}>Refresh</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setDistanceCheckEnabled(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={s.distanceOffText}>Off</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              // ON + not yet checked
-              <>
-                <Text style={[s.distanceBarText, { flex: 1 }]}>
-                  {pairCount > 0
-                    ? `🗺️ ${pairCount} venue pair${pairCount !== 1 ? 's' : ''} to check`
-                    : '🗺️ Add venues via Discover to enable'}
-                </Text>
-                {pairCount > 0 && (
-                  <TouchableOpacity style={s.distanceCheckBtn} onPress={() => runDistanceCheck(false)} activeOpacity={0.75}>
-                    <Text style={s.distanceCheckBtnText}>Check</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity onPress={() => setDistanceCheckEnabled(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={s.distanceOffText}>Off</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        ) : null}
 
         <ScrollView
           style={s.scroll}

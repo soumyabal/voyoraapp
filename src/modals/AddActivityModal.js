@@ -476,6 +476,13 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
     }
   };
 
+  // The day being edited (fixed in Edit mode; Add mode has its own day picker). Shown as a
+  // context chip so the user always knows which day this activity lives on.
+  const editDay = trip.days?.[currentDay ?? 0];
+  const editDayLabel = editDay
+    ? `${editDay.label} · ${new Date(editDay.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`
+    : '';
+
   // ── Cost calculations ──────────────────────────────────────────────────────
   const totalMembers  = trip.families.reduce((s, f) => s + f.members.length, 0);
   const familyCount   = trip.families.length;
@@ -567,6 +574,14 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
             onAction={handleSave}
             actionLabel={isEdit ? 'Save' : allDays ? `Add ×${(trip.days || []).length}` : 'Add'}
           />
+
+          {/* Which day this activity is on — always visible in Edit mode (Add mode has the
+              day picker below), so the user knows exactly which day they're working on. */}
+          {isEdit && !!editDayLabel && (
+            <View style={s.dayContext}>
+              <Text style={s.dayContextText}>📅  {editDayLabel}</Text>
+            </View>
+          )}
 
           <ScrollView
             ref={scrollRef}
@@ -1165,6 +1180,9 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll:    { flex: 1 },
   content:   { padding: spacing.xxl, paddingBottom: 60 },
+  // Day-context chip under the header (Edit mode) — "Day 1 · Mon, Jul 12".
+  dayContext:     { alignItems: 'center', paddingVertical: spacing.sm, backgroundColor: colors.accentSoft, borderBottomWidth: 1, borderBottomColor: colors.hairline },
+  dayContextText: { ...typography.smallBold, color: colors.accent },
 
   sectionLabel: { fontSize: 10, fontWeight: '800', color: colors.muted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing.sm },
   optional:     { fontSize: 9, fontWeight: '400', color: '#c0c8d0', textTransform: 'none', letterSpacing: 0 },

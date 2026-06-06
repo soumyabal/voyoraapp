@@ -30,8 +30,9 @@ on one data spine (`families × days × places × money × photos`).**
 ---
 
 ## 3. Revenue streams (the core)
-Three independent streams, layered so **the core is always free** (free = the viral loop) and money
-arrives *downstream of value*:
+**Four** independent streams, layered so **the core is always free** (free = the viral loop) and
+money arrives *downstream of value*: subscriptions (§3.1), affiliate booking (§3.1), and — at scale —
+a human-planner **marketplace** (§3.5):
 
 ### 3.1 The tiers
 | Tier | Price *(illustrative)* | What you get | Turns on |
@@ -71,9 +72,31 @@ plan and the money (searchable by *trip / people / who-owed-what*, not just date
 | **2 — App Store + backend** (~wk10–22) | auth · keys server-side · collaboration · AI planning · storage | **Pro + Premium subscriptions ON** | first recurring revenue; member participation |
 | **3 — Monetization** (~wk22–34) | real hotel/Airbnb pricing | **+ Affiliate booking ON** (the big lever) | Book-tap rate + first commissions |
 | **4 — Growth + AI + WhatsApp** (~wk34+) | AI depth · **WhatsApp companion (§5)** | all three + new acquisition surface | K-factor lift; cross-platform reach |
+| **5 — Marketplace** (scale-gated) | **"Kithova for Pros"** → human planner / guide marketplace (§3.5) | **+ marketplace take-rate** | done-for-you families; planner supply |
 
 Sequencing logic: subscriptions need the **backend** (Phase 2); affiliate needs **real pricing**
 (Phase 3). Revenue trails adoption *by design* — Phase 1 proves the wedge for free.
+
+### 3.5 Marketplace — human trip planners & guided tours *(Phase 5, scale-gated)*
+For families with **no time or energy to DIY**: a two-sided marketplace where **vetted human trip
+planners and local guides quote** custom plans + guided tours **inside Kithova**, and Kithova takes a
+**take-rate** (planning fee + tour commission). *Why it fits us specifically:* a planner doing
+*group* trips needs exactly what Kithova already has — multi-family structure, per-family budget +
+split, and the day-plan as a shareable artifact. The planner builds in Kithova; the plan flows
+straight into the family's split and booking. No other tool gives a pro a **group-travel** workspace.
+- **Smart on-ramp — "Kithova for Pros" first.** Before a consumer marketplace, let existing
+  independent travel advisors use Kithova as their **planning tool / CRM**. They bring *their own*
+  clients → this **seeds the supply side** and proves the workflow *without* the cold-start.
+- **Honest gating.** A marketplace is the **hardest** model (two-sided chicken-and-egg). It needs
+  **demand-side scale first — realistically *thousands* of active trips, not "hundreds"** — before a
+  planner can earn from leads. Turn on *only after* the core loop + subscriptions + affiliate prove out.
+- **Take-rate (illustrative):** ~15–20% of a $150–500 planning fee (≈ **$25–100 / booking**) + a cut
+  of guided-tour bookings.
+- **⚠️ Flags (get professional counsel — not a legal opinion):** selling travel services triggers
+  **payments + escrow + payouts + 1099 tax**, **trust & safety** (vetting, reviews, disputes,
+  refunds, no-shows), **liability / insurance**, and **"seller of travel" registration/bonding** in
+  some US states (e.g. CA / FL / WA). Design against **disintermediation** — keep payments, the plan,
+  and comms in-platform.
 
 ---
 
@@ -143,6 +166,10 @@ traction gates (settlement rate · K-factor · repeat captains · Book-tap rate)
 
 **Blended ARPU / completed trip (~$30–40):** `affiliate ~$31 + per-trip Pro ~$0.70 + Premium attach`
 → rounded to a $30–40 band (affiliate-dominated). Recompute once $2,500 / 5% / 25% are sourced.
+
+**Marketplace take-rate (Phase 5, scale-gated):** `planning fee $150–500 × take-rate ~15–20% ≈
+$25–100 / booking` + a cut of guided-tour bookings. Two-sided cold-start → volume-gated on
+*thousands* of active trips; not in the Yr-1–3 base case.
 
 **Trajectory** *(adoption × ramping ARPU; affiliate only from Phase 3, so ARPU ramps)*
 - Y1: `~10K trips × ~$0` (pre-monetization) = ~$0

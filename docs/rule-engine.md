@@ -1,4 +1,4 @@
-# Voyara — rule engines, visualized
+# Kithova — rule engines, visualized
 
 Three deterministic, pure engines power the experience — **Trip Check** (§1), the **planner** (§2),
 and the **split/settlement moat** (§3). This doc is the **structure**

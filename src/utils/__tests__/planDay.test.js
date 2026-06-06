@@ -21,6 +21,32 @@ describe('planDay — convergence', () => {
   });
 });
 
+describe('planDay — keeps the user\'s order (shifts times, never reshuffles)', () => {
+  test('order is preserved even when a geographic route would reorder', () => {
+    // A far, B near, C mid — nearest-neighbour from the origin would reorder to B, C, A.
+    // Plan-my-day must keep the user's chronological order A, B, C and only cascade times.
+    const at = (id, time, lat, lng) => ({ id, type: 'activity', name: id, time, durationMins: 60, lat, lng });
+    const acts = [at('A', '09:00', 0.5, 0.5), at('B', '11:00', 0.01, 0.01), at('C', '13:00', 0.2, 0.2)];
+    const r = planDay(acts, { date: FRI, pace: 'moderate', anchor: { lat: 0, lng: 0 } });
+    const order = r.scheduled
+      .filter((a) => a.type === 'activity' && a.time)
+      .sort((x, y) => timeToMin(x.time) - timeToMin(y.time))
+      .map((a) => a.id);
+    expect(order).toEqual(['A', 'B', 'C']);          // user's order, not B,C,A
+  });
+
+  test('times cascade forward to stay feasible while order holds', () => {
+    // Two stops the user put 30 min apart but ~an hour of travel between → the 2nd is pushed
+    // later (cascade), but it stays AFTER the 1st (order preserved), never swapped earlier.
+    const at = (id, time, lat, lng) => ({ id, type: 'activity', name: id, time, durationMins: 60, lat, lng });
+    const acts = [at('First', '09:00', 0, 0), at('Second', '09:30', 0.4, 0.4)];
+    const r = planDay(acts, { date: FRI, pace: 'moderate', anchor: { lat: 0, lng: 0 } });
+    const first = r.scheduled.find((a) => a.id === 'First');
+    const second = r.scheduled.find((a) => a.id === 'Second');
+    expect(timeToMin(second.time)).toBeGreaterThan(timeToMin(first.time)); // still after, just shifted
+  });
+});
+
 describe('planDay — over-capacity', () => {
   test('reports overflow beyond the pace cap but keeps every item', () => {
     const acts = ['A', 'B', 'C', 'D', 'E'].map((id, i) => act(id, `${9 + i * 2}:00`));

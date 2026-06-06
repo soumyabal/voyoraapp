@@ -619,7 +619,13 @@ export function scheduleDay(activities, opts = {}) {
     const iv = dayIntervals(a.openHours, wd2);   // null/[] → unknown today → no urgency
     return iv && iv.length ? Math.max(...iv.map(x => x.c)) : Infinity;
   };
-  const daytime = routeOrder(acts.filter(a => windowFor(a) == null), anchor, opts.endAnchor || null, closeMin);
+  // preserveOrder (Plan-my-day): keep the USER's sequence and only shift times to fit travel
+  // + opening hours (the cascade below) — never reshuffle their plan. Without it (basket
+  // auto-arrange) the route is optimized geographically. Either way placeInHours cascades.
+  const daytimeStops = acts.filter(a => windowFor(a) == null);
+  const daytime = opts.preserveOrder
+    ? daytimeStops.slice().sort((a, b) => (a.time ? timeToMin(a.time) : DAY_END_MIN) - (b.time ? timeToMin(b.time) : DAY_END_MIN))
+    : routeOrder(daytimeStops, anchor, opts.endAnchor || null, closeMin);
   let cursor = DAY_START_MIN;
   daytime.forEach((a, idx) => {
     const need = Math.max(BUFFER_MIN, estimateDuration(a));
@@ -771,8 +777,9 @@ export function comfortPass(activities, opts = {}) {
  */
 export function planDay(activities, opts = {}) {
   // PLACE (order + windows), then a comfort sweep so cross-type travel legs are feasible
-  // (the breakfast → far sight gap scheduleDay's per-type passes miss).
-  const comfort = comfortPass(scheduleDay(activities, opts), opts);
+  // (the breakfast → far sight gap scheduleDay's per-type passes miss). Plan-my-day KEEPS the
+  // user's order (preserveOrder) and only shifts times to fit — it never reshuffles their plan.
+  const comfort = comfortPass(scheduleDay(activities, { ...opts, preserveOrder: opts.preserveOrder ?? true }), opts);
   const scheduled = comfort.adjusted;
 
   // Convergence fingerprint: a good day re-planned yields the same (id,time) set →

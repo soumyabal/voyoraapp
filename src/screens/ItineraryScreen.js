@@ -8,6 +8,7 @@ import PlayTripModal from '../modals/PlayTripModal';
 import { colors, spacing, radius, typography, shadow, activityColors } from '../theme';
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
+import ConfettiBurst from '../components/ui/ConfettiBurst';
 import { fmt, fmtM, uid } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost } from '../utils/costs';
 import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
@@ -29,6 +30,7 @@ import LocationSearchField from '../components/ui/LocationSearchField';
 const SCREEN_W       = Dimensions.get('window').width;
 const CARD_ACTIONS_W = 216;                        // Move · Delete action buttons
 const CARD_W         = SCREEN_W - 48;              // SCREEN_W - 2 × spacing.xxl (24)
+const WD_SHORT       = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];  // weekdayOf() → label
 
 // Static lookup tables (day slots, icons, pill tones, meal map, night-plan options/meta)
 // now live in utils/itineraryConfig — imported at the top of this file.
@@ -382,6 +384,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const [collapsedSlots,        setCollapsedSlots]        = useState({});
   const [mustDosDismissed,      setMustDosDismissed]      = useState(false);
   const [mustDosChecked,        setMustDosChecked]        = useState({});
+  const [celebrate,             setCelebrate]             = useState(false);  // one-shot when Trip Check turns all-green
 
   const toggleSlot = (key) =>
     setCollapsedSlots(prev => ({ ...prev, [key]: !prev[key] }));
@@ -415,6 +418,18 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   // Trip Check, computed ONCE: warnings grouped per day + each day's health level (drives
   // the calm day-pill dots — a pill only gets a dot when a day needs attention).
   const { healthByDay, warningsByDay } = React.useMemo(() => computeTripHealth(trip), [trip]);
+
+  // Celebrate the earned moment: when Trip Check transitions to all-green (every day planned &
+  // nothing flagged), fire a one-shot confetti burst. Only on a TRANSITION — never on open
+  // (prev starts null), so an already-clean trip doesn't celebrate every time you visit.
+  const tripCheckState = React.useMemo(() => tripCheckStatus(trip).state, [trip]);
+  const prevCheckState = React.useRef(null);
+  React.useEffect(() => {
+    if (prevCheckState.current && prevCheckState.current !== 'clear' && tripCheckState === 'clear') {
+      setCelebrate(true);
+    }
+    prevCheckState.current = tripCheckState;
+  }, [tripCheckState]);
 
   // This day's warnings (re-sliced cheaply when the day changes; no extra validateTrip call).
   const dayWarnings = React.useMemo(
@@ -802,6 +817,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
               >
                 {healthDot && <View style={[styles.dayHealthDot, { backgroundColor: healthDot }]} />}
                 <Text style={[styles.dayBtnLabel, i === currentDay && styles.dayBtnLabelActive]}>{d.label}</Text>
+                <Text style={[styles.dayBtnWeekday, i === currentDay && { color: colors.primary }]}>{WD_SHORT[weekdayOf(d.date)] || ''}</Text>
                 <Text style={[styles.dayBtnDate, i === currentDay && { color: colors.primary }]}>{fmt(d.date)}</Text>
                 {dc > 0 && <Text style={styles.dayCost}>{fmtM(dc)}</Text>}
               </TouchableOpacity>
@@ -1299,6 +1315,9 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           bottom={92}
         />
       )}
+
+      {/* One-shot celebration when Trip Check just turned all-green */}
+      {celebrate && <ConfettiBurst onDone={() => setCelebrate(false)} />}
 
       {/* "How's tonight handled?" — a polite, one-tap resolver for a hotel-less
           night. Picking a reason writes day.nightPlan; a located reason (friends/
@@ -2178,6 +2197,7 @@ const styles = StyleSheet.create({
   dayBtnActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   dayBtnLabel: { ...typography.caption, color: colors.muted, fontWeight: '700', textTransform: 'uppercase' },
   dayBtnLabelActive: { color: colors.primary },
+  dayBtnWeekday: { ...typography.caption, color: colors.text, fontSize: 12, fontWeight: '800', marginTop: 1 },
   dayBtnDate: { ...typography.caption, color: colors.muted, fontSize: 10, marginTop: 1 },
   dayCost: { ...typography.caption, color: colors.muted, fontWeight: '700', fontSize: 10, marginTop: 1 },
 

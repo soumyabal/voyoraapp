@@ -178,9 +178,36 @@ export function twoOptOrder(items, anchor, endAnchor = null) {
   return best;
 }
 
-/** Greedy nearest-neighbour seed, then a bounded 2-opt refine (optionally end-anchored). */
-export function routeOrder(items, anchor, endAnchor = null) {
-  return twoOptOrder(nearestNeighborOrder(items, anchor), anchor, endAnchor);
+// Comfort-first close-time pass: AFTER distance routing, gently pull earlier-closing stops
+// forward — but ONLY while the whole route stays within COMFORT_BUDGET_KM of its optimized
+// length. So the day never DETOURS to chase a closing venue (that's deferred); it just breaks
+// near-ties toward "see what closes soonest first." Deterministic; a no-op without closingMinOf.
+const COMFORT_BUDGET_KM = 2.0;
+export function comfortClosePass(order, anchor, endAnchor, closingMinOf) {
+  if (!closingMinOf || !order || order.length < 2) return order || [];
+  const budget = pathCost(order, anchor, endAnchor) + COMFORT_BUDGET_KM;
+  let cur = order.slice();
+  for (let pass = 0; pass < cur.length; pass++) {
+    let swapped = false;
+    for (let i = 0; i < cur.length - 1; i++) {
+      // a later stop that closes earlier than the one before it wants to go first
+      if (closingMinOf(cur[i + 1]) < closingMinOf(cur[i])) {
+        const cand = cur.slice();
+        [cand[i], cand[i + 1]] = [cand[i + 1], cand[i]];
+        if (pathCost(cand, anchor, endAnchor) <= budget) { cur = cand; swapped = true; }
+      }
+    }
+    if (!swapped) break;
+  }
+  return cur;
+}
+
+/** Greedy nearest-neighbour seed → bounded 2-opt (distance) → comfort-first close-time pass.
+ *  closingMinOf(stop) → minutes-after-midnight the stop closes (Infinity = unknown/no urgency).
+ *  Omitting closingMinOf preserves the exact previous (distance-only) ordering. */
+export function routeOrder(items, anchor, endAnchor = null, closingMinOf = null) {
+  const tour = twoOptOrder(nearestNeighborOrder(items, anchor), anchor, endAnchor);
+  return comfortClosePass(tour, anchor, endAnchor, closingMinOf);
 }
 
 // ── Place → draft Activity ────────────────────────────────────────
@@ -587,7 +614,12 @@ export function scheduleDay(activities, opts = {}) {
     }
     return null;   // known hours, no room today → don't cram past close
   };
-  const daytime = routeOrder(acts.filter(a => windowFor(a) == null), anchor, opts.endAnchor || null);
+  // Comfort-first: among near-equidistant stops, see the earliest-closing one first (no detour).
+  const closeMin = (a) => {
+    const iv = dayIntervals(a.openHours, wd2);   // null/[] → unknown today → no urgency
+    return iv && iv.length ? Math.max(...iv.map(x => x.c)) : Infinity;
+  };
+  const daytime = routeOrder(acts.filter(a => windowFor(a) == null), anchor, opts.endAnchor || null, closeMin);
   let cursor = DAY_START_MIN;
   daytime.forEach((a, idx) => {
     const need = Math.max(BUFFER_MIN, estimateDuration(a));

@@ -5,6 +5,23 @@
 
 ---
 
+## Store / TestFlight readiness (the non-code gates)
+
+- [x] **Branded launch** — real app icon + splash (kith constellation), splash via the
+      expo-splash-screen plugin. EAS dev-build prep done (expo-dev-client + key-free config hook).
+- [ ] **Privacy policy** — DRAFTED at `docs/privacy-policy.md` (code-accurate: local-only storage,
+      no accounts, no analytics, no GPS; sends typed place searches to Google/Wikipedia/Komoot-OSM).
+      TODO: review it, set the contact email + any legal entity, **host it** (e.g.
+      `https://kithova.com/privacy`), and paste the URL into App Store Connect. App Privacy
+      questionnaire answers are pre-filled in `docs/app-store-privacy-answers.md`.
+- [ ] **Restrict the Google Places key** in Google Cloud Console: (a) API restriction → Places API
+      (New) + Geocoding (unconditional, no code change); (b) iOS app restriction → bundle
+      `com.kithova.app`, which also needs an `X-Ios-Bundle-Identifier` header added to the Places
+      fetches (small code change — do it together so we can verify Places still returns results).
+- [ ] **Apple Developer enrollment** ($99/yr) — gates both the EAS device build and TestFlight.
+- [ ] **Version sync (optional)** — app.json/package.json are `1.0.0` while git tags are at
+      `v1.2.0`; sync if you want the build number to track tags.
+
 ## Lint baseline / React Compiler readiness (from the June 2026 lint-to-zero pass)
 
 Lint is now **0 errors** (was 97). The React Compiler rules from `eslint-plugin-react-hooks`

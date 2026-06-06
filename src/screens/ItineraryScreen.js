@@ -27,7 +27,7 @@ import { getDietaryWarning } from '../utils/dietary';
 import { generateDayShareText } from '../utils/dayShare';
 import { computeTripHealth } from '../utils/tripHealth';
 import { tripCheckStatus } from '../utils/tripCheckStatus';
-import { DAY_SLOTS, ACT_ICON, SEV_RANK, DAY_PILL, HEALTH_DOT, SLOT_MEAL, MEAL_LABEL, NIGHT_PLAN_OPTIONS, NIGHT_PLAN_META } from '../utils/itineraryConfig';
+import { DAY_SLOTS, ACT_ICON, SEV_RANK, DAY_PILL, HEALTH_DOT, NIGHT_PLAN_OPTIONS, NIGHT_PLAN_META } from '../utils/itineraryConfig';
 import { bookingUrl } from '../utils/booking';
 import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
@@ -657,49 +657,10 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   };
 
   // ── Eat at the hotel (in-room dining) ─────────────────────────────
-  // Tired or unwell days → one tap to eat in. Breakfast uses LAST night's hotel
-  // (you wake there); lunch/dinner use TONIGHT's hotel (where you're staying).
-  // Free by default — the user can add a room-service cost on the card.
-  const wokeAtHotel  = currentDay > 0 ? lodgingForNight(trip, currentDay - 1) : null;
-  const tonightHotel = lodgingForNight(trip, currentDay);
-  const hotelForMeal = {
-    breakfast: wokeAtHotel?.stay || null,                       // where you woke up
-    lunch:     tonightHotel?.stay || wokeAtHotel?.stay || null, // staying tonight, or pre-checkout
-    dinner:    tonightHotel?.stay || null,                      // only where you sleep tonight
-  };
-  const dayMealPresent = (meal) => (day?.activities || []).some(a =>
-    a.type === 'food' && a.status !== 'skipped' &&
-    (a.meal === meal || (meal === 'breakfast' && /breakfast|brunch/i.test(a.name || ''))));
-  const addHotelMeal = (meal) => {
-    const stay = hotelForMeal[meal];
-    if (!stay) return;
-    const { label, time } = MEAL_LABEL[meal];
-    const id = uid();
-    addActivity(trip.id, currentDay, {
-      id, type: 'food', time,
-      name: `${label} at ${stay.name}`, detail: 'In-room dining',
-      meal, atHotel: true,
-      costPerPerson: 0, costMode: 'per_person', costAmount: 0,
-      address: stay.address || '', url: stay.url || '',
-      lat: stay.lat ?? null, lng: stay.lng ?? null,
-      note: null, status: null,
-    });
-    showUndoAction(`${label} added at the hotel`, 'food', () => deleteActivity(trip.id, id));
-  };
-  // The in-room-dining chip for a given slot (or null when there's no hotel /
-  // that meal is already planned).
-  const renderHotelMealChip = (slotKey) => {
-    const meal = SLOT_MEAL[slotKey];
-    const stay = meal ? hotelForMeal[meal] : null;
-    if (!stay || dayMealPresent(meal)) return null;
-    const { emoji, label } = MEAL_LABEL[meal];
-    return (
-      <TouchableOpacity style={styles.bfastChip} onPress={() => addHotelMeal(meal)} activeOpacity={0.8}>
-        <Text style={styles.bfastChipText} numberOfLines={1}>{emoji}  {label} at {stay.name}</Text>
-        <Text style={styles.bfastChipAdd}>+ Add</Text>
-      </TouchableOpacity>
-    );
-  };
+  // (Removed) The auto-suggested "<meal> at <your hotel>" chip. It assumed the lodging served
+  // that meal at that slot, but lodges/resorts have their own — often limited or guests-only —
+  // dining hours, so the suggestion was unreliable. Add meals explicitly via "+ Add here" or
+  // Discover instead.
 
   // Toggle an activity's done state (the card checkbox) + undo toast. 'Did not do' was retired
   // from the Phase-1 planner UI; the engine still understands 'skipped' for any existing data.
@@ -1049,7 +1010,6 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
               {/* Empty slot template */}
               {DAY_SLOTS.map(slot => (
                 <React.Fragment key={slot.key}>
-                  {renderHotelMealChip(slot.key)}
                   <TouchableOpacity
                     style={styles.emptySlot}
                     onPress={() => openAddInSlot(slot.defaultTime)}
@@ -1174,9 +1134,6 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                   {!isCollapsed && slotActs.length > 0 && prevSlotLast && (
                     <TravelConnector from={prevSlotLast} to={slotActs[0]} />
                   )}
-
-                  {/* In-room dining — breakfast/lunch/dinner at the hotel for this slot */}
-                  {!isCollapsed && renderHotelMealChip(slot.key)}
 
                   {!isCollapsed && slotActs.length === 0 ? (
                     <TouchableOpacity
@@ -2230,9 +2187,6 @@ const styles = StyleSheet.create({
   arrangeBtnText: { ...typography.caption, color: colors.smartDeep, fontWeight: '800' },
   routeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentSoft, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   routeBtnText: { ...typography.caption, color: colors.accent, fontWeight: '800' },
-  bfastChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fffaf2', borderWidth: 1, borderColor: '#f0d9b5', borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.sm, marginTop: 2 },
-  bfastChipText: { flex: 1, fontSize: 12.5, color: '#9a6b1e', fontWeight: '600' },
-  bfastChipAdd: { fontSize: 11, color: colors.primary, fontWeight: '800' },
   // Travel leg connector between two stops
   legRow:      { flexDirection: 'row', alignItems: 'center', gap: 7, paddingLeft: 22, marginTop: -2, marginBottom: 4 },
   legDot:      { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.border },

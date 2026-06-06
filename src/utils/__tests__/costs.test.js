@@ -12,7 +12,7 @@ import {
   famExpenseShare, memberExpenseShare,
   calcTripItineraryTotal, calcDayCostForTrip, calcDayPerPersonCost, calcFamilyItineraryCost,
   calcFamilyExpenseTotal, calcMemberExpenseShare,
-  calcBalances, calcSettlements, calcFamilyBalances,
+  calcBalances, calcSettlements, calcFamilyBalances, paymentsOf,
 } from '../costs';
 
 // Two paying families (A: 2 members, head A1; B: 1 member) + an EMPTY family C (no members).
@@ -179,5 +179,56 @@ describe('balances + settlement', () => {
     expect(fb.A).toBe(30);   // paid 90, owed 60
     expect(fb.B).toBe(-30);
     expect(fb.C).toBe(0);
+  });
+});
+
+describe('multiple payers (paymentsOf)', () => {
+  // 3 single-member families so "each owes a clean third" is obvious.
+  const fX = { id: 'X', name: 'Ex',  members: [{ id: 'x1', name: 'X1' }] };
+  const fY = { id: 'Y', name: 'Wy',  members: [{ id: 'y1', name: 'Y1' }] };
+  const fZ = { id: 'Z', name: 'Zed', members: [{ id: 'z1', name: 'Z1' }] };
+  const t3 = (exps) => ({ families: [fX, fY, fZ], splitMode: 'family', expenses: exps, days: [] });
+  const dinner = (extra) => ({ id: 'd', name: 'Dinner', amount: 300, splitMode: 'family', participatingFamilies: ['X', 'Y', 'Z'], participatingMembers: null, excluded: false, ...extra });
+
+  test('the restaurant case: 3 families split, 2 paid (cross-family) → Z owes X & Y', () => {
+    // $300 ÷ 3 = $100 each owed. X & Y each fronted $150; Z's card failed.
+    const exp = dinner({ paidBy: 'x1', payments: [{ memberId: 'x1', amount: 150 }, { memberId: 'y1', amount: 150 }] });
+    const trip = t3([exp]);
+    expect(paymentsOf(exp, trip)).toHaveLength(2);
+    const net = Object.fromEntries(calcBalances(trip).map(b => [b.member.id, b.net]));
+    expect(net.x1).toBe(50); expect(net.y1).toBe(50); expect(net.z1).toBe(-100);
+    expect(close(Object.values(net).reduce((s, n) => s + n, 0), 0)).toBe(true);
+    const s = calcSettlements(calcBalances(trip));
+    expect(s).toHaveLength(2);
+    s.forEach(x => { expect(x.from.id).toBe('z1'); expect(x.amount).toBe(50); });
+    expect(s.map(x => x.to.id).sort()).toEqual(['x1', 'y1']);
+  });
+
+  test('two payers in the SAME family also work (per-family net is correct)', () => {
+    const fam   = { id: 'A', name: 'Aye', members: [{ id: 'a1', name: 'A1' }, { id: 'a2', name: 'A2' }] };
+    const famB2 = { id: 'B', name: 'Bee', members: [{ id: 'b1', name: 'B1' }] };
+    // individual $90 → 3 members owe $30 each; A1 & A2 (same family) each fronted $45.
+    const exp = { id: 'e', name: 'Dinner', amount: 90, participatingFamilies: ['A', 'B'], participatingMembers: null, excluded: false, paidBy: 'a1', payments: [{ memberId: 'a1', amount: 45 }, { memberId: 'a2', amount: 45 }] };
+    const trip = { families: [fam, famB2], splitMode: 'individual', expenses: [exp], days: [] };
+    const fb = Object.fromEntries(calcFamilyBalances(trip).map(b => [b.family.id, b.net]));
+    expect(fb.A).toBe(30);   // paid 90, owed 60
+    expect(fb.B).toBe(-30);
+  });
+
+  test('unbalanced payments → safe fallback to the single payer (no leak)', () => {
+    const exp = dinner({ paidBy: 'x1', payments: [{ memberId: 'x1', amount: 10 }] }); // 10 ≠ 300
+    const trip = t3([exp]);
+    expect(paymentsOf(exp, trip)).toEqual([{ memberId: 'x1', amount: 300 }]);
+    expect(close(calcBalances(trip).reduce((s, b) => s + b.net, 0), 0)).toBe(true);
+  });
+
+  test('a payment by a non-member is ignored → fallback (no leak)', () => {
+    const exp = dinner({ paidBy: 'x1', payments: [{ memberId: 'ghost', amount: 300 }] });
+    expect(paymentsOf(exp, t3([exp]))).toEqual([{ memberId: 'x1', amount: 300 }]);
+  });
+
+  test('single-payer expense is unchanged (no payments → paidBy carries it)', () => {
+    const exp = dinner({ paidBy: 'x1' });
+    expect(paymentsOf(exp, t3([exp]))).toEqual([{ memberId: 'x1', amount: 300 }]);
   });
 });

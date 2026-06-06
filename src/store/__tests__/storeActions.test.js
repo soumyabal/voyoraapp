@@ -10,6 +10,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'));
 
 import useStore from '../index';
+import { calcBalances } from '../../utils/costs';
 
 const S = () => useStore.getState();
 const tripById = id => S().trips.find(t => t.id === id);
@@ -208,5 +209,35 @@ describe('applyPlannedActivities — budget attachment', () => {
     const t2 = tripById(t.id);
     expect(t2.days[0].activities[0].name).toBe('Walk');
     expect(t2.itineraryPushed).toBe(false);
+  });
+});
+
+describe('updateExpensePayments — multiple payers (data model + no-leak on delete)', () => {
+  test('sets payments + paidBy = largest payer; books still balance', () => {
+    const t = makeTrip();
+    addDinner(t.id, 10);                         // $30 expense, 3 members
+    const exp  = tripById(t.id).expenses[0];
+    const fams = tripById(t.id).families;
+    const a1 = fams[0].members[0].id, a2 = fams[0].members[1].id, b1 = fams[1].members[0].id;
+    S().updateExpensePayments(t.id, exp.id, [{ memberId: a1, amount: 20 }, { memberId: b1, amount: 10 }]);
+    const e = tripById(t.id).expenses[0];
+    expect(e.payments).toEqual([{ memberId: a1, amount: 20 }, { memberId: b1, amount: 10 }]);
+    expect(e.paidBy).toBe(a1);                   // largest payer
+    const net = Object.fromEntries(calcBalances(tripById(t.id)).map(b => [b.member.id, b.net]));
+    expect(net[a1] + net[a2] + net[b1]).toBeCloseTo(0);   // Σ net = 0 (no leak)
+  });
+
+  test('deleting a payer re-homes their payment to the heir — never leaks', () => {
+    const t = makeTrip();
+    addDinner(t.id, 10);
+    const exp  = tripById(t.id).expenses[0];
+    const fams = tripById(t.id).families;
+    const a1 = fams[0].members[0].id, b1 = fams[1].members[0].id;
+    S().updateExpensePayments(t.id, exp.id, [{ memberId: a1, amount: 15 }, { memberId: b1, amount: 15 }]);
+    S().deleteTraveler(t.id, fams[0].id, a1);    // remove A1 — a payer
+    const e = tripById(t.id).expenses[0];
+    expect((e.payments || []).some(p => p.memberId === a1)).toBe(false);          // A1's payment re-homed
+    expect((e.payments || []).reduce((s, p) => s + p.amount, 0)).toBe(30);        // still sums to the bill
+    expect(calcBalances(tripById(t.id)).reduce((s, b) => s + b.net, 0)).toBeCloseTo(0); // no leak
   });
 });

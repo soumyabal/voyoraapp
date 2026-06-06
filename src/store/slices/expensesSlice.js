@@ -57,6 +57,29 @@ export const createExpensesSlice = (set, get) => ({
     }),
   })),
 
+  // Set MULTIPLE payers for one expense (e.g. a restaurant bill 2 families covered because the
+  // 3rd's card failed). `payments` = [{ memberId, amount }] and should sum to the expense amount;
+  // the split engine's paymentsOf() falls back to a single payer if it doesn't, so the books can
+  // never leak. `paidBy` is kept = the largest payer for display + the member-delete heir logic +
+  // back-compat. Pass an empty/invalid list → no change. (Single-payer stays the default path.)
+  updateExpensePayments: (tripId, expId, payments) => set(s => ({
+    trips: s.trips.map(t => {
+      if (t.id !== tripId) return t;
+      return {
+        ...t,
+        expenses: t.expenses.map(e => {
+          if (e.id !== expId) return e;
+          const clean = (Array.isArray(payments) ? payments : [])
+            .filter(p => p && p.memberId && Number(p.amount) > 0)
+            .map(p => ({ memberId: p.memberId, amount: Number(p.amount) }));
+          if (!clean.length) return e;
+          const primary = clean.reduce((a, b) => (b.amount > a.amount ? b : a), clean[0]);
+          return { ...e, payments: clean, paidBy: primary.memberId };
+        }),
+      };
+    }),
+  })),
+
   // ── SPLIT MODE ──────────────────────────────────────────────
 
   setTripSplitMode: (tripId, mode) => set(s => ({

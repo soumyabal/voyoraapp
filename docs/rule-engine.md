@@ -125,6 +125,16 @@ flowchart TD
 - **Family mode → only the head** of a family carries its share; dependents owe 0.
 - **`estimatedAmount` is frozen** — only `amount` ever changes (see AGENTS.md invariants).
 
+**Multiple payers (engine + store ready; UI deferred).** An expense can carry `payments:
+[{ memberId, amount }]` so a single bill can be **co-paid** (e.g. a $300 restaurant split 3 ways
+but only 2 families' cards worked → each pays $150). `paymentsOf(exp, trip)` uses it only when it's
+**valid + balanced** (payers are current members AND amounts sum to `exp.amount`), else falls back
+to the single `paidBy` — so the books can never leak. Who-*paid* only touches the *paid* side; the
+split/owed math and `calcSettlements` are unchanged, so co-paid settlements just work. Same-family
+or cross-family payers both work (payments are per-member; `calcFamilyBalances` sums each family's).
+Set via `updateExpensePayments`; member-delete re-homes a payer's amount to the heir. **Single-payer
+stays the default; the multi-payer *UI* is intentionally not built yet.**
+
 **Locked by:** `costs.test.js` (direct, 99% stmts) + `splitEngine.regression.test.js` /
 `splitDelete.regression.test.js` (every mode, a 500-trip property fuzz, delete-flow balance).
 

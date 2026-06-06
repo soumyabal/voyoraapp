@@ -193,6 +193,31 @@ export function calcMemberExpenseShare(member, trip) {
   return trip.expenses.reduce((s, exp) => exp.excluded ? s : s + memberExpenseShare(member, exp, trip), 0);
 }
 
+// ── WHO PAID (single or multiple payers) ─────────────────────────
+
+/**
+ * Who actually fronted this expense, as [{ memberId, amount }] — supports MULTIPLE payers
+ * (e.g. a $300 restaurant bill 2 families covered because the 3rd's card failed). Uses
+ * `exp.payments` only when it's a VALID, BALANCED breakdown: every payer is a current trip
+ * member AND the amounts sum to `exp.amount`. Otherwise it falls back to the single `exp.paidBy`
+ * carrying the whole amount. That balance check is the leak guard — a stale/unbalanced breakdown
+ * can never under- or over-credit the group (Σ paid always equals exp.amount). Single-payer
+ * expenses (no `payments`) behave exactly as before. Mirrors the unevenActive pattern.
+ */
+export function paymentsOf(exp, trip) {
+  const memberIds = new Set(getAllMembers(trip).map(m => m.id));
+  const ps = Array.isArray(exp.payments)
+    ? exp.payments.filter(p => p && memberIds.has(p.memberId))
+    : [];
+  if (ps.length) {
+    const sum = ps.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    if (Math.abs(sum - exp.amount) < 0.01) {
+      return ps.map(p => ({ memberId: p.memberId, amount: Number(p.amount) || 0 }));
+    }
+  }
+  return exp.paidBy ? [{ memberId: exp.paidBy, amount: exp.amount }] : [];
+}
+
 // ── BALANCE & SETTLEMENT ─────────────────────────────────────────
 
 export function calcBalances(trip) {
@@ -205,9 +230,8 @@ export function calcBalances(trip) {
     // An expense with no one to split across isn't in the ledger — crediting the
     // payer for it would invent money nobody owes (Σ net ≠ 0).
     if (getEffectiveMembers(exp, trip).length === 0) return;
-    if (exp.paidBy) {
-      paid[exp.paidBy] = (paid[exp.paidBy] || 0) + exp.amount;
-    }
+    // Credit each payer (one or many) — paymentsOf guarantees Σ credited = exp.amount.
+    paymentsOf(exp, trip).forEach(p => { paid[p.memberId] = (paid[p.memberId] || 0) + p.amount; });
     members.forEach(m => {
       owed[m.id] = (owed[m.id] || 0) + memberExpenseShare(m, exp, trip);
     });
@@ -227,7 +251,7 @@ export function calcFamilyBalances(trip) {
       let paid = 0, owed = 0;
       trip.expenses.filter(exp => !exp.excluded).forEach(exp => {
         if (getEffectiveMembers(exp, trip).length === 0) return;
-        if (exp.paidBy && memberIds.has(exp.paidBy)) paid += exp.amount;
+        paymentsOf(exp, trip).forEach(p => { if (memberIds.has(p.memberId)) paid += p.amount; });
         fam.members.forEach(m => { owed += memberExpenseShare(m, exp, trip); });
       });
       return { family: fam, paid, owed, net: paid - owed };

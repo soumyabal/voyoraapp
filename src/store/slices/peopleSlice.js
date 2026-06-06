@@ -12,6 +12,21 @@
  */
 import { uid, familyPalette } from '../../utils/helpers';
 
+// Re-home a multi-payer breakdown when payer(s) are deleted: reassign dead payers' amounts to
+// the heir (merging if the heir already paid), drop if there's no heir. Keeps Σ payments intact
+// so the split engine never leaks. Returns null when empty (so paymentsOf falls back to paidBy).
+const remapPayments = (payments, deadSet, heir) => {
+  if (!Array.isArray(payments)) return payments;
+  const merged = {};
+  payments.forEach(p => {
+    const id = deadSet.has(p.memberId) ? heir : p.memberId;
+    if (!id) return;
+    merged[id] = (merged[id] || 0) + (Number(p.amount) || 0);
+  });
+  const out = Object.entries(merged).map(([memberId, amount]) => ({ memberId, amount }));
+  return out.length ? out : null;
+};
+
 export const createPeopleSlice = (set, get) => ({
   // ── FAMILIES & TRAVELERS ─────────────────────────────────
   addFamily: (tripId, { name, members }) => set(s => {
@@ -80,6 +95,7 @@ export const createPeopleSlice = (set, get) => ({
       const expenses = t.expenses.map(e => {
         const next = { ...e };
         if (next.paidBy === memberId) next.paidBy = heir;
+        if (Array.isArray(next.payments)) next.payments = remapPayments(next.payments, new Set([memberId]), heir);
         if (Array.isArray(next.participatingMembers)) {
           const pm = next.participatingMembers.filter(id => id !== memberId);
           next.participatingMembers = pm.length ? pm : null;
@@ -119,6 +135,7 @@ export const createPeopleSlice = (set, get) => ({
         if (Array.isArray(pf) && pf.length === 0) pf = families.length ? families.map(f => f.id) : null;
         next.participatingFamilies = pf;
         if (deadIds.has(next.paidBy)) next.paidBy = heir;
+        if (Array.isArray(next.payments)) next.payments = remapPayments(next.payments, deadIds, heir);
         if (Array.isArray(next.participatingMembers)) {
           const pm = next.participatingMembers.filter(id => !deadIds.has(id));
           next.participatingMembers = pm.length ? pm : null;

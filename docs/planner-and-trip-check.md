@@ -52,49 +52,46 @@ Net loop: **add places → Trip Check lights up → Plan my day (one day) → st
 
 ---
 
-## Part 3 — Recommendation: collapse the loop into one proactive pass
+## Part 3 — Recommendation (revised per owner, June 2026): a conflict-anchored **ripple resolver**, NOT a global re-plan
 
-**Principle: diagnose and resolve *together*, trip-wide, in one reviewable pass. Trip Check becomes ambient (a passive health signal), not an action you invoke.**
+> ⚠️ **Supersedes the earlier "Plan my trip" idea.** Do NOT build a one-tap global auto-planner.
 
-### The WOW flow — "✨ Plan my trip" (one tap, whole trip)
-One primary button. It:
-1. Runs `planDay` across **every day** (loop the existing engine), then
-2. **Auto-resolves everything the engine legitimately can** (see ladder below), then
-3. Presents **ONE preview**: *"Here's your plan. I arranged N days, fixed X, and moved Y. **2 things need your call.**"* — Apply / Discard the whole thing, with the 2 decisions inline.
+### Why global auto-plan is the wrong tool (owner's hard-won experience)
+The app targets trips **up to 21 days**. A from-scratch `autoArrange`/"plan everything" pass was tried and hit **structural failure modes the engine couldn't manage**: overnight drives, a night with **no stay**, a day with **no starting point/anchor**, multi-day journeys, and more. The reason is fundamental: a global planner has to *derive all the structural scaffolding* — where you sleep each night, where each day starts, how multi-day legs connect — and on a 21-day, multi-family, multi-city trip there are too many edge cases to get right. **Rejected. Don't rebuild it.**
 
-This converts "check → fix → check → fix…" into **"plan → review → done."** Re-tapping a clean trip yields **"All set ✨"** (convergence already exists in `planDay`'s `changed` flag — extend it trip-wide), so the badge goes green and *stays*.
+### The right tool: local, incremental ripple resolution
+The user is (rightly) the author of the plan. When Trip Check flags **one** conflict and suggests a concrete nudge ("move X by ~30 min" / "X starts before you can realistically get there"), let the user accept it and have the engine **cascade only the affected, movable stops into the next available slots — preserving the user's order, honoring Travel + Open-Hour rules, and treating every structural anchor as IMMUTABLE.**
 
-### Auto-resolution ladder (what the engine resolves WITHOUT asking)
-Today these are *reported*; the upgrade is to *act* on the unambiguous ones:
-- **Re-time + re-order every day** — already done by `planDay`; just run it for all days.
-- **Redistribute overflow** — a day beyond its pace cap pushes its lowest-priority extra stop to the nearest **lighter day in the same city** (extend `autoArrange`'s basket logic to operate cross-day, respecting `ruleMultiCity`).
-- **Re-day a closed-day visit** — a venue closed on its scheduled day but open on another day of the trip → propose moving it there (the data is already in `ruleClosedVenue` + `openHours`).
-- **Fill obvious gaps** — an empty planned day with nearby high-quality Discover stops (only if the user opts in; never silent invention).
+So instead of "re-plan the trip," it's **"I nudged this one stop — now smartly re-flow the knock-on stops so the day stays feasible."**
 
-### The few REAL human decisions → decision cards, not warnings
-Whatever the engine *can't* resolve unambiguously becomes a **one-tap choice**, surfaced in the plan result (not as a vague amber pill):
-> 🔒 *"Circus World is closed Monday. **Move to Tuesday** · Keep anyway · Remove."*
+### The contract (this is the whole design)
+- **IMMUTABLE — never moved, never derived** (these are exactly the things the global planner kept getting wrong, so the resolver simply doesn't touch them): locked stops (`timeLocked`), the day's **stay / check-in**, **overnight transit**, **transport-with-a-time**, the **day-start anchor** (where you wake — `dayStartAnchor`), and **window-anchored** stops (sunrise/sunset/nightlife).
+- **MOVABLE:** the un-pinned daytime activities only.
+- **The cascade (order-preserving, NOT a re-order):** from the changed stop, walk forward in the user's **current order**; push each movable stop to `max(prevStopEnd + travelLeg(prev → this), the stop's next OPEN interval that day)`, clamped to the day's end. Keep the order the user chose — only shift *times* to feasibility. (This is the key difference from `scheduleDay`, which re-orders nearest-neighbour and can fight the user's intent.)
+- **Can't fit before it closes?** Don't cram. Surface a one-tap **decision card** — *"Doesn't fit today → move to another day · keep anyway · remove"* — reusing today's `noFitHours` signal.
+- **Preview + Apply/Discard** (reuse the `planDay` preview-diff so the user sees "moved 3 later stops" before committing), and **convergent** (re-running on an already-feasible day is a no-op).
 
-This is the inversion: **info-tips become either a silent fix or an explicit decision.** The user is never asked to go re-open a separate checker and interpret severity colours.
+### Why this is trustworthy where global wasn't
+- **Tiny, predictable blast radius** — one day, only the tail after the edit, only movable stops. No chance of inventing/dropping a stay or losing a day's anchor, because it never edits those.
+- **The user stays the author** — their order and every structural decision are preserved; the engine only relieves the tedium of re-timing the knock-on stops.
+- **Every action is conflict-anchored + explainable** — invoked on a specific flagged problem with a concrete fix; the result reads as "moved Pier and Park later to keep travel + hours feasible," not a mysterious re-plan.
 
-### What Trip Check becomes
-- Stays as the **ambient** calm pill + the detailed checker for power users — but it's the *output state* of the planner, not the thing you bounce to. After "Plan my trip," the badge should read **clear/green** because the planner already consumed the actionable warnings.
+### Where it plugs into the existing engine (the pieces already exist)
+- `geo.travelLeg` (travel feasibility) · `hours.dayIntervals`/`isOpenAt` (open-hour windows) · `slots`/`timeToMin` (slotting) · the *feasibility-sweep idea* from `comfortPass` — but applied **order-preserving and anchor-respecting**, not via `scheduleDay`'s nearest-neighbour re-order.
+- **Surface:** each Trip Check `error`/`warning` that re-timing can fix (overlap, travel-time-too-tight, a manual time edit that breaks the downstream) gets a **"Smart fix"** action → ripple → preview → apply. Soft `info` tips stay passive.
 
-### First-run aha (the retention moment)
-Open app → pre-built 2-family demo trip → **one tap "✨ Plan my trip"** → watch a beautiful, feasible, *fair* multi-day plan resolve in one motion (timings, routing, the per-family split). That single tap is the "this app is smart" moment — make it the hero of onboarding.
+### Phasing (small, shippable, test-gated)
+1. **Ripple from a manual edit** — when the user changes one stop's time and it makes the downstream infeasible (travel/hours), offer *"Shift the rest to fit"* → cascade the movable tail of that one day. The most common, most trusted case.
+2. **"Smart fix" on a Trip Check conflict** — wire the same resolver to the overlap / travel-time / no-fit warnings as a one-tap fix on the day pill.
+3. **Decision cards** for the residual (can't-fit-today, closed-that-day) — explicit one-tap choices, never silent.
+- **Explicitly out of scope:** a global "plan the whole trip" button.
 
-### Suggested phasing (each shippable, test-gated, behavior-preserving where it can be)
-1. **Trip-wide planDay** — "Plan my trip" loops `planDay` over all days into ONE preview-diff. Small; reuses the engine; unit-testable. *Biggest single UX win.*
-2. **Cross-day overflow redistribution** — move capacity overflow to lighter same-city days. Engine + tests.
-3. **Decision cards** — closed-day re-day / keep / remove as one-tap choices in the result.
-4. **Fold Trip Check into the result** — the planner's output screen shows "handled / your call / all clear"; the standalone checker recedes to a detail view.
-
-### Guardrails for whoever builds this
-- **Never let the planner touch the money/split** (the moat) — it arranges days; costs follow per-family as they do today.
-- **Keep it deterministic + golden-snapshot-gated** (`tripValidator.snapshot.test.js`, the autoArrange/planDay tests). The planner stays a rule engine, not an LLM.
-- **Auto-resolve only the unambiguous**; everything else is an explicit user choice. Never silently delete or invent.
-- This is heavy UI → build behind the tripwire and **device-verify** (see AGENTS.md "Field-tested workflow").
+### Guardrails (unchanged)
+- **Never touch the split/moat** — the resolver only re-times movable stops; costs follow per-family as today.
+- **Anchors are immutable** (stays, overnight transit, day origin, locked/window stops) — this is what keeps it from reproducing the global-planner failures.
+- **Deterministic + golden-snapshot-gated** (`tripValidator.snapshot.test.js`, autoArrange/planDay tests). Stays a rule engine, not an LLM.
+- **Only auto-move the unambiguous**; anything else is an explicit choice. Heavy UI → build behind the tripwire and **device-verify** (AGENTS.md "Field-tested workflow").
 
 ---
 
-*One line: today the user is the integration layer between a diagnostician and a per-day fixer. The win is to make the engine do that integration — one tap, whole trip, auto-resolve the unambiguous, ask once for the rest — so "plan → review → done" replaces "check ↔ fix."*
+*One line: don't re-plan the trip — when the user accepts a single nudge, let the engine ripple just the movable downstream stops into feasible (travel + open-hours) slots, leaving every structural anchor exactly where the user put it. Local, explainable, and immune to the overnight-drive / missing-stay / no-day-start failures that sank the global planner.*

@@ -8,7 +8,7 @@ import PlayTripModal from '../modals/PlayTripModal';
 import { colors, spacing, radius, typography, shadow, activityColors } from '../theme';
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
-import { fmt, fmtM, getActivityIcon, uid } from '../utils/helpers';
+import { fmt, fmtM, uid } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost } from '../utils/costs';
 import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
@@ -364,7 +364,7 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
 }
 
 export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
-  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, markPlanDayNoteSeen, setNightPlan, toggleActivityLock, ignoreWarning } = useStore();
+  const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, markPlanDayNoteSeen, setNightPlan, toggleActivityLock, ignoreWarning } = useStore();
   const [showPlayTrip,          setShowPlayTrip]          = useState(false);
   const [showAddActivity,       setShowAddActivity]       = useState(false);
   const [editActivity,          setEditActivity]          = useState(null);
@@ -379,7 +379,6 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const [snack,                 setSnack]                 = useState(null);  // undo toast
   const snackTimer = useRef(null);
   useEffect(() => () => clearTimeout(snackTimer.current), []);
-  const [reorderHint,           setReorderHint]           = useState(false);
   const [collapsedSlots,        setCollapsedSlots]        = useState({});
   const [mustDosDismissed,      setMustDosDismissed]      = useState(false);
   const [mustDosChecked,        setMustDosChecked]        = useState({});
@@ -387,20 +386,6 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const toggleSlot = (key) =>
     setCollapsedSlots(prev => ({ ...prev, [key]: !prev[key] }));
 
-  // Show a brief hint after any reorder, then auto-dismiss
-  const handleReorder = (actId, direction, slotActs) => {
-    // Swap TIME VALUES between the two adjacent activities in sorted slot order.
-    // (Swapping array positions doesn't work because rendering re-sorts by time.)
-    const idx = slotActs.findIndex(a => a.id === actId);
-    const swapIdx = idx + direction;
-    if (swapIdx < 0 || swapIdx >= slotActs.length) return;
-    const timeA = slotActs[idx].time;
-    const timeB = slotActs[swapIdx].time;
-    updateActivity(trip.id, actId, { time: timeB });
-    updateActivity(trip.id, slotActs[swapIdx].id, { time: timeA });
-    setReorderHint(true);
-    setTimeout(() => setReorderHint(false), 3000);
-  };
 
   const day = trip.days[currentDay] || trip.days[0];
 
@@ -508,10 +493,6 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     setShowDiscover(true);
   };
 
-  const cycleStatus = (act) => {
-    const next = !act.status ? 'done' : act.status === 'done' ? 'skipped' : null;
-    markActivityStatus(trip.id, act.id, next);
-  };
   // Show an undo toast after a status change; rolls back to the prior status.
   const showUndo = (message, icon, actId, prevStatus) => {
     clearTimeout(snackTimer.current);
@@ -969,14 +950,6 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           )
         )}
 
-        {/* Reorder hint — shown briefly after ↑↓ tap */}
-        {reorderHint && (
-          <View style={styles.reorderHintBar}>
-            <Text style={styles.reorderHintText}>
-              ↕ Order changed — use Check Trip in the header to verify the schedule
-            </Text>
-          </View>
-        )}
 
         {/* "Doesn't fit this day" tray — venues the planner left UNSCHEDULED because this
             day is too packed to fit them during their open hours. Loud + actionable: move
@@ -1521,7 +1494,6 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
        : act.url                       ? { url: act.url,  kind: 'web'  }
        : null)
     : null;
-  const actIcon        = getActivityIcon(act.type, act.subtype);
   const isPerFamily    = act.costMode === 'per_family';
   const isTotal        = act.costMode === 'total';
   const displayCostAmt = isPerFamily || isTotal ? act.costAmount : act.costPerPerson;

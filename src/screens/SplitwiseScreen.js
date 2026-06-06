@@ -14,7 +14,7 @@ import {
   calcFamilyExpenseTotal, calcMemberExpenseShare,
   calcTripItineraryTotal, calcBalances, calcSettlements,
 } from '../utils/costs';
-import { summariseExpenses } from '../utils/expenses';
+import { summariseExpenses, unconfirmedSplitItems } from '../utils/expenses';
 
 // Expense category emoji (stored in exp.category) → Icon name + tint
 const CAT_ICON = { '🏨': 'hotel', '✈️': 'plane', '🍽️': 'food', '🎯': 'activity', '💊': 'medkit-outline', '🚗': 'transport' };
@@ -34,6 +34,11 @@ export default function SplitwiseScreen({ trip }) {
   const tripMode = trip.splitMode || 'individual';
   const { itinExpenses, manualExpenses, itinIncluded, itinSkipped, itinTotal, manualTotal, grandTotal } = summariseExpenses(trip);
 
+  // Past activities whose split expense was never checked off — only surfaced here, on the
+  // Split tab, so non-split users never see it. Needs the wall clock (post-event check).
+  // eslint-disable-next-line react-hooks/purity -- intentional: time-aware check while the Split tab is on screen
+  const unconfirmed = unconfirmedSplitItems(trip, Date.now());
+
   const balances = calcBalances(trip);
   const settlements = calcSettlements([...balances]);
 
@@ -44,6 +49,29 @@ export default function SplitwiseScreen({ trip }) {
   return (
     <View style={{ flex: 1 }}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+
+        {/* ── Unconfirmed spend — past activities in the split that weren't checked off ── */}
+        {unconfirmed.length > 0 && (
+          <View style={styles.unconfBanner}>
+            <View style={styles.unconfHead}>
+              <Text style={styles.unconfIcon}>⚠️</Text>
+              <Text style={styles.unconfTitle}>
+                {unconfirmed.length} past {unconfirmed.length === 1 ? 'activity is' : 'activities are'} in the split but not checked off
+              </Text>
+            </View>
+            <Text style={styles.unconfSub}>
+              Confirm they happened (check them off in Plan) or remove them, so the split only divides what actually occurred.
+            </Text>
+            {unconfirmed.slice(0, 4).map(({ activity, expense, dayLabel }) => (
+              <Text key={activity.id} style={styles.unconfItem} numberOfLines={1}>
+                •  {activity.name} · {dayLabel} · {fmtM(expense.amount)}
+              </Text>
+            ))}
+            {unconfirmed.length > 4 && (
+              <Text style={styles.unconfMore}>…and {unconfirmed.length - 4} more</Text>
+            )}
+          </View>
+        )}
 
         {/* ── Split Mode Toggle ── */}
         <View style={styles.modeCard}>
@@ -813,6 +841,14 @@ function ExpenseCard({
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { padding: spacing.xxl, paddingBottom: 120 },
+  // Unconfirmed-spend banner (Split tab only) — amber, calm, never blocks settling.
+  unconfBanner: { backgroundColor: colors.warnSoft, borderRadius: radius.md, borderWidth: 1, borderColor: colors.warn, padding: spacing.md, marginBottom: spacing.lg },
+  unconfHead:   { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  unconfIcon:   { fontSize: 15 },
+  unconfTitle:  { flex: 1, ...typography.smallBold, color: colors.ink, lineHeight: 18 },
+  unconfSub:    { ...typography.caption, color: colors.body, marginTop: spacing.xs, lineHeight: 16 },
+  unconfItem:   { ...typography.caption, color: colors.body, marginTop: spacing.xs },
+  unconfMore:   { ...typography.caption, color: colors.subtle, marginTop: 2 },
 
   // Sticky footer
   stickyFooter: {

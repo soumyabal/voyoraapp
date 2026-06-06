@@ -1041,11 +1041,11 @@ function ruleCheckOutBy(trip) {
 }
 
 // ── Trip rule: a hotel booked PAST your next check-in (double-booked nights) ──
-// lodgingForNight shows per-night coverage (the latest check-in wins), but the room
-// COST is billed per stay as rate × nights — so a stay whose `nights` run past a LATER
-// hotel's check-in double-books those nights (and double-bills the room, and mislabels
-// "Night x of n"). On a hotel change, the earlier hotel should check out when the next
-// one checks in. Real + data-backed → 'warning', carrying a one-tap trim fix.
+// On a hotel change, a stay whose `nights` run past a LATER hotel's check-in reserves the
+// same night at two hotels — it mislabels "Night x of n" and (for rate × nights bookings)
+// over-states the room cost. The earlier hotel should check out when the next one checks
+// in. Real + data-backed → 'warning', carrying a one-tap trim fix (nights only — never
+// touches the stored cost, so the money path is untouched).
 function ruleHotelOverlap(trip) {
   const warnings = [];
   const days = trip?.days || [];
@@ -1066,7 +1066,7 @@ function ruleHotelOverlap(trip) {
       severity: 'warning',
       icon:     '🏨',
       title:    'Hotel booked past your next check-in',
-      message:  `${stay.name} is booked ${nights} nights, but you check into ${next.stay.name} on ${days[next.dayIndex]?.label || `Day ${next.dayIndex + 1}`} — that double-books ${over} night${over !== 1 ? 's' : ''} and the room cost.`,
+      message:  `${stay.name} is booked ${nights} nights, but you check into ${next.stay.name} on ${days[next.dayIndex]?.label || `Day ${next.dayIndex + 1}`} — so ${over === 1 ? 'a night is' : `${over} nights are`} booked at both hotels.`,
       hint:     `Trim ${stay.name} to ${trimTo} night${trimTo !== 1 ? 's' : ''} so each night is booked once.`,
       dayIndex,
       trimStayId:   stay.id,

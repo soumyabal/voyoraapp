@@ -78,6 +78,10 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
   const handleApplyFix = (w) => {
     if (w.moveActId && w.suggestedTime) {
       updateActivity(trip.id, w.moveActId, { time: w.suggestedTime });
+    } else if (w.trimStayId && w.trimToNights != null) {
+      // Hotel-overlap fix: trim the earlier stay's nights (cost is per-stay, not per-night,
+      // so the stored amount is untouched — only coverage/labels change).
+      updateActivity(trip.id, w.trimStayId, { nights: w.trimToNights });
     }
     handleIgnore(w);
   };
@@ -262,17 +266,19 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
                             <Text style={s.ignoreText}>Ignore</Text>
                           </TouchableOpacity>
 
-                          {w.impactedActivities?.length > 0 ? (
-                            // Impacted activities shown above — footer just needs Jump to day
+                          {w.trimStayId && w.trimToNights != null ? (
+                            // One-tap fix: trim the over-booked hotel to the nights actually slept
                             <TouchableOpacity
-                              onPress={() => handleNavigate(w)}
+                              onPress={() => handleApplyFix(w)}
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                               activeOpacity={0.7}
                             >
-                              <Text style={[s.navFooterText, { color: col.icon }]}>{navLabel(w)}</Text>
+                              <Text style={[s.navFooterText, { color: col.icon }]}>
+                                Trim to {w.trimToNights} night{w.trimToNights !== 1 ? 's' : ''} →
+                              </Text>
                             </TouchableOpacity>
                           ) : (
-                            // No impacted list — jump to day
+                            // Otherwise — jump to the affected day
                             <TouchableOpacity
                               onPress={() => handleNavigate(w)}
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

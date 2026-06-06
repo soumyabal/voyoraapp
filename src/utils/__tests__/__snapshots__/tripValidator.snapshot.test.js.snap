@@ -242,7 +242,7 @@ exports[`validateTrip — golden snapshots (characterization) hotelChange: full 
     "dayIndex": 0,
     "hint": "Trim Great Wolf Lodge to 1 night so each night is booked once.",
     "icon": "🏨",
-    "message": "Great Wolf Lodge is booked 2 nights, but you check into The Baywatch Resort on Day 2 — that double-books 1 night and the room cost.",
+    "message": "Great Wolf Lodge is booked 2 nights, but you check into The Baywatch Resort on Day 2 — so a night is booked at both hotels.",
     "severity": "warning",
     "title": "Hotel booked past your next check-in",
     "trimStayId": "h1",

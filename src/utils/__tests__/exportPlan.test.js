@@ -78,20 +78,22 @@ describe('buildDayHTML (day PDF)', () => {
 
   test('NO key leak in a shared file', () => noLeak(html));
 
-  test('renders a day in TIME order, not array order (late "Drive home" lands last)', () => {
-    const t = {
-      ...trip,
-      days: [{ label: 'Day 1', date: '2099-06-12', activities: [
-        { id: 'x1', type: 'transport', name: 'Drive back home', time: '18:00', costPerPerson: 0 },
-        { id: 'x2', type: 'activity',  name: 'Morning Hike',    time: '09:00', costPerPerson: 0 },
-        { id: 'x3', type: 'food',      name: 'Lunch Spot',      time: '13:00', costPerPerson: 12 },
-      ] }],
-    };
-    const out = buildHTML(t);
-    const order = ['Morning Hike', 'Lunch Spot', 'Drive back home']
-      .map(n => out.indexOf(n));
-    expect(order[0]).toBeLessThan(order[1]);   // hike before lunch
-    expect(order[1]).toBeLessThan(order[2]);   // lunch before drive home (drive home last)
+  test('renders a day strictly in timestamp order, whatever the array order or type', () => {
+    // Scrambled array order; a stop type/name carries NO ordering weight — only time does.
+    // A stopover added with a LATER time than the drive must render AFTER it (not "drive = last").
+    const acts = [
+      { id: 'x1', type: 'transport', name: 'Drive back home', time: '18:00', costPerPerson: 0 },
+      { id: 'x2', type: 'activity',  name: 'Morning Hike',    time: '09:00', costPerPerson: 0 },
+      { id: 'x3', type: 'food',      name: 'Dinner Stopover', time: '20:00', costPerPerson: 30 },
+      { id: 'x4', type: 'food',      name: 'Lunch Spot',      time: '13:00', costPerPerson: 12 },
+    ];
+    const out = buildHTML({ ...trip, days: [{ label: 'Day 1', date: '2099-06-12', activities: acts }] });
+
+    const expected = acts.slice().map(a => a.name)
+      .sort((p, q) => acts.find(a => a.name === p).time.localeCompare(acts.find(a => a.name === q).time));
+    const rendered = acts.map(a => a.name).sort((p, q) => out.indexOf(p) - out.indexOf(q));
+    expect(rendered).toEqual(expected);                 // exact ascending-time order
+    expect(rendered[rendered.length - 1]).toBe('Dinner Stopover'); // later stopover, not the drive, is last
   });
 });
 

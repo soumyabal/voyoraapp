@@ -59,6 +59,38 @@ export function summariseExpenses(trip) {
   };
 }
 
+/**
+ * Past activities that have a (non-excluded) itinerary expense in the split but were never
+ * checked off — i.e. money that will be divided for something we can't confirm happened.
+ * Surfaced ONLY on the Split tab (so non-split users never see it). TIME-AWARE: only events
+ * whose end has passed `now` (ms) — never future ones. Pure: the caller passes `now` so it
+ * stays testable. 'skipped' is excluded (already decided), 'done' is confirmed.
+ * Returns [{ activity, expense, dayIndex, dayLabel }].
+ */
+export function unconfirmedSplitItems(trip, now) {
+  if (now == null) return [];
+  const linked = new Map();
+  (trip.expenses || [])
+    .filter(e => e.source === 'itinerary' && e.activityId && !e.excluded)
+    .forEach(e => linked.set(e.activityId, e));
+  if (linked.size === 0) return [];
+  const out = [];
+  (trip.days || []).forEach((day, i) => {
+    (day.activities || []).forEach(act => {
+      if (act.status === 'done' || act.status === 'skipped') return;
+      const expense = linked.get(act.id);
+      if (!expense) return;
+      // Event end = start time + its duration (or end-of-day when it has no time). Only
+      // flag once it's actually over — no nagging about things that haven't happened yet.
+      const end = new Date(`${day.date}T${act.time || '23:59'}:00`);
+      if (act.time) end.setMinutes(end.getMinutes() + (act.durationMins || 0));
+      if (Number.isNaN(end.getTime()) || end.getTime() > now) return;
+      out.push({ activity: act, expense, dayIndex: i, dayLabel: day.label });
+    });
+  });
+  return out;
+}
+
 /** Rebuild a trip's itinerary expenses from its costed activities. Manual
  *  expenses (source !== 'itinerary') are preserved. */
 export function rebuildItineraryExpenses(t) {

@@ -443,6 +443,17 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     const slotKey = getSlotKey(openMin != null ? minToTime(openMin) : '10:00');
     updateActivity(trip.id, act.id, { time: getSuggestedTime(trip, dayIdx, slotKey, need, act.openHours) });
   };
+  // Keep an unscheduled (didn't-fit-hours) stop on THIS day anyway — give it a time (its open
+  // hour today, else noon) so it leaves the "doesn't fit" tray and becomes a normal card. The
+  // user accepts the imperfect fit; Trip Check notes it softly. Undo restores it to unscheduled.
+  const keepOnDay = (act) => {
+    const d = trip.days[currentDay];
+    const iv = dayIntervals(act.openHours, weekdayOf(d?.date));
+    const start = (iv && iv.length) ? iv[0].o : 12 * 60;
+    updateActivity(trip.id, act.id, { time: minToTime(start) });
+    showUndoAction(`Kept ${(act.name || 'stop').slice(0, 24)} on ${d?.label || 'this day'}`, 'checkmark-circle',
+      () => updateActivity(trip.id, act.id, { time: null }));
+  };
 
   // ── "How's tonight handled?" — resolve a hotel-less night politely ──────────
   const openNightPlan = (dayIdx) => setNightPlanDay(dayIdx);
@@ -963,30 +974,36 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                 🗓️  {unfit.length === 1 ? "1 stop doesn’t fit this day" : `${unfit.length} stops don’t fit this day`}
               </Text>
               <Text style={styles.noFitSub}>
-                This day is too packed to fit {unfit.length === 1 ? 'it' : 'them'} during open hours — move to another day.
+                Too packed to fit {unfit.length === 1 ? 'it' : 'them'} during open hours — for each, move it to a day with room, keep it here anyway, or remove it.
               </Text>
               {unfit.map(a => {
                 // Confident one-tap target: a day whose open hours genuinely have room.
                 const best = suggestDayForVenue(trip, a, { excludeDayIndex: currentDay }).best;
                 return (
                   <View key={a.id} style={styles.noFitRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.noFitName} numberOfLines={1}>{a.name}</Text>
-                      {!!a.openHours && (
-                        <Text style={styles.noFitHours}>Open {hoursLabel(a.openHours, weekdayOf(day.date))}</Text>
-                      )}
-                    </View>
-                    {best != null ? (
-                      <TouchableOpacity style={styles.noFitMoveBtn} onPress={() => moveUnfitTo(a, best)} activeOpacity={0.85}>
-                        <Icon name="calendar" size={13} color="#fff" />
-                        <Text style={styles.noFitMoveText}>Move to {trip.days[best]?.label || `Day ${best + 1}`}</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity style={styles.noFitMoveBtn} onPress={() => setMovingAct(a)} activeOpacity={0.85}>
-                        <Icon name="calendar" size={13} color="#fff" />
-                        <Text style={styles.noFitMoveText}>Move to a day</Text>
-                      </TouchableOpacity>
+                    <Text style={styles.noFitName} numberOfLines={1}>{a.name}</Text>
+                    {!!a.openHours && (
+                      <Text style={styles.noFitHours}>Open {hoursLabel(a.openHours, weekdayOf(day.date))}</Text>
                     )}
+                    <View style={styles.noFitActions}>
+                      {best != null ? (
+                        <TouchableOpacity style={styles.noFitMoveBtn} onPress={() => moveUnfitTo(a, best)} activeOpacity={0.85}>
+                          <Icon name="calendar" size={13} color="#fff" />
+                          <Text style={styles.noFitMoveText}>Move to {trip.days[best]?.label || `Day ${best + 1}`}</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity style={styles.noFitMoveBtn} onPress={() => setMovingAct(a)} activeOpacity={0.85}>
+                          <Icon name="calendar" size={13} color="#fff" />
+                          <Text style={styles.noFitMoveText}>Move to a day…</Text>
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity style={styles.noFitGhostBtn} onPress={() => keepOnDay(a)} activeOpacity={0.7}>
+                        <Text style={styles.noFitGhostText}>Keep</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.noFitGhostBtn} onPress={() => deleteWithUndo(a)} activeOpacity={0.7}>
+                        <Text style={styles.noFitGhostText}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 );
               })}
@@ -2670,11 +2687,14 @@ const styles = StyleSheet.create({
   },
   noFitTitle: { ...typography.bodyBold, color: '#92400e' },
   noFitSub:   { ...typography.caption, color: '#a16207', marginTop: 2, marginBottom: spacing.sm },
-  noFitRow:   { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 6, borderTopWidth: 1, borderTopColor: '#fef3c7' },
+  noFitRow:   { paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#fef3c7' },
   noFitName:  { ...typography.body, color: colors.text, fontWeight: '700' },
   noFitHours: { ...typography.caption, color: colors.subtle, marginTop: 1 },
+  noFitActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: 8 },
   noFitMoveBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#d97706', borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 7 },
   noFitMoveText: { color: '#fff', fontWeight: '800', fontSize: 12.5 },
+  noFitGhostBtn: { borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 7, borderWidth: 1, borderColor: '#fcd34d' },
+  noFitGhostText: { color: '#a16207', fontWeight: '800', fontSize: 12.5 },
   reorderHintBar: {
     marginHorizontal: spacing.xxl,
     marginBottom: spacing.sm,

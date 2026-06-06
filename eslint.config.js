@@ -52,4 +52,17 @@ module.exports = [
       'react-hooks/set-state-in-effect': 'warn',
     },
   },
+  {
+    // Local build/codegen scripts (gen-music.js, gen-icon.js) run in Node/CommonJS, not the
+    // RN/browser runtime — declare the Node globals so require/module/__dirname/Buffer aren't
+    // flagged as no-undef.
+    files: ['scripts/**/*.js'],
+    languageOptions: {
+      globals: {
+        require: 'readonly', module: 'writable', exports: 'writable',
+        __dirname: 'readonly', __filename: 'readonly',
+        process: 'readonly', Buffer: 'readonly', console: 'readonly',
+      },
+    },
+  },
 ];

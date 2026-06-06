@@ -1,5 +1,11 @@
 # Voyara — Product Roadmap, GTM & Path to 10
 
+> **📍 For CURRENT status, the decision log, and the market analysis, start at
+> [`state-of-kithova.md`](state-of-kithova.md) — the living doc.** This file is the deeper reference
+> (GTM, phases, the §12 fundraising model); where the two disagree, the living doc wins (it's newer).
+> Note: parts of §11 below (live "Today"/day-tracking) are **superseded** — see the living doc's
+> decision log.
+>
 > The single source of truth for *where the product stands*, *where it's going*, and *what to ship when*.
 > Synthesized from a multi-panel review (product strategist · staff engineer · travel-itinerary architect · growth/GTM).
 > Pairs with [`engine-architecture.md`](./engine-architecture.md) (the *how it's built*) and
@@ -179,6 +185,11 @@ Ordered by ROI; each gated by the existing golden snapshots where it touches the
 ---
 
 ## 11. Trip lifecycle (before / during / after) + notifications
+
+> **⚠️ Partly superseded.** We dropped **live in-itinerary day-tracking** (the "Today" screen /
+> now-next / day-locking in steps 2–3 below). The itinerary is now **phase-agnostic** — move any
+> activity on any day regardless of trip phase. We kept only *trip-level* phase (Home grouping +
+> the eventual settle-up nudge). See [`state-of-kithova.md`](state-of-kithova.md) §3 for the why.
 
 Triggered by a real user report ("a not-started trip showed me Day 2"). Root cause: the app had **no concept of trip status** — `currentDay` was a single global, persisted, non-date-aware index. **Fixed** (`5494ea3`): a date-derived phase (`tripPhase`) now lands every trip on the right day (`defaultDayFor`). That fix is the foundation for the bigger opportunity below — the panel's strongest "go-to travel app" insight.
 

@@ -44,8 +44,8 @@ export default function SplitwiseScreen({ trip }) {
   const settlements = calcSettlements([...balances]);
 
   const modeLabel = tripMode === 'family'
-    ? 'Equal share per group — like insurance (group head covers dependents)'
-    : 'Equal share per person — great for groups of individuals';
+    ? 'Each group splits equally by default — open any expense to set custom amounts (e.g. Airbnb by room)'
+    : 'Equal share per person by default — open any expense to set custom amounts';
 
   return (
     <View style={{ flex: 1 }}>
@@ -120,7 +120,7 @@ export default function SplitwiseScreen({ trip }) {
             <View style={{ flex: 1 }}>
               <Text style={styles.headTipTitle}>How &quot;By Group&quot; works</Text>
               <Text style={styles.headTipBody}>
-                Each family pays an equal share regardless of size. The family head (first member) carries the balance — others in the family show $0 owed. Change the head in the People tab or by tapping a member in Balances below.
+                By default each family pays an equal share regardless of size, and the family head (first member) carries the balance (others show $0 owed). That&apos;s only the default — open any expense and choose Custom to split it unevenly (e.g. an Airbnb where families paid different amounts by room). Change the head in the People tab or by tapping a member in Balances below.
               </Text>
             </View>
             <TouchableOpacity onPress={() => setHeadTipDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>

@@ -1,4 +1,4 @@
-import { deviceTz, zonedNowDate, zonedNowMinutes, tzForDay, zonedWallToUtcMs, offsetMinutes, zoneShortLabel } from './tz';
+import { deviceTz, zonedNowDate, zonedNowMinutes, tzForDay, tzForCoords, zonedWallToUtcMs, offsetMinutes, zoneShortLabel } from './tz';
 
 // Generate a short random ID
 export function uid() {
@@ -234,6 +234,8 @@ export function openFocusFor(trip, nowMs = Date.now()) {
  * vs 'PST') ONLY when the day's wall-clock offset differs from the traveler's home zone. Same
  * offset as home (a domestic trip) → '' (no badge, stays clean). Compares OFFSETS not names, so
  * two zones that happen to share an offset don't show a pointless badge. '' if zones unknown.
+ * (Superseded in the UI by resolveDayZones, which also handles zone-spanning travel days; kept
+ * for its unit tests + as the simple single-zone helper.)
  */
 export function dayZoneLabel(trip, dayIndex) {
   const home  = trip?.homeTz || deviceTz();
@@ -243,6 +245,58 @@ export function dayZoneLabel(trip, dayIndex) {
   const ms = zonedWallToUtcMs(date, '12:00', dayTz);
   if (offsetMinutes(dayTz, ms) === offsetMinutes(home, ms)) return '';
   return zoneShortLabel(dayTz, date, '12:00');
+}
+
+const _tMin = (t) => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+
+// The zone carried INTO a day = the last located stop's zone across all earlier days (time
+// order), so a location-less morning inherits where you ended up yesterday. Falls back to the
+// trip default / home / device when nothing earlier is located.
+function _zoneCarriedInto(trip, dayIndex) {
+  let carry = trip?.defaultTz || trip?.homeTz || deviceTz() || null;
+  for (let i = 0; i < dayIndex; i++) {
+    const acts = (trip?.days?.[i]?.activities || [])
+      .filter(a => a.time).slice().sort((a, b) => _tMin(a.time) - _tMin(b.time));
+    for (const a of acts) if (a.lat != null && a.lng != null) carry = tzForCoords(a.lat, a.lng) || carry;
+  }
+  return carry;
+}
+
+/**
+ * Per-day timezone resolution for the itinerary (the "smart" display). Each timed activity takes
+ * the zone of ITS OWN location (offline tzForCoords); a location-less activity inherits the
+ * previous activity's zone in trip time-order (carrying across days). Then:
+ *   - day stays in ONE zone → { dayBadge } (the single chip), shown only when ≠ home;
+ *   - day SPANS zones (a travel day, e.g. Chicago→Traverse City crosses CST→EST) → no day badge,
+ *     and { zoneById } tags each activity with its own zone so the crossover is explicit.
+ * Pure (uses tzForCoords/Intl); compares OFFSETS so equal-offset zones don't split a day.
+ * Returns { spans, dayBadge, zoneById }.
+ */
+export function resolveDayZones(trip, dayIndex) {
+  const day  = trip?.days?.[dayIndex];
+  const date = day?.date;
+  const home = trip?.homeTz || deviceTz();
+  const acts = (day?.activities || [])
+    .filter(a => a.time && a.status !== 'skipped').slice().sort((a, b) => _tMin(a.time) - _tMin(b.time));
+
+  let carry = _zoneCarriedInto(trip, dayIndex);
+  const zoneOf = {};
+  for (const a of acts) {
+    if (a.lat != null && a.lng != null) carry = tzForCoords(a.lat, a.lng) || carry;
+    zoneOf[a.id] = carry;
+  }
+  const offAt = (tz) => (tz && date) ? offsetMinutes(tz, zonedWallToUtcMs(date, '12:00', tz)) : null;
+  const homeOff = offAt(home);
+  const distinct = [...new Set(acts.map(a => offAt(zoneOf[a.id])))];
+
+  if (distinct.length > 1) {
+    const zoneById = {};
+    for (const a of acts) zoneById[a.id] = zoneShortLabel(zoneOf[a.id], date, '12:00');
+    return { spans: true, dayBadge: '', zoneById };
+  }
+  const tz = zoneOf[acts[0]?.id] || carry;
+  const badge = (offAt(tz) != null && homeOff != null && offAt(tz) !== homeOff) ? zoneShortLabel(tz, date, '12:00') : '';
+  return { spans: false, dayBadge: badge, zoneById: {} };
 }
 
 export function nowNextOf(day, nowMin) {

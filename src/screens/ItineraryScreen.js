@@ -14,7 +14,7 @@ import { colors, spacing, radius, typography, shadow, activityColors } from '../
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
 import ConfettiBurst from '../components/ui/ConfettiBurst';
-import { fmt, fmtM, uid, checkOutOf, dayZoneLabel } from '../utils/helpers';
+import { fmt, fmtM, uid, checkOutOf, resolveDayZones } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost } from '../utils/costs';
 import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
@@ -464,6 +464,10 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     () => (warningsByDay[currentDay] || []).slice().sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity]),
     [warningsByDay, currentDay]
   );
+
+  // Per-day timezone resolution: a single day badge for a one-zone day, or per-activity zone
+  // tags when the day spans zones (a travel day). Drives both the header chip + the card eyebrows.
+  const dayZones = React.useMemo(() => resolveDayZones(trip, currentDay), [trip, currentDay]);
 
   const handlePush = () => { pushItineraryToSplitwise(trip.id); switchTab('splitwise'); };
 
@@ -980,17 +984,15 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             they don't compete with the left-anchored day-status pill below). */}
         {day && (
           <View style={styles.dayHeader}>
-            {/* Zone badge — shown only when this day's offset differs from home (an abroad/
-                cross-zone trip); DST-correct for the day's date. Single-zone trips stay clean. */}
-            {(() => {
-              const zl = dayZoneLabel(trip, currentDay);
-              return zl ? (
-                <View style={styles.zoneChip} accessibilityRole="text"
-                  accessibilityLabel={`Times this day are shown in ${zl}`}>
-                  <Text style={styles.zoneChipText}>🕘 {zl}</Text>
-                </View>
-              ) : null;
-            })()}
+            {/* Zone badge — one chip when the whole day is in a single away-zone (DST-correct for
+                the date). A zone-SPANNING travel day shows no badge; each activity carries its own
+                zone instead (see the eyebrow). Single-zone home days stay clean. */}
+            {!!dayZones.dayBadge && (
+              <View style={styles.zoneChip} accessibilityRole="text"
+                accessibilityLabel={`Times this day are shown in ${dayZones.dayBadge}`}>
+                <Text style={styles.zoneChipText}>🕘 {dayZones.dayBadge}</Text>
+              </View>
+            )}
             <View style={styles.dayHeaderActions}>
               {!!dayRouteUrl && (
                 <TouchableOpacity style={styles.routeBtn} onPress={openDayRoute} activeOpacity={0.85}>
@@ -1216,6 +1218,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                             activity={act}
                             trip={trip}
                             dayDate={day.date}
+                            zoneLabel={dayZones.zoneById[act.id]}
                             originStop={prev}
                             isHighlighted={highlightedActIds.includes(act.id)}
                             isFirst={index === 0}
@@ -1567,7 +1570,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   );
 }
 
-function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onEdit, onDelete, onMoveRequest, onSlotMove, onToggleLock, onExploreNearby }) {
+function ActivityCard({ activity: act, trip, dayDate, zoneLabel, originStop, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onEdit, onDelete, onMoveRequest, onSlotMove, onToggleLock, onExploreNearby }) {
   const status    = act.status ?? null;
   const isDone    = status === 'done';
   const isSkipped = status === 'skipped';
@@ -1743,6 +1746,7 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
             {!dimmed && (
               <Text style={styles.actEyebrow} numberOfLines={1}>
                 <Text style={styles.actEyebrowTime}>{act.time}</Text>
+                {zoneLabel ? <Text style={styles.actEyebrowZone}> {zoneLabel}</Text> : null}
                 {act.timeLocked ? '  🔒' : ''}
                 {act.type === 'transport' && !!act.arriveTime ? ` → ${act.arriveTime}` : ''}
                 {durationLabel ? `  ·  ~${durationLabel}` : ''}
@@ -2720,6 +2724,7 @@ const styles = StyleSheet.create({
   thumbBookBadge:{ backgroundColor: colors.accent },
   actEyebrow:    { ...typography.caption, color: colors.subtle, marginBottom: 1 },
   actEyebrowTime:{ color: colors.primary, fontWeight: '800' },
+  actEyebrowZone:{ color: colors.smart, fontWeight: '800' },
   actTimeCol:    { alignItems: 'center', justifyContent: 'center', minWidth: 44 },
   actThumb:      { width: 38, height: 38, borderRadius: 9, marginTop: 5, backgroundColor: colors.surface2 },
   actTime:       { ...typography.caption, color: colors.primary, fontWeight: '700' },

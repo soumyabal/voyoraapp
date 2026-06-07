@@ -1037,15 +1037,9 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             they don't compete with the left-anchored day-status pill below). */}
         {day && (
           <View style={styles.dayHeader}>
-            {/* Zone badge — one chip when the whole day is in a single away-zone (DST-correct for
-                the date). A zone-SPANNING travel day shows no badge; each activity carries its own
-                zone instead (see the eyebrow). Single-zone home days stay clean. */}
-            {!!dayZones.dayBadge && (
-              <View style={styles.zoneChip} accessibilityRole="text"
-                accessibilityLabel={`Times this day are shown in ${dayZones.dayBadge}`}>
-                <Text style={styles.zoneChipText}>🕘 {dayZones.dayBadge}</Text>
-              </View>
-            )}
+            {/* Each activity carries its own zone label in its eyebrow (see ActivityCard) — shown
+                consistently on every stop, so a single-zone trip is never blank next to a
+                zone-crossing one. No day-level chip. */}
             <View style={styles.dayHeaderActions}>
               {!!dayRouteUrl && (
                 <TouchableOpacity style={styles.routeBtn} onPress={openDayRoute} activeOpacity={0.85}>
@@ -2401,9 +2395,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   dayHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  // Timezone badge (left of the day-header actions; only shown when the day differs from home).
-  zoneChip: { marginRight: 'auto', flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.full, backgroundColor: colors.smartSoft },
-  zoneChipText: { ...typography.caption, color: colors.smartDeep, fontWeight: '800' },
   addActBtn: {
     flexDirection: 'row',
     alignItems: 'center',

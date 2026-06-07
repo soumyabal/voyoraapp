@@ -126,39 +126,28 @@ describe('dayZoneLabel — badge only when the day differs from home', () => {
   });
 });
 
-describe('resolveDayZones — smart per-day vs per-activity timezone', () => {
-  const CHI = { lat: 41.88, lng: -87.63 };   // America/Chicago (CDT in summer)
-  const TVC = { lat: 44.76, lng: -85.62 };   // Traverse City, America/Detroit (EDT in summer)
+describe('resolveDayZones — a zone label on EVERY stop (consistent, never blank)', () => {
+  const CHI = { lat: 41.88, lng: -87.63 };   // Chicago, America/Chicago (CDT in summer)
+  const TVC = { lat: 44.76, lng: -85.62 };   // Traverse City MI, America/Detroit (EDT in summer)
+  const MKE = { lat: 43.04, lng: -87.91 };   // Milwaukee WI, America/Chicago (CDT) — same zone as Chicago
+  const z = (t, i = 0) => resolveDayZones(t, i).zoneById;
 
-  test('single away-zone day → one day badge, no per-activity tags', () => {
-    // Home Chicago; whole day in Traverse City (Eastern).
-    const t = { homeTz: 'America/Chicago', days: [{ date: '2026-07-11', activities: [
-      { id: 'a', time: '09:00', ...TVC }, { id: 'b', time: '13:00', ...TVC },
-    ] }] };
-    const r = resolveDayZones(t, 0);
-    expect(r.spans).toBe(false);
-    expect(r.dayBadge).toBe('EDT');
-    expect(r.zoneById).toEqual({});
-  });
-
-  test('domestic same-zone day → no badge, no tags', () => {
-    const t = { homeTz: 'America/Chicago', days: [{ date: '2026-07-11', activities: [
-      { id: 'a', time: '09:00', ...CHI },
-    ] }] };
-    expect(resolveDayZones(t, 0)).toEqual({ spans: false, dayBadge: '', zoneById: {} });
-  });
-
-  test('travel day (Chicago → Traverse City) → spans, per-activity zones, no day badge', () => {
+  test('Chicago → Michigan travel day: each stop carries its own zone', () => {
     const t = { homeTz: 'America/Chicago', days: [{ date: '2026-07-11', activities: [
       { id: 'breakfast', time: '09:00', ...CHI },
       { id: 'drive',     time: '11:00', ...CHI },
       { id: 'checkin',   time: '14:00', ...TVC },
       { id: 'dinner',    time: '18:00', ...TVC },
     ] }] };
-    const r = resolveDayZones(t, 0);
-    expect(r.spans).toBe(true);
-    expect(r.dayBadge).toBe('');
-    expect(r.zoneById).toEqual({ breakfast: 'CDT', drive: 'CDT', checkin: 'EDT', dinner: 'EDT' });
+    expect(z(t)).toEqual({ breakfast: 'CDT', drive: 'CDT', checkin: 'EDT', dinner: 'EDT' });
+  });
+
+  test('Chicago → Wisconsin (same zone) still shows CDT on each — no more blank (the bug)', () => {
+    const t = { homeTz: 'America/Chicago', days: [{ date: '2026-07-11', activities: [
+      { id: 'a', time: '09:00', ...CHI },
+      { id: 'b', time: '14:00', ...MKE },
+    ] }] };
+    expect(z(t)).toEqual({ a: 'CDT', b: 'CDT' });
   });
 
   test('a location-less manual activity inherits the previous activity\'s zone', () => {
@@ -166,9 +155,7 @@ describe('resolveDayZones — smart per-day vs per-activity timezone', () => {
       { id: 'checkin', time: '14:00', ...TVC },
       { id: 'walk',    time: '16:00' },              // no coords → inherits EDT
     ] }] };
-    const r = resolveDayZones(t, 0);
-    // both EDT → single zone → badge, no per-activity tags
-    expect(r).toEqual({ spans: false, dayBadge: 'EDT', zoneById: {} });
+    expect(z(t)).toEqual({ checkin: 'EDT', walk: 'EDT' });
   });
 
   test('carries the zone across days: a location-less day inherits yesterday\'s last zone', () => {
@@ -176,7 +163,7 @@ describe('resolveDayZones — smart per-day vs per-activity timezone', () => {
       { date: '2026-07-11', activities: [{ id: 'x', time: '14:00', ...TVC }] },   // ends in Eastern
       { date: '2026-07-12', activities: [{ id: 'y', time: '10:00' }] },           // no coords → Eastern
     ] };
-    expect(resolveDayZones(t, 1).dayBadge).toBe('EDT');
+    expect(z(t, 1)).toEqual({ y: 'EDT' });
   });
 });
 

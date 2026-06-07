@@ -279,31 +279,20 @@ function _activityZones(trip, dayIndex) {
 }
 
 /**
- * Per-day timezone resolution for the itinerary (the "smart" display). Each timed activity takes
- * the zone of ITS OWN location (offline tzForCoords); a location-less activity inherits the
- * previous activity's zone in trip time-order (carrying across days). Then:
- *   - day stays in ONE zone → { dayBadge } (the single chip), shown only when ≠ home;
- *   - day SPANS zones (a travel day, e.g. Chicago→Traverse City crosses CST→EST) → no day badge,
- *     and { zoneById } tags each activity with its own zone so the crossover is explicit.
- * Pure (uses tzForCoords/Intl); compares OFFSETS so equal-offset zones don't split a day.
- * Returns { spans, dayBadge, zoneById }.
+ * Per-day timezone resolution for the itinerary: a zone label for EVERY timed stop. Each takes
+ * the zone of ITS OWN location (offline tzForCoords); a location-less stop inherits the previous
+ * activity's zone in trip time-order (carrying across days). The label is the DST-correct short
+ * abbreviation for the day's date (CDT vs CST). Shown on every activity — consistently, never
+ * suppressed — because a single trip-level badge confused (a Chicago→Wisconsin trip is all CDT
+ * and read as "blank" next to a Chicago→Michigan trip that crosses into EDT). '' for any stop
+ * whose zone can't be resolved (no Intl/coords). Returns { zoneById }.
  */
 export function resolveDayZones(trip, dayIndex) {
   const date = trip?.days?.[dayIndex]?.date;
-  const home = trip?.homeTz || deviceTz();
-  const { acts, zoneOf, carry } = _activityZones(trip, dayIndex);
-  const offAt = (tz) => (tz && date) ? offsetMinutes(tz, zonedWallToUtcMs(date, '12:00', tz)) : null;
-  const homeOff = offAt(home);
-  const distinct = [...new Set(acts.map(a => offAt(zoneOf[a.id])))];
-
-  if (distinct.length > 1) {
-    const zoneById = {};
-    for (const a of acts) zoneById[a.id] = zoneShortLabel(zoneOf[a.id], date, '12:00');
-    return { spans: true, dayBadge: '', zoneById };
-  }
-  const tz = zoneOf[acts[0]?.id] || carry;
-  const badge = (offAt(tz) != null && homeOff != null && offAt(tz) !== homeOff) ? zoneShortLabel(tz, date, '12:00') : '';
-  return { spans: false, dayBadge: badge, zoneById: {} };
+  const { acts, zoneOf } = _activityZones(trip, dayIndex);
+  const zoneById = {};
+  for (const a of acts) zoneById[a.id] = zoneShortLabel(zoneOf[a.id], date, '12:00');
+  return { zoneById };
 }
 
 /**

@@ -28,10 +28,14 @@
 >   day header ONLY when the day's offset differs from home; compares OFFSETS not names; uses the
 >   day's own date so it's DST-correct (EDT↔EST). Single-zone trips stay clean.
 >
-> Still TODO Phase 2: **travel-leg arrival labels** ("lands 2:00 PM EDT · 5h", red-eye/+1-day) —
-> needs per-stop/leg zone data, i.e. **Phase 2c per-day tz inference** (derive `day.tz` from each
-> day's located stops via `tzForCoords`, so multi-city trips show the right zone per day + the
-> badge varies across the trip). Device-verified; degrades gracefully without `Intl` timeZone.
+> - **Per-day zone inference (Phase 2c)** — `tzForDay` now derives a day's zone from its first
+>   located stop's coords (offline `tzForCoords`), so a cross-zone trip lights up automatically
+>   even when `defaultTz` = home (the origin=home case), and multi-city trips vary by day. Order:
+>   day.tz override → inferred-from-stops → defaultTz → homeTz → device.
+>
+> Still TODO Phase 2: **travel-leg arrival labels** ("lands 2:00 PM EDT · 5h", red-eye/+1-day) +
+> an optional **manual zone picker** on Edit Trip. Device-verified; degrades gracefully without
+> `Intl` timeZone.
 
 ---
 

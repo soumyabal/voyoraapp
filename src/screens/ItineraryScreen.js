@@ -1581,6 +1581,9 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
        : act.url                       ? { url: act.url,  kind: 'web'  }
        : null)
     : null;
+  // Photo-forward: when a live card has a place photo, show it as a full-bleed hero at the
+  // top (the lead column then carries the type icon, not a duplicate thumbnail).
+  const heroPhoto      = !!act.photo && !dimmed;
   const isPerFamily    = act.costMode === 'per_family';
   const isTotal        = act.costMode === 'total';
   const displayCostAmt = isPerFamily || isTotal ? act.costAmount : act.costPerPerson;
@@ -1641,11 +1644,36 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
             isHighlighted && styles.actCardHighlighted,
           ]}
         >
+        {/* ── Hero photo (photo-forward): the place's picture, full-bleed at the top. ONE tap
+            target — a hotel opens Booking.com (the revenue link), everything else its website. */}
+        {heroPhoto && (
+          thumbAction ? (
+            <TouchableOpacity activeOpacity={0.9} onPress={handleThumbPress}
+              accessibilityRole="link"
+              accessibilityLabel={thumbAction.kind === 'book' ? `Book ${act.name || 'this stay'}` : `${act.name || 'this place'} website`}
+              accessibilityHint={thumbAction.kind === 'book' ? 'Opens Booking.com in your browser' : 'Opens the website in your browser'}>
+              <Image source={{ uri: refreshPhotoKey(act.photo) }} style={styles.actHero} />
+              <View style={[styles.heroBadge, thumbAction.kind === 'book' && styles.thumbBookBadge]} pointerEvents="none">
+                <Icon name={thumbAction.kind === 'book' ? 'bed-outline' : 'open-outline'} size={12} color="#fff" />
+                <Text style={styles.heroBadgeText}>{thumbAction.kind === 'book' ? 'Book' : 'Website'}</Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <Image source={{ uri: refreshPhotoKey(act.photo) }} style={styles.actHero} />
+          )
+        )}
+
+        <View style={styles.actCardRow}>
         {/* ── Leading thumbnail: place photo · tinted type icon — ALWAYS shown, even when
             done/skipped (done state is the single corner checkbox, not a glyph here). When
-            live & openable it's ONE tap target (hotel → Booking.com, else → website). */}
+            live & openable it's ONE tap target (hotel → Booking.com, else → website).
+            With a hero above, this becomes just the tinted type icon (no duplicate photo). */}
         <View style={styles.actLead}>
-          {thumbAction ? (
+          {heroPhoto ? (
+            <View style={[styles.actLeadIcon, { backgroundColor: (activityColors[act.type] || colors.muted) + '1A' }]}>
+              <Icon name={ACT_ICON[act.type] || 'activity'} size={22} color={activityColors[act.type] || colors.subtle} />
+            </View>
+          ) : thumbAction ? (
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={handleThumbPress}
@@ -1851,6 +1879,7 @@ function ActivityCard({ activity: act, trip, dayDate, originStop, isHighlighted,
             </TouchableOpacity>
           )}
         </View>
+        </View>{/* end actCardRow */}
         </View>{/* end actCard */}
 
         {/* ── Action buttons (revealed when card scrolls left): Move · Delete ──
@@ -2577,16 +2606,31 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   actCard: {
-    flexDirection: 'row',
+    // Column wrapper so a full-bleed hero photo can sit above the content row.
+    flexDirection: 'column',
     alignItems: 'stretch',
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: colors.border,
     borderLeftWidth: 4,
+  },
+  // The content row (lead · body · done) — padding lives here now, so the hero is edge-to-edge.
+  actCardRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     gap: spacing.sm,
   },
+  // Photo-forward hero — the place's picture, full-bleed at the top of the card.
+  actHero: { width: '100%', height: 150, backgroundColor: colors.surface2 },
+  heroBadge: {
+    position: 'absolute', right: spacing.sm, bottom: spacing.sm,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: radius.full,
+    paddingHorizontal: 9, paddingVertical: 4,
+  },
+  heroBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   actCardNote:    { backgroundColor: colors.yellowLight, borderColor: '#f0d080' },
   actCardDone:    { backgroundColor: '#f0fdf4', borderLeftColor: '#22c55e', borderColor: '#bbf7d0' },
   actCardSkipped: { backgroundColor: '#fef2f2', borderLeftColor: '#ef4444', borderColor: '#fecaca' },

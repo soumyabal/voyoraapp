@@ -14,7 +14,7 @@ import { colors, spacing, radius, typography, shadow, activityColors } from '../
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
 import ConfettiBurst from '../components/ui/ConfettiBurst';
-import { fmt, fmtM, uid, checkOutOf } from '../utils/helpers';
+import { fmt, fmtM, uid, checkOutOf, dayZoneLabel } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost } from '../utils/costs';
 import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
@@ -980,6 +980,17 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             they don't compete with the left-anchored day-status pill below). */}
         {day && (
           <View style={styles.dayHeader}>
+            {/* Zone badge — shown only when this day's offset differs from home (an abroad/
+                cross-zone trip); DST-correct for the day's date. Single-zone trips stay clean. */}
+            {(() => {
+              const zl = dayZoneLabel(trip, currentDay);
+              return zl ? (
+                <View style={styles.zoneChip} accessibilityRole="text"
+                  accessibilityLabel={`Times this day are shown in ${zl}`}>
+                  <Text style={styles.zoneChipText}>🕘 {zl}</Text>
+                </View>
+              ) : null;
+            })()}
             <View style={styles.dayHeaderActions}>
               {!!dayRouteUrl && (
                 <TouchableOpacity style={styles.routeBtn} onPress={openDayRoute} activeOpacity={0.85}>
@@ -2324,6 +2335,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   dayHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Timezone badge (left of the day-header actions; only shown when the day differs from home).
+  zoneChip: { marginRight: 'auto', flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.full, backgroundColor: colors.smartSoft },
+  zoneChipText: { ...typography.caption, color: colors.smartDeep, fontWeight: '800' },
   addActBtn: {
     flexDirection: 'row',
     alignItems: 'center',

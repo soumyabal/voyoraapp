@@ -2,7 +2,7 @@
  * tripPhase.test.js — trip lifecycle (before/during/after) + the landing-day fix
  * for "a not-started trip opens on Day 2".
  */
-import { tripPhase, defaultDayFor, daysBetweenISO, nowNextOf, openFocusFor } from '../helpers';
+import { tripPhase, defaultDayFor, daysBetweenISO, nowNextOf, openFocusFor, dayZoneLabel } from '../helpers';
 
 const trip = (start, end, nDays) => ({
   startDate: start, endDate: end,
@@ -94,6 +94,26 @@ describe('openFocusFor — timezone-aware "open to now"', () => {
 
   test('PAST → Day 1 (recap), no activity focus', () => {
     expect(openFocusFor(t, Date.UTC(2026, 6, 20, 19, 0))).toEqual({ dayIndex: 0, activityId: null });
+  });
+});
+
+describe('dayZoneLabel — badge only when the day differs from home', () => {
+  const day = (date) => ({ date, label: date });
+  test('abroad (offset differs from home) → DST-correct abbr', () => {
+    const t = { homeTz: 'America/Chicago', defaultTz: 'Asia/Tokyo', days: [day('2026-07-11')] };
+    expect(dayZoneLabel(t, 0)).toBe('GMT+9');   // Tokyo has no common abbr → GMT offset form
+  });
+  test('domestic (same offset as home) → no badge', () => {
+    const t = { homeTz: 'America/Chicago', defaultTz: 'America/Chicago', days: [day('2026-07-11')] };
+    expect(dayZoneLabel(t, 0)).toBe('');
+  });
+  test('DST-correct per date: US/Eastern from a Chicago home is shown both summer + winter', () => {
+    const t = { homeTz: 'America/Chicago', defaultTz: 'America/New_York', days: [day('2026-07-11'), day('2026-01-11')] };
+    expect(dayZoneLabel(t, 0)).toBe('EDT');   // summer
+    expect(dayZoneLabel(t, 1)).toBe('EST');   // winter — same zone, DST-aware label
+  });
+  test('missing zones/date → empty (no crash)', () => {
+    expect(dayZoneLabel({ days: [{}] }, 0)).toBe('');
   });
 });
 

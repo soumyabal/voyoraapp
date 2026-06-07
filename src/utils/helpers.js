@@ -1,4 +1,4 @@
-import { deviceTz, zonedNowDate, zonedNowMinutes } from './tz';
+import { deviceTz, zonedNowDate, zonedNowMinutes, tzForDay, zonedWallToUtcMs, offsetMinutes, zoneShortLabel } from './tz';
 
 // Generate a short random ID
 export function uid() {
@@ -227,6 +227,22 @@ export function openFocusFor(trip, nowMs = Date.now()) {
   const nowMin = zonedNowMinutes(tz, nowMs);
   const { now, next } = nowNextOf(trip.days?.[dayIndex], nowMin);
   return { dayIndex, activityId: (now || next)?.id || null };
+}
+
+/**
+ * The zone badge to show on a day — its short label (DST-correct for THAT day's date, e.g. 'PDT'
+ * vs 'PST') ONLY when the day's wall-clock offset differs from the traveler's home zone. Same
+ * offset as home (a domestic trip) → '' (no badge, stays clean). Compares OFFSETS not names, so
+ * two zones that happen to share an offset don't show a pointless badge. '' if zones unknown.
+ */
+export function dayZoneLabel(trip, dayIndex) {
+  const home  = trip?.homeTz || deviceTz();
+  const dayTz = tzForDay(trip, dayIndex);
+  const date  = trip?.days?.[dayIndex]?.date;
+  if (!dayTz || !home || !date) return '';
+  const ms = zonedWallToUtcMs(date, '12:00', dayTz);
+  if (offsetMinutes(dayTz, ms) === offsetMinutes(home, ms)) return '';
+  return zoneShortLabel(dayTz, date, '12:00');
 }
 
 export function nowNextOf(day, nowMin) {

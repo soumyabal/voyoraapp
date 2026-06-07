@@ -19,13 +19,19 @@
 > `tzForDay(trip, i)` (day.tz → defaultTz → homeTz → device) is the one resolution rule. 34 tz
 > tests + the persisted-shape guard updated.
 >
-> **Phase 2 — IN PROGRESS.** First piece DONE: **open to "now"** — `setCurrentTrip` lands a
-> Happening trip on the DESTINATION's current day (via `tz.zonedNowDate(trip.defaultTz)`, so
-> Tokyo can be a day ahead of the phone) and TripScreen scrolls to that day's now/next activity
-> (`helpers.openFocusFor` + `tz.zonedNowMinutes` + the existing highlight). Wires up the long-dead
-> `defaultDayFor` (every trip used to open on Day 1). Still TODO: **zone badges** (`7:00 PM PDT`
-> only where the zone differs) + travel-leg arrival labels. Device-verified; degrades gracefully
-> if Hermes lacks `Intl` timeZone.
+> **Phase 2 — IN PROGRESS.** Done so far:
+> - **Open to "now"** — `setCurrentTrip` lands a Happening trip on the DESTINATION's current day
+>   (`tz.zonedNowDate(trip.defaultTz)`, so Tokyo can be a day ahead of the phone) and TripScreen
+>   scrolls to that day's now/next activity (`helpers.openFocusFor` + `tz.zonedNowMinutes` + the
+>   existing highlight). Wires up the long-dead `defaultDayFor` (every trip used to open on Day 1).
+> - **Per-day zone badge** — `helpers.dayZoneLabel(trip, i)` shows a `🕘 EDT`/`GMT+9` chip on the
+>   day header ONLY when the day's offset differs from home; compares OFFSETS not names; uses the
+>   day's own date so it's DST-correct (EDT↔EST). Single-zone trips stay clean.
+>
+> Still TODO Phase 2: **travel-leg arrival labels** ("lands 2:00 PM EDT · 5h", red-eye/+1-day) —
+> needs per-stop/leg zone data, i.e. **Phase 2c per-day tz inference** (derive `day.tz` from each
+> day's located stops via `tzForCoords`, so multi-city trips show the right zone per day + the
+> badge varies across the trip). Device-verified; degrades gracefully without `Intl` timeZone.
 
 ---
 

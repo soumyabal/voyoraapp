@@ -1,7 +1,11 @@
 # Smart Paste — "paste an itinerary, get a trip" (design + honest assessment)
 
-> Status: **MVP BUILT (deterministic, behind `RELEASE_FLAGS.smartPaste`).** Written 2026-06-07 as
-> an assessment; the owner then green-lit building it. Shipped this session:
+> Status: **ON HOLD (2026-06-07).** Owner tried it on device: "not working — put on hold, revisit
+> later." `RELEASE_FLAGS.smartPaste` is now **false** (the Home "Paste a plan" button is hidden);
+> all the code stays in place (tested, dormant). When we revisit: flip the flag, then debug the
+> on-device flow (the parse→assemble→gazetteer pipeline is unit-green, so the issue is most likely
+> in the modal UI / how the built trip presents — needs an on-device repro to pin down). The MVP
+> as built (still in the tree):
 > - `src/utils/itineraryParser.js` — parse (stages A–C): markdown bullets/bold, `Day N` + calendar
 >   headers, **wall-of-text re-segmentation**, segments, slots, stops, Option A/B, type lexicon,
 >   candidate-place extraction + alias/stop-list. (14 tests)

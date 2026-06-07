@@ -25,6 +25,7 @@ import AddProfileModal from '../modals/AddProfileModal';
 import { colors, spacing, radius, typography, shadow, gradients } from '../theme';
 import { RELEASE_FLAGS } from '../config';
 import { avatarColor, getAllMembers, fmt } from '../utils/helpers';
+import { seedCrossZoneDemo } from '../utils/devSeed';
 import Icon from '../components/ui/Icon';
 import PressableScale from '../components/ui/PressableScale';
 import KithovaWordmark from '../components/ui/KithovaWordmark';
@@ -786,6 +787,17 @@ export default function HomeScreen({ navigation }) {
         </PressableScale>
       )}
 
+      {/* DEV-ONLY: one-tap demo trip for on-device timezone verification (never ships — __DEV__). */}
+      {__DEV__ && activeTab === 'trips' && (
+        <TouchableOpacity
+          style={[styles.devSeedBtn, { bottom: insets.bottom + TAB_BAR_HEIGHT + 64 }]}
+          onPress={() => openTrip(seedCrossZoneDemo(useStore.getState()).id)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.devSeedText}>＋ Demo: ORD↔LAX↔SD</Text>
+        </TouchableOpacity>
+      )}
+
       <NewTripModal
         visible={showNewTrip}
         onClose={() => setShowNewTrip(false)}
@@ -927,6 +939,8 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 2, borderBottomRightRadius: 2,
   },
 
+  devSeedBtn: { position: 'absolute', right: 16, backgroundColor: '#1e293b', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, opacity: 0.9 },
+  devSeedText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   fab: {
     position: 'absolute', right: 20,
     flexDirection: 'row', alignItems: 'center', gap: 6,

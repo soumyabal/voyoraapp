@@ -301,6 +301,11 @@ export default function SplitwiseScreen({ trip, onOpenActivity }) {
                         })}
                       </>
                     )}
+                    {grandTotal > 0 && (
+                      <View style={styles.shareBarTrack}>
+                        <View style={[styles.shareBarFill, { width: `${Math.max(3, Math.round((famTotal / grandTotal) * 100))}%`, backgroundColor: fam.color }]} />
+                      </View>
+                    )}
                   </View>
                   <Text style={[styles.famTotal, { color: fam.color }]}>{fmtM(famTotal)}</Text>
                 </View>
@@ -367,7 +372,11 @@ export default function SplitwiseScreen({ trip, onOpenActivity }) {
 
             <Text style={styles.settleTitle}>Who Pays Whom</Text>
             {settlements.length === 0 ? (
-              <Text style={styles.settledText}>All settled up! 🎉</Text>
+              <View style={styles.settledCard}>
+                <Text style={styles.settledEmoji}>🎉</Text>
+                <Text style={styles.settledBig}>All settled up</Text>
+                <Text style={styles.settledSub}>Everyone&apos;s even — no transfers needed.</Text>
+              </View>
             ) : (
               settlements.map((s, i) => {
                 const fromFam  = findMemberFamily(trip, s.from.id);
@@ -1082,6 +1091,8 @@ const styles = StyleSheet.create({
   headBadgeText: { fontSize: 10, color: colors.muted, fontWeight: '600' },
   famMeta: { ...typography.tiny, color: colors.muted, marginBottom: 4 },
   famTotal: { ...typography.h4, fontWeight: '900' },
+  shareBarTrack: { height: 6, borderRadius: 3, backgroundColor: colors.surface2, marginTop: 8, overflow: 'hidden' },
+  shareBarFill: { height: 6, borderRadius: 3 },
   memberShareRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
   memberAvatar: { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
   memberAvatarText: { color: '#fff', fontSize: 8, fontWeight: '700' },
@@ -1101,6 +1112,10 @@ const styles = StyleSheet.create({
   balanceNet: { ...typography.smallBold },
   settleTitle: { fontSize: 10, fontWeight: '800', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.4, padding: spacing.md, paddingBottom: spacing.sm },
   settledText: { ...typography.body, color: colors.muted, padding: spacing.lg },
+  settledCard: { alignItems: 'center', paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, backgroundColor: colors.successSoft, borderRadius: radius.lg, margin: spacing.md, marginTop: 0 },
+  settledEmoji: { fontSize: 30, marginBottom: 6 },
+  settledBig: { ...typography.h4, color: colors.success, fontWeight: '900' },
+  settledSub: { ...typography.small, color: colors.body, marginTop: 2, textAlign: 'center' },
   settleItem: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: spacing.md, backgroundColor: colors.surface2, marginHorizontal: spacing.md, borderRadius: radius.sm, marginBottom: 6 },
   settleName:     { ...typography.smallBold, color: colors.text },
   settleNamePaid: { textDecorationLine: 'line-through', color: colors.muted },

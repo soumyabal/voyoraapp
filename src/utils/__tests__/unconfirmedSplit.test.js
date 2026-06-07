@@ -62,6 +62,16 @@ describe('unconfirmedSplitItems', () => {
   test('a trip with no itinerary expenses → empty fast-path', () => {
     expect(ids(trip(PAST, [act('A')], undefined))).toEqual([]);
   });
+
+  test('a no-time activity uses end-of-day: flagged once the whole day has passed', () => {
+    const noTime = { id: 'A', type: 'activity', name: 'A' };           // no time → ends 23:59
+    expect(ids(trip(PAST, [noTime], [exp('A')]))).toEqual(['A']);      // yesterday is over → flagged
+    expect(ids(trip(TODAY, [noTime], [exp('A')]))).toEqual([]);        // today not over yet → not flagged
+  });
+
+  test('an unparseable date is guarded (no crash, not flagged)', () => {
+    expect(ids(trip('not-a-date', [act('A')], [exp('A')]))).toEqual([]);
+  });
 });
 
 describe('withUnconfirmedExcluded — auto-exclude past unchecked items from the split view', () => {
@@ -98,5 +108,13 @@ describe('withUnconfirmedExcluded — auto-exclude past unchecked items from the
   test('null clock → no-op (same trip), deterministic', () => {
     const t = trip(PAST, [act('A')], [exp('A')]);
     expect(withUnconfirmedExcluded(t, null)).toBe(t);
+  });
+
+  test('only the unconfirmed expense is flipped; others pass through untouched', () => {
+    const manual = { id: 'man', source: 'manual', amount: 10, excluded: false };
+    const t = trip(PAST, [act('A')], [exp('A'), manual]);
+    const v = withUnconfirmedExcluded(t, NOW);
+    expect(v.expenses.find(e => e.id === exId('A')).excluded).toBe(true);
+    expect(v.expenses.find(e => e.id === 'man')).toBe(manual);   // same object — untouched
   });
 });

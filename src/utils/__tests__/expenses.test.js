@@ -43,6 +43,20 @@ describe('activityToExpense', () => {
     expect(cat('food')).toBe('🍽️');
     expect(cat('transport')).toBe('✈️');
     expect(cat('activity')).toBe('🎯');
+    expect(cat('weird')).toBe('🎯');          // unknown type → default
+  });
+
+  test('lodging splits by family; everything else inherits the trip mode', () => {
+    const sm = type => activityToExpense({ id: 'x', name: 'x', type, costPerPerson: 1 }, 'D', members, ['f1']).splitMode;
+    expect(sm('stay')).toBe('family');        // a shared hotel is a per-group cost
+    expect(sm('food')).toBeNull();            // null = inherit trip splitMode
+    expect(sm('activity')).toBeNull();
+  });
+
+  test('no members → amount 0 and paidBy null (no crash, no phantom payer)', () => {
+    const e = activityToExpense({ id: 'a', name: 'Solo', type: 'activity', costPerPerson: 50 }, 'D', [], ['f1']);
+    expect(e.amount).toBe(0);
+    expect(e.paidBy).toBeNull();
   });
 });
 

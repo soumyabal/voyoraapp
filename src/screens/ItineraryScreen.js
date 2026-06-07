@@ -719,8 +719,8 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     );
   };
 
-  // A locked stop is a fixed anchor — block MANUAL moves too (up/down, another day,
-  // another slot), not just Plan my day. Warn and require an explicit unlock first.
+  // A locked stop is a fixed anchor — block MANUAL moves too (another day, another
+  // slot), not just Plan my day. Warn and require an explicit unlock first.
   const guardMove = (act, move) => {
     if (!act.timeLocked) { move(); return; }
     Alert.alert(
@@ -729,6 +729,26 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Unlock', onPress: () => toggleActivityLock(trip.id, act.id) },
+      ],
+    );
+  };
+
+  // Up/Down SWAP an adjacent pair's times — so it must refuse if EITHER the moved stop
+  // OR the neighbor it swaps with is locked. Otherwise moving a non-locked stop past a
+  // locked one silently rewrites the locked stop's time (the reported bug). Names the
+  // locked stop and offers to unlock it.
+  const guardSwap = (moved, neighbor, doMove) => {
+    const locked = moved?.timeLocked ? moved : (neighbor?.timeLocked ? neighbor : null);
+    if (!locked) { doMove(); return; }
+    const movingTheLock = locked === moved;
+    Alert.alert(
+      `🔒 ${(locked.name || 'A stop').slice(0, 40)} is locked`,
+      movingTheLock
+        ? `Its ${locked.time} start time is locked. Unlock it first to move it.`
+        : `This move would change ${locked.name || 'a locked stop'}’s locked ${locked.time} time. Unlock it first to reorder around it.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Unlock', onPress: () => toggleActivityLock(trip.id, locked.id) },
       ],
     );
   };
@@ -1210,18 +1230,22 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                           isHighlighted={highlightedActIds.includes(act.id)}
                           isFirst={index === 0}
                           isLast={index === slotActs.length - 1}
-                          onMoveUp={() => guardMove(act, () => {
+                          onMoveUp={() => {
                             if (index === 0) return;
-                            const newOrder = [...slotActs];
-                            [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
-                            reorderSlotActivities(trip.id, currentDay, newOrder.map(a => a.id));
-                          })}
-                          onMoveDown={() => guardMove(act, () => {
+                            guardSwap(act, slotActs[index - 1], () => {
+                              const newOrder = [...slotActs];
+                              [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+                              reorderSlotActivities(trip.id, currentDay, newOrder.map(a => a.id));
+                            });
+                          }}
+                          onMoveDown={() => {
                             if (index === slotActs.length - 1) return;
-                            const newOrder = [...slotActs];
-                            [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
-                            reorderSlotActivities(trip.id, currentDay, newOrder.map(a => a.id));
-                          })}
+                            guardSwap(act, slotActs[index + 1], () => {
+                              const newOrder = [...slotActs];
+                              [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+                              reorderSlotActivities(trip.id, currentDay, newOrder.map(a => a.id));
+                            });
+                          }}
                           onMarkDone={() => setDone(act)}
                           onEdit={() => openEdit(act)}
                           onDelete={() => deleteWithUndo(act)}

@@ -422,7 +422,7 @@ function EditGroupModal({ visible, group, travelers, onSave, onClose }) {
 }
 
 // ─── Swipeable trip card wrapper ─────────────────────────────────
-function SwipeableTripCard({ trip, onPress, onComplete, onDelete }) {
+function SwipeableTripCard({ trip, status, onPress, onComplete, onDelete }) {
   const scrollRef = useRef(null);
   const close = () => scrollRef.current?.scrollTo({ x: 0, animated: true });
 
@@ -451,6 +451,7 @@ function SwipeableTripCard({ trip, onPress, onComplete, onDelete }) {
       {/* Card */}
       <TripCard
         trip={trip}
+        status={status}
         onPress={onPress}
         style={{ width: TRIP_CARD_W }}
       />
@@ -681,10 +682,11 @@ export default function HomeScreen({ navigation }) {
                 {active.length > 0 && (
                   <>
                     <Text style={styles.spotCaption}>ACTIVE NOW</Text>
-                    {active.map(({ trip }) => (
+                    {active.map(({ trip, status }) => (
                       <SwipeableTripCard
                         key={trip.id}
                         trip={trip}
+                        status={status}
                         onPress={() => openTrip(trip.id)}
                         onComplete={() => updateTrip(trip.id, { archived: !trip.archived })}
                         onDelete={() => deleteTrip(trip.id)}
@@ -728,10 +730,11 @@ export default function HomeScreen({ navigation }) {
                       : 'No past trips yet.'}
                   </Text>
                 ) : (
-                  list.map(({ trip }) => (
+                  list.map(({ trip, status }) => (
                     <SwipeableTripCard
                       key={trip.id}
                       trip={trip}
+                      status={status}
                       onPress={() => openTrip(trip.id)}
                       onComplete={() => updateTrip(trip.id, { archived: !trip.archived })}
                       onDelete={() => deleteTrip(trip.id)}

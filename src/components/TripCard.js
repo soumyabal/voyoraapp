@@ -6,13 +6,29 @@ import { getAllMembers, fmt, fmtM } from '../utils/helpers';
 import { calcTripItineraryTotal } from '../utils/costs';
 import Icon from './ui/Icon';
 
-// Compact list row: emoji thumbnail · name + one meta line · total.
-// Kept short on purpose — the spotlight handles the "hero" treatment.
-export default function TripCard({ trip, onPress, style }) {
-  const allMembers   = getAllMembers(trip);
-  const itinTotal    = calcTripItineraryTotal(trip);
-  const expTotal     = trip.expenses.filter(e => e.source === 'manual').reduce((s, e) => s + e.amount, 0);
+// Compact list row: gradient emoji thumbnail · name + status pill · destination/dates ·
+// a family avatar stack (who's going) · total. Kept to a row on purpose — the spotlight
+// owns the big "hero" treatment; this just lifts the at-a-glance craft of the list.
+// `status` is optional ({ phase, label } from HomeScreen.tripStatus) — pill hidden without it.
+
+// Phase → calm pill tone (bg + text). Upcoming leans brand terracotta, active is live-green,
+// past is a muted neutral.
+const PILL_TONE = {
+  upcoming: { bg: colors.accentSoft, fg: colors.accentDark },
+  ongoing:  { bg: colors.successSoft, fg: colors.success },
+  past:     { bg: colors.surface2, fg: colors.subtle },
+};
+
+export default function TripCard({ trip, onPress, style, status }) {
+  const allMembers    = getAllMembers(trip);
+  const itinTotal     = calcTripItineraryTotal(trip);
+  const expTotal      = trip.expenses.filter(e => e.source === 'manual').reduce((s, e) => s + e.amount, 0);
   const hasAccessible = trip.families.some(f => f.members.some(m => m.needs.length > 0));
+  const tone          = status ? (PILL_TONE[status.phase] || PILL_TONE.upcoming) : null;
+
+  const fams      = trip.families || [];
+  const shownFams = fams.slice(0, 4);
+  const extraFams = fams.length - shownFams.length;
 
   return (
     <TouchableOpacity
@@ -32,17 +48,38 @@ export default function TripCard({ trip, onPress, style }) {
         <View style={styles.nameRow}>
           {trip.archived && <Icon name="check" size={14} color={colors.success} />}
           <Text style={styles.name} numberOfLines={1}>{trip.name}</Text>
+          {tone && (
+            <View style={[styles.pill, { backgroundColor: tone.bg }]}>
+              <Text style={[styles.pillText, { color: tone.fg }]} numberOfLines={1}>{status.label}</Text>
+            </View>
+          )}
         </View>
+
         <View style={styles.metaRow}>
           <Icon name="location" size={12} color={colors.subtle} />
           <Text style={styles.meta} numberOfLines={1}>
             {trip.destination} · {fmt(trip.startDate)}–{fmt(trip.endDate)} · {trip.days.length}d
           </Text>
         </View>
+
+        {/* Who's going — a stack of family-colored chips + a headcount */}
         <View style={styles.metaRow}>
-          <Icon name="people" size={12} color={colors.subtle} />
+          {shownFams.length > 0 && (
+            <View style={styles.stack}>
+              {shownFams.map((f, i) => (
+                <View key={f.id} style={[styles.stackDot, { backgroundColor: f.color || colors.subtle, marginLeft: i ? -7 : 0, zIndex: shownFams.length - i }]}>
+                  <Text style={styles.stackInitial}>{(f.name || '?')[0].toUpperCase()}</Text>
+                </View>
+              ))}
+              {extraFams > 0 && (
+                <View style={[styles.stackDot, styles.stackMore, { marginLeft: -7 }]}>
+                  <Text style={styles.stackMoreText}>+{extraFams}</Text>
+                </View>
+              )}
+            </View>
+          )}
           <Text style={styles.meta} numberOfLines={1}>
-            {trip.families.length} famil{trip.families.length !== 1 ? 'ies' : 'y'} · {allMembers.length} {allMembers.length !== 1 ? 'people' : 'person'}
+            {allMembers.length} {allMembers.length !== 1 ? 'people' : 'person'}
           </Text>
           {hasAccessible && <Icon name="accessible" size={12} color={colors.success} style={{ marginLeft: 2 }} />}
         </View>
@@ -67,15 +104,26 @@ const styles = StyleSheet.create({
   },
   cardArchived: { backgroundColor: '#f6faf7', borderColor: '#cde7d6' },
   thumb: {
-    width: 58, height: 58, borderRadius: radius.md,
+    width: 60, height: 60, borderRadius: radius.md,
     alignItems: 'center', justifyContent: 'center',
   },
   emoji: { fontSize: 28 },
-  body: { flex: 1, gap: 3 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  body: { flex: 1, gap: 4 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { ...typography.h4, color: colors.ink, flexShrink: 1 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  pill: { flexShrink: 0, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
+  pillText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.1 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   meta: { ...typography.small, color: colors.subtle, flexShrink: 1 },
+  stack: { flexDirection: 'row', alignItems: 'center' },
+  stackDot: {
+    width: 22, height: 22, borderRadius: 11,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: colors.surface,
+  },
+  stackInitial: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  stackMore: { backgroundColor: colors.surface2, borderColor: colors.surface },
+  stackMoreText: { color: colors.body, fontSize: 9, fontWeight: '800' },
   right: { alignItems: 'flex-end', minWidth: 52 },
   totalAmt: { ...typography.bodyBold, color: colors.ink },
   totalLabel: { ...typography.tiny, color: colors.subtle },

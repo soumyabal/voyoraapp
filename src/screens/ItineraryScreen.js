@@ -1291,12 +1291,27 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
               );
             }
             if (lod?.stay) {
-              return (
-                <View style={styles.lodgeChip}>
+              // Tonight's lodging is DERIVED from the one check-in stay. When it's a
+              // searchable hotel, make the chip a tap-to-Book link (Booking.com = the
+              // revenue stream) so every covered night carries the affordance — without
+              // duplicating the check-in day's photo-forward stay card.
+              const book = bookingUrl(lod.stay);
+              const inner = (
+                <>
                   <Icon name="hotel" size={14} color={colors.smart} />
                   <Text style={styles.lodgeChipText}>Night {lod.nightNumber} of {lod.nights} · {lod.stay.name}</Text>
                   {!lod.isCheckInDay && <Text style={styles.lodgeChipMuted}>· no extra charge</Text>}
-                </View>
+                  {!!book && <Text style={styles.lodgeBookLink}>  🛏 Book ›</Text>}
+                </>
+              );
+              return book ? (
+                <TouchableOpacity style={styles.lodgeChip} activeOpacity={0.8}
+                  onPress={() => Linking.openURL(book).catch(() => {})}
+                  accessibilityRole="link" accessibilityLabel={`Book ${lod.stay.name} on Booking.com`}>
+                  {inner}
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.lodgeChip}>{inner}</View>
               );
             }
             // The user told us this hotel-less night is covered → calm settled chip
@@ -2406,6 +2421,7 @@ const styles = StyleSheet.create({
   lodgeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.smartSoft },
   lodgeChipText: { ...typography.caption, color: colors.smartDeep, fontWeight: '700' },
   lodgeChipMuted: { ...typography.caption, color: colors.subtle },
+  lodgeBookLink:  { ...typography.caption, color: colors.accent, fontWeight: '800' },
   // Checkout-day prompt — informational indigo (matches the lodging family), never amber.
   checkoutBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.smartSoft, borderRadius: radius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.sm },
   checkoutBannerIcon: { fontSize: 15 },

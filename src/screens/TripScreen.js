@@ -13,6 +13,7 @@ import EditTripModal from '../modals/EditTripModal';
 import ChangeModeModal from '../modals/ChangeModeModal';
 import AgenticPlannerModal from '../modals/AgenticPlannerModal';
 import TripValidationModal from '../modals/TripValidationModal';
+import PackingModal from '../modals/PackingModal';
 import { colors, spacing, typography, radius, gradients, shadow } from '../theme';
 import Icon from '../components/ui/Icon';
 import { fmt, getAllMembers, openFocusFor } from '../utils/helpers';
@@ -47,6 +48,7 @@ export default function TripScreen({ navigation }) {
   const [showModeModal, setShowModeModal]       = useState(false);
   const [showPlanner, setShowPlanner]           = useState(false);
   const [showValidation,    setShowValidation]    = useState(false);
+  const [showPacking,       setShowPacking]       = useState(false);
   const [highlightedActIds, setHighlightedActIds] = useState([]);
   const trip = getCurrentTrip();
 
@@ -129,6 +131,7 @@ export default function TripScreen({ navigation }) {
   const handleMenu = () => {
     Alert.alert(trip.name, 'What would you like to do?', [
       { text: '✏️  Edit Trip',              onPress: () => setShowEditModal(true) },
+      { text: '🎒  Packing List',           onPress: () => setShowPacking(true) },
       { text: '🔄  Switch Planning Mode',   onPress: () => setShowModeModal(true) },
       { text: '📋  Duplicate',              onPress: handleDuplicate },
       { text: '📤  Share',                  onPress: handleShare },
@@ -263,6 +266,7 @@ export default function TripScreen({ navigation }) {
         onIgnore={(key) => ignoreWarning(trip.id, key)}
         onClearIgnored={() => clearIgnoredWarnings(trip.id)}
       />
+      <PackingModal visible={showPacking} trip={trip} onClose={() => setShowPacking(false)} />
       <EditTripModal visible={showEditModal} trip={trip} onClose={() => setShowEditModal(false)} />
       <ChangeModeModal visible={showModeModal} trip={trip} onClose={() => setShowModeModal(false)} />
       <AgenticPlannerModal

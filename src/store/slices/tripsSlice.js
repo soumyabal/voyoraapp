@@ -97,7 +97,7 @@ export const createTripsSlice = (set, get) => ({
       emoji: TRIP_EMOJIS[Math.floor(Math.random() * TRIP_EMOJIS.length)],
       startDate, endDate, mode,
       pace, budget, focus,
-      splitMode: 'individual', // 'individual' | 'family'
+      splitMode: 'family', // 'individual' | 'family' — Voyara is multi-family-first, so default to By Group
       bgColors: TRIP_BG_COLORS[Math.floor(Math.random() * TRIP_BG_COLORS.length)],
       itineraryPushed: false,
       families, days, expenses: [],

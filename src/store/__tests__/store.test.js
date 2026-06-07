@@ -41,11 +41,11 @@ const addDinner = (tripId, cpp = 10) =>
   S().addActivity(tripId, 0, { type: 'food', name: 'Dinner', time: '19:00', costPerPerson: cpp });
 
 describe('createTrip', () => {
-  test('builds N days from the date range, individual split, not yet pushed', () => {
+  test('builds N days from the date range, By-Group split, not yet pushed', () => {
     const t = makeTrip();
     expect(t.days).toHaveLength(3);          // Jun 12, 13, 14 inclusive
     expect(t.families).toHaveLength(2);
-    expect(t.splitMode).toBe('individual');
+    expect(t.splitMode).toBe('family');      // multi-family-first → default By Group
     expect(t.itineraryPushed).toBe(false);
     expect(t.expenses).toEqual([]);
     expect(t.origin).toBeNull();
@@ -122,6 +122,7 @@ describe('expense moat — invariants that must never break', () => {
 describe('settlement (end-to-end money assertion)', () => {
   test('non-payers settle up to the payer for their share', () => {
     const t = makeTrip();
+    S().setTripSplitMode(t.id, 'individual');         // per-person math (default is now By Group)
     addDinner(t.id, 10);                              // $30 total, 3 members → $10 each
     let t2 = tripById(t.id);
     const payer = t2.families[0].members[0];          // A1 pays the whole $30

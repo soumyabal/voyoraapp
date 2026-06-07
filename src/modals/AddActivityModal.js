@@ -356,7 +356,10 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
 
 
   // Cost
-  const [costMode, setCostMode]   = useState('per_person'); // 'per_person' | 'per_family'
+  // Default NEW activities to 'total' — at planning time you usually know the total price and
+  // shouldn't have to think about per-head splitting (the Split tab handles that). Editing an
+  // existing activity respects its saved costMode below (so old per-person amounts read right).
+  const [costMode, setCostMode]   = useState('total'); // 'per_person' | 'per_family' | 'total'
   const [costInput, setCostInput] = useState('');
   // Keep the cost field above the number pad: the decimal-pad has no return key and the
   // field sits low in the form, so we scroll it into view on focus.

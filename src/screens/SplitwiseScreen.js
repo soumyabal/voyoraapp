@@ -32,7 +32,7 @@ export default function SplitwiseScreen({ trip, onOpenActivity }) {
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [headTipDismissed, setHeadTipDismissed] = useState(false);
 
-  const tripMode = trip.splitMode || 'individual';
+  const tripMode = trip.splitMode || 'family';   // multi-family-first → default to By Group
 
   // Past activities whose split expense was never checked off — only surfaced here, on the
   // Split tab, so non-split users never see it. Needs the wall clock (post-event check).

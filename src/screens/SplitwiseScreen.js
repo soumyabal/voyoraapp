@@ -14,7 +14,7 @@ import {
   calcFamilyExpenseTotal, calcMemberExpenseShare,
   calcTripItineraryTotal, calcBalances, calcSettlements,
 } from '../utils/costs';
-import { summariseExpenses, unconfirmedSplitItems, pendingSplitItems, withUnconfirmedExcluded } from '../utils/expenses';
+import { summariseExpenses, unconfirmedSplitItems, pendingSplitItems, itineraryExpenseOrder, withUnconfirmedExcluded } from '../utils/expenses';
 import { exportSettlementAsPDF } from '../utils/exportPlan';
 
 // Expense category emoji (stored in exp.category) → Icon name + tint
@@ -74,9 +74,15 @@ export default function SplitwiseScreen({ trip, onOpenActivity }) {
 
   // Lists render from the real trip (so unconfirmed rows still show); totals/counts come
   // from the counted-only view so the numbers reflect what will actually be split.
-  const { itinExpenses, manualExpenses, itinSkipped } = summariseExpenses(trip);
+  const { itinExpenses: itinUnsorted, manualExpenses, itinSkipped } = summariseExpenses(trip);
   const { itinTotal, manualTotal, grandTotal } = summariseExpenses(splitTrip);
-  const itinIncluded = itinExpenses.filter(e => !e.excluded && !unconfirmedExpIds.has(e.id));
+  const itinIncluded = itinUnsorted.filter(e => !e.excluded && !unconfirmedExpIds.has(e.id));
+  // List itinerary expenses in itinerary order (day → time), not raw insertion order, so the
+  // flagged/unflagged rows line up with the trip (orphaned links sort last). Pure display sort.
+  const itinOrder = itineraryExpenseOrder(trip);
+  const itinExpenses = [...itinUnsorted].sort(
+    (a, b) => (itinOrder.get(a.activityId) ?? Infinity) - (itinOrder.get(b.activityId) ?? Infinity)
+  );
 
   const balances = calcBalances(splitTrip);
   const settlements = calcSettlements([...balances]);

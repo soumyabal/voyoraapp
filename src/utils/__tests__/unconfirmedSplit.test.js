@@ -2,7 +2,7 @@
  * unconfirmedSplit.test.js — unconfirmedSplitItems(): past activities that carry a split
  * expense but were never checked off. Time-aware + pure (now passed in), so fully deterministic.
  */
-import { unconfirmedSplitItems, pendingSplitItems, withUnconfirmedExcluded } from '../expenses';
+import { unconfirmedSplitItems, pendingSplitItems, itineraryExpenseOrder, withUnconfirmedExcluded } from '../expenses';
 
 const NOW = new Date('2026-06-13T12:00:00').getTime();   // "past" = ends before this
 const PAST = '2026-06-12';
@@ -115,6 +115,36 @@ describe('pendingSplitItems — every unchecked/orphaned itinerary expense is re
   test('no time gate needed → works without a clock', () => {
     const t = trip(FUTURE, [act('A')], [exp('A')]);
     expect(pIds(t)).toEqual(['e_A']);   // pendingSplitItems takes no `now`
+  });
+});
+
+describe('itineraryExpenseOrder — chronological rank for the Split-tab listing', () => {
+  const sortExp = (t, expenses) => {
+    const r = itineraryExpenseOrder(t);
+    return [...expenses].sort((a, b) => (r.get(a.activityId) ?? Infinity) - (r.get(b.activityId) ?? Infinity)).map(e => e.activityId);
+  };
+
+  test('orders by time within a day (regardless of expense insertion order)', () => {
+    const t = { days: [{ label: 'Day 1', date: PAST, activities: [
+      act('A', { time: '18:00' }), act('B', { time: '09:00' }), act('C', { time: '13:00' }),
+    ] }] };
+    // expenses deliberately scrambled
+    expect(sortExp(t, [exp('A'), exp('C'), exp('B')])).toEqual(['B', 'C', 'A']);
+  });
+
+  test('orders by day first, then time', () => {
+    const t = { days: [
+      { label: 'Day 1', date: PAST,   activities: [act('A', { time: '20:00' })] },
+      { label: 'Day 2', date: TODAY,  activities: [act('B', { time: '08:00' })] },
+    ] };
+    expect(sortExp(t, [exp('B'), exp('A')])).toEqual(['A', 'B']);  // Day1-20:00 before Day2-08:00
+  });
+
+  test('untimed activity sorts to the end of its day; orphan sorts last', () => {
+    const t = { days: [{ label: 'Day 1', date: PAST, activities: [
+      act('A', { time: '10:00' }), { id: 'N', type: 'activity', name: 'N' }, // no time
+    ] }] };
+    expect(sortExp(t, [exp('GONE'), exp('N'), exp('A')])).toEqual(['A', 'N', 'GONE']);
   });
 });
 

@@ -92,6 +92,28 @@ export function unconfirmedSplitItems(trip, now) {
 }
 
 /**
+ * Chronological rank for each activity (day index, then start time) → so the Split tab can
+ * list itinerary expenses in the SAME order as the itinerary instead of raw insertion order
+ * (which scattered the flagged/unflagged rows and read as a bug). Map: activityId → rank.
+ * Untimed activities sort to the end of their day; orphaned links (not in the map) sort last
+ * at the call site. Pure + testable.
+ */
+export function itineraryExpenseOrder(trip) {
+  const rank = new Map();
+  (trip.days || []).forEach((day, di) => {
+    (day.activities || []).forEach(act => {
+      if (rank.has(act.id)) return;
+      const [h, m] = String(act.time || '').split(':').map(Number);
+      // Guard on act.time being truthy: Number('') is 0 (not NaN), so an empty time would
+      // otherwise read as 00:00. No/invalid time → end of day.
+      const mins = act.time && Number.isFinite(h) ? h * 60 + (Number.isFinite(m) ? m : 0) : 24 * 60;
+      rank.set(act.id, di * 100000 + mins);
+    });
+  });
+  return rank;
+}
+
+/**
  * Every itinerary expense that still needs confirming, for the Split tab's tap-to-resolve:
  * its linked activity is unchecked (not done/skipped), OR the link is ORPHANED (the activity
  * was edited/deleted so the id no longer matches). Unlike unconfirmedSplitItems this has NO

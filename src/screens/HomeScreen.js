@@ -25,7 +25,7 @@ import AddProfileModal from '../modals/AddProfileModal';
 import { colors, spacing, radius, typography, shadow, gradients } from '../theme';
 import { RELEASE_FLAGS } from '../config';
 import { avatarColor, getAllMembers, fmt } from '../utils/helpers';
-import { seedCrossZoneDemo } from '../utils/devSeed';
+import { DEMO_SEEDS } from '../utils/devSeed';
 import PasteImportModal from '../modals/PasteImportModal';
 import Icon from '../components/ui/Icon';
 import PressableScale from '../components/ui/PressableScale';
@@ -801,14 +801,20 @@ export default function HomeScreen({ navigation }) {
         </TouchableOpacity>
       )}
 
-      {/* DEV-ONLY: one-tap demo trip for on-device timezone verification (never ships — __DEV__). */}
+      {/* DEV-ONLY: a menu of demo trips for on-device verification (never ships — __DEV__). */}
       {__DEV__ && activeTab === 'trips' && (
         <TouchableOpacity
-          style={[styles.devSeedBtn, { bottom: insets.bottom + TAB_BAR_HEIGHT + 64 }]}
-          onPress={() => openTrip(seedCrossZoneDemo(useStore.getState()).id)}
+          style={[styles.devSeedBtn, { bottom: insets.bottom + TAB_BAR_HEIGHT + 12 }]}
+          onPress={() => Alert.alert('Demo trips', 'Seed a scenario', [
+            ...DEMO_SEEDS.map(d => ({
+              text: d.label,
+              onPress: () => { const t = d.run(useStore.getState()); if (t) openTrip(t.id); },
+            })),
+            { text: 'Cancel', style: 'cancel' },
+          ])}
           activeOpacity={0.85}
         >
-          <Text style={styles.devSeedText}>＋ Demo: ORD↔LAX↔SD</Text>
+          <Text style={styles.devSeedText}>＋ Demo trips</Text>
         </TouchableOpacity>
       )}
 

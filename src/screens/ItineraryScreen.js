@@ -4,7 +4,7 @@
    press, never during render; the compiler is OFF and can't see that. Keep new logic clean —
    this is not a license to read refs in render here. */
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal, Share, Image, KeyboardAvoidingView, Platform, findNodeHandle } from 'react-native';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal, Share, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import DiscoverModal from '../modals/DiscoverModal';
@@ -391,6 +391,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   // Check), scroll the day so the row is actually in view — not just highlighted off-screen.
   // rowRefs maps actId → its wrapping View; we measure that against the scroll view + scrollTo.
   const scrollRef = useRef(null);
+  const scrollYRef = useRef(0);          // live scroll offset (from onScroll)
   const rowRefs = useRef({});
   useEffect(() => {
     const id = highlightedActIds[0];
@@ -398,14 +399,17 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     const t = setTimeout(() => {
       const node = rowRefs.current[id];
       const sc = scrollRef.current;
-      if (!node || !sc) return;
-      try {
-        node.measureLayout(
-          findNodeHandle(sc),
-          (x, y) => sc.scrollTo({ y: Math.max(0, y - 80), animated: true }),
-          () => {},
-        );
-      } catch (_) { /* measure can throw if unmounted mid-animation — safe to ignore */ }
+      const scrollHost = sc?.getNativeScrollRef?.();
+      if (!node?.measure || !scrollHost?.measure || !sc) return;
+      // .measure gives absolute (page) coords on both old + new architecture — no
+      // findNodeHandle/measureLayout (which Fabric rejects). Row's page-Y minus the scroll
+      // viewport's page-Y, plus the current offset, is the row's Y in the scroll content.
+      scrollHost.measure((sx, sy, sw, sh, scPageX, scPageY) => {
+        node.measure((x, y, w, h, rowPageX, rowPageY) => {
+          const target = scrollYRef.current + (rowPageY - scPageY) - 80;
+          sc.scrollTo({ y: Math.max(0, target), animated: true });
+        });
+      });
     }, 350);   // let the tab become visible (display:flex) + lay out first
     return () => clearTimeout(t);
   }, [highlightedActIds, currentDay]);
@@ -862,7 +866,14 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         onPlayTrip={() => setShowPlayTrip(true)}
       />
 
-      <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={(e) => { scrollYRef.current = e.nativeEvent.contentOffset.y; }}
+      >
 
         {/* Day Navigation — pick any day to plan it (no live "today" tracking in the planner) */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayNav} contentContainerStyle={{ paddingHorizontal: spacing.xxl }}>

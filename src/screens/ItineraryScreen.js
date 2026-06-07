@@ -14,7 +14,7 @@ import { colors, spacing, radius, typography, shadow, activityColors } from '../
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
 import ConfettiBurst from '../components/ui/ConfettiBurst';
-import { fmt, fmtM, uid, checkOutOf, resolveDayZones } from '../utils/helpers';
+import { fmt, fmtM, uid, checkOutOf, resolveDayZones, pastActivityIds, isDayInPast, planFloorMin } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost } from '../utils/costs';
 import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
@@ -469,6 +469,13 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   // tags when the day spans zones (a travel day). Drives both the header chip + the card eyebrows.
   const dayZones = React.useMemo(() => resolveDayZones(trip, currentDay), [trip, currentDay]);
 
+  // Clock-aware locking (TZ): on a live trip, a stop whose local start has passed is auto-locked
+  // (can't be moved without a warning) and Plan-my-day only arranges the remaining time. Date.now()
+  // is read at render so it stays current as the day progresses (re-read on each interaction).
+  const nowMs = Date.now();
+  const pastIds = React.useMemo(() => pastActivityIds(trip, currentDay, nowMs), [trip, currentDay, nowMs]);
+  const dayPast = React.useMemo(() => isDayInPast(trip, currentDay, nowMs), [trip, currentDay, nowMs]);
+
   const handlePush = () => { pushItineraryToSplitwise(trip.id); switchTab('splitwise'); };
 
   const openEdit       = (act)  => { setEditActivity(act); setShowAddActivity(true); };
@@ -604,8 +611,20 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     const checkout = coHotel
       ? { name: coHotel.name, time: checkOutOf(coHotel), lat: coHotel.lat ?? null, lng: coHotel.lng ?? null }
       : undefined;
-    const r = planDay(day.activities, {
+    // Live trip: pin everything already past (TZ-aware) so Plan-my-day keeps it where it was and
+    // only arranges the REMAINING time (earliestMin floors free placement after "now"). The
+    // derived locks are stripped before writing so we never persist clock-state onto the trip.
+    const userLocked = new Set(day.activities.filter(a => a.timeLocked).map(a => a.id));
+    const input = day.activities.map(a => (pastIds.has(a.id) && !a.timeLocked) ? { ...a, timeLocked: true } : a);
+    const stripDerived = (a) => {
+      if (pastIds.has(a.id) && !userLocked.has(a.id) && a.timeLocked) {
+        const { timeLocked, ...rest } = a; return rest;
+      }
+      return a;
+    };
+    const r = planDay(input, {
       dayRole, date: day.date, anchor, endAnchor, pace: trip.pace, families: trip.families, origin: trip.origin, checkout,
+      earliestMin: planFloorMin(trip, currentDay, nowMs),
     });
 
     // Stable end-state: nothing moved → calm acknowledgement, never a re-prompt.
@@ -669,7 +688,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     const apply = () => {
       markPlanDayNoteSeen();
       const snap = planSnapshot();               // one undo for the whole operation (reorder + moves)
-      setDayActivities(trip.id, currentDay, r.scheduled);
+      setDayActivities(trip.id, currentDay, r.scheduled.map(stripDerived));
       const undo = () => restoreTripState(trip.id, snap);
       if (decisionItems.length) { decideLeftovers(decisionItems, 0, undo); return; }
       const tight = r.unresolved.filter(u => u.reason === 'tight').length;
@@ -749,6 +768,16 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   // A locked stop is a fixed anchor — block MANUAL moves too (another day, another
   // slot), not just Plan my day. Warn and require an explicit unlock first.
   const guardMove = (act, move) => {
+    // A stop whose time has already passed (TZ-aware) is auto-locked — moving it rewrites
+    // history, so confirm first (no "unlock", it's the clock). User-locked → the unlock flow.
+    if (!act.timeLocked && pastIds.has(act.id)) {
+      Alert.alert(
+        `🕒 ${(act.name || 'This stop').slice(0, 40)} already happened`,
+        `Its ${act.time} start time has passed, so it's locked to keep your trip accurate. Move it anyway?`,
+        [{ text: 'Cancel', style: 'cancel' }, { text: 'Move anyway', onPress: move }],
+      );
+      return;
+    }
     if (!act.timeLocked) { move(); return; }
     Alert.alert(
       `🔒 ${(act.name || 'This stop').slice(0, 40)} is locked`,
@@ -766,7 +795,21 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   // locked stop and offers to unlock it.
   const guardSwap = (moved, neighbor, doMove) => {
     const locked = moved?.timeLocked ? moved : (neighbor?.timeLocked ? neighbor : null);
-    if (!locked) { doMove(); return; }
+    if (!locked) {
+      // Neither is user-locked — but reordering across a PAST stop rewrites a time that's
+      // already happened. Confirm rather than silently swap it.
+      const past = pastIds.has(moved?.id) ? moved : (pastIds.has(neighbor?.id) ? neighbor : null);
+      if (past) {
+        Alert.alert(
+          `🕒 ${(past.name || 'A stop').slice(0, 40)} already happened`,
+          `Reordering here would change a time that's already passed. Move anyway?`,
+          [{ text: 'Cancel', style: 'cancel' }, { text: 'Move anyway', onPress: doMove }],
+        );
+        return;
+      }
+      doMove();
+      return;
+    }
     const movingTheLock = locked === moved;
     Alert.alert(
       `🔒 ${(locked.name || 'A stop').slice(0, 40)} is locked`,
@@ -1000,9 +1043,17 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                   <Text style={styles.routeBtnText}>Route</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity style={styles.arrangeBtn} onPress={planMyDay} activeOpacity={0.85}>
-                <Icon name="sparkles" size={13} color={colors.smart} />
-                <Text style={styles.arrangeBtnText}>Plan my day</Text>
+              {/* Plan-my-day is locked for a day that's already in the past (past day of a live
+                  trip, or any day of a finished trip) — you can't plan time that's gone. */}
+              <TouchableOpacity
+                style={[styles.arrangeBtn, dayPast && styles.btnDisabled]}
+                onPress={() => dayPast
+                  ? showUndoAction('This day has passed — Plan my day works on upcoming days', 'sparkles', () => {})
+                  : planMyDay()}
+                activeOpacity={0.85}
+              >
+                <Icon name={dayPast ? 'lock-closed' : 'sparkles'} size={13} color={dayPast ? colors.subtle : colors.smart} />
+                <Text style={[styles.arrangeBtnText, dayPast && { color: colors.subtle }]}>Plan my day</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.addActBtn} onPress={openAdd}>
                 <Icon name="create-outline" size={13} color="#fff" />
@@ -1219,6 +1270,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                             trip={trip}
                             dayDate={day.date}
                             zoneLabel={dayZones.zoneById[act.id]}
+                            autoLocked={pastIds.has(act.id)}
                             originStop={prev}
                             isHighlighted={highlightedActIds.includes(act.id)}
                             isFirst={index === 0}
@@ -1570,7 +1622,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   );
 }
 
-function ActivityCard({ activity: act, trip, dayDate, zoneLabel, originStop, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onEdit, onDelete, onMoveRequest, onSlotMove, onToggleLock, onExploreNearby }) {
+function ActivityCard({ activity: act, trip, dayDate, zoneLabel, autoLocked, originStop, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onEdit, onDelete, onMoveRequest, onSlotMove, onToggleLock, onExploreNearby }) {
   const status    = act.status ?? null;
   const isDone    = status === 'done';
   const isSkipped = status === 'skipped';
@@ -1747,7 +1799,7 @@ function ActivityCard({ activity: act, trip, dayDate, zoneLabel, originStop, isH
               <Text style={styles.actEyebrow} numberOfLines={1}>
                 <Text style={styles.actEyebrowTime}>{act.time}</Text>
                 {zoneLabel ? <Text style={styles.actEyebrowZone}> {zoneLabel}</Text> : null}
-                {act.timeLocked ? '  🔒' : ''}
+                {act.timeLocked ? '  🔒' : (autoLocked ? '  🕒' : '')}
                 {act.type === 'transport' && !!act.arriveTime ? ` → ${act.arriveTime}` : ''}
                 {durationLabel ? `  ·  ~${durationLabel}` : ''}
               </Text>
@@ -2353,6 +2405,7 @@ const styles = StyleSheet.create({
   },
   addActBtnText: { ...typography.caption, color: '#fff', fontWeight: '800' },
   arrangeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.smartSoft, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  btnDisabled: { opacity: 0.45 },
   arrangeBtnText: { ...typography.caption, color: colors.smartDeep, fontWeight: '800' },
   routeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentSoft, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   routeBtnText: { ...typography.caption, color: colors.accent, fontWeight: '800' },

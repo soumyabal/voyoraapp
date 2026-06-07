@@ -2,7 +2,7 @@
  * tripPhase.test.js — trip lifecycle (before/during/after) + the landing-day fix
  * for "a not-started trip opens on Day 2".
  */
-import { tripPhase, defaultDayFor, daysBetweenISO, nowNextOf } from '../helpers';
+import { tripPhase, defaultDayFor, daysBetweenISO, nowNextOf, openFocusFor } from '../helpers';
 
 const trip = (start, end, nDays) => ({
   startDate: start, endDate: end,
@@ -55,6 +55,45 @@ describe('nowNextOf — live "now / next" orientation', () => {
   });
   test('empty day → empty flag', () => {
     expect(nowNextOf({ activities: [] }, 600).empty).toBe(true);
+  });
+});
+
+describe('openFocusFor — timezone-aware "open to now"', () => {
+  // 4-day trip in LA; days carry activities so we can find now/next.
+  const t = {
+    startDate: '2026-07-10', endDate: '2026-07-13', defaultTz: 'America/Los_Angeles',
+    days: [
+      { label: 'Day 1', activities: [{ id: 'd1a', time: '09:00' }] },
+      { label: 'Day 2', activities: [{ id: 'd2morning', time: '09:00' }, { id: 'd2afternoon', time: '14:00' }] },
+      { label: 'Day 3', activities: [] },
+      { label: 'Day 4', activities: [{ id: 'd4a', time: '09:00' }] },
+    ],
+  };
+
+  test('ACTIVE: lands on the destination day + the current (already-started) activity', () => {
+    // 2026-07-11 19:00 UTC = 12:00 PDT on the 11th → Day 2, 12:00 → "now" = the 09:00 stop
+    const f = openFocusFor(t, Date.UTC(2026, 6, 11, 19, 0));
+    expect(f).toEqual({ dayIndex: 1, activityId: 'd2morning' });
+  });
+
+  test('ACTIVE before the first stop → focuses the NEXT activity', () => {
+    // 2026-07-11 15:00 UTC = 08:00 PDT → Day 2, before 09:00 → next = the 09:00 stop
+    expect(openFocusFor(t, Date.UTC(2026, 6, 11, 15, 0)).activityId).toBe('d2morning');
+  });
+
+  test('the destination zone, not the device, decides the day', () => {
+    // Same instant, but a Tokyo trip is a calendar day ahead → Day 3, not Day 2.
+    const tokyo = { ...t, defaultTz: 'Asia/Tokyo' };
+    // 2026-07-11 19:00 UTC = 2026-07-12 04:00 JST → Day 3 (index 2), which is empty → no activity
+    expect(openFocusFor(tokyo, Date.UTC(2026, 6, 11, 19, 0))).toEqual({ dayIndex: 2, activityId: null });
+  });
+
+  test('UPCOMING → Day 1, no activity focus', () => {
+    expect(openFocusFor(t, Date.UTC(2026, 6, 1, 19, 0))).toEqual({ dayIndex: 0, activityId: null });
+  });
+
+  test('PAST → Day 1 (recap), no activity focus', () => {
+    expect(openFocusFor(t, Date.UTC(2026, 6, 20, 19, 0))).toEqual({ dayIndex: 0, activityId: null });
   });
 });
 

@@ -4,8 +4,11 @@
  */
 import {
   offsetMinutes, zonedWallToUtcMs, tzAbbr, zoneShortLabel,
-  formatGmtOffset, crossZoneLegMinutes, tzForCoords, tzForDay, deviceTz, tzSupported, _resetTzSupportCache,
+  formatGmtOffset, crossZoneLegMinutes, tzForCoords, tzForDay,
+  zonedNowDate, zonedNowMinutes, deviceTz, tzSupported, _resetTzSupportCache,
 } from '../tz';
+
+const zoneNowParts = (tz, ms) => [zonedNowDate(tz, ms), zonedNowMinutes(tz, ms)];
 
 describe('offsetMinutes — DST-correct minutes ahead of UTC', () => {
   test('America/New_York: EST in winter (-300), EDT in summer (-240)', () => {
@@ -108,6 +111,25 @@ describe('tzForCoords — offline coords → IANA zone', () => {
   });
   test('accepts numeric strings (geocode output is sometimes stringy)', () => {
     expect(tzForCoords('34.05', '-118.24')).toBe('America/Los_Angeles');
+  });
+});
+
+describe('zonedNowDate / zonedNowMinutes — the destination "now"', () => {
+  // 2025-07-01 12:00 UTC
+  const noonUTC = Date.UTC(2025, 6, 1, 12, 0);
+  test('same instant is a different civil date across zones', () => {
+    expect(zoneNowParts('America/Los_Angeles', noonUTC)).toEqual(['2025-07-01', 5 * 60]);  // 05:00 PDT
+    expect(zoneNowParts('Asia/Tokyo', noonUTC)).toEqual(['2025-07-01', 21 * 60]);          // 21:00 JST
+  });
+  test('rolls the date back when the zone is behind UTC midnight', () => {
+    const sixUTC = Date.UTC(2025, 6, 1, 6, 0);  // 06:00 UTC
+    // LA is -7 → 23:00 the PREVIOUS day
+    expect(zoneNowParts('America/Los_Angeles', sixUTC)).toEqual(['2025-06-30', 23 * 60]);
+  });
+  test('rolls the date forward when the zone is ahead', () => {
+    const eveUTC = Date.UTC(2025, 6, 1, 18, 0);  // 18:00 UTC
+    // Tokyo +9 → 03:00 the NEXT day
+    expect(zoneNowParts('Asia/Tokyo', eveUTC)).toEqual(['2025-07-02', 3 * 60]);
   });
 });
 

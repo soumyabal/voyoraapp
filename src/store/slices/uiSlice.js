@@ -8,6 +8,8 @@
  * The corresponding state (currentTripId/currentDay/planMode/account/subscription/
  * chatHistory/preferences/planDayNoteSeen) is declared in ../index.js.
  */
+import { openFocusFor } from '../../utils/helpers';
+
 export const createUiSlice = (set, get) => ({
   // ── GETTERS (computed) ──────────────────────────────────
   getCurrentTrip: () => {
@@ -16,8 +18,13 @@ export const createUiSlice = (set, get) => ({
   },
 
   // ── NAVIGATION ──────────────────────────────────────────
-  // Phase-1 planner: always open a trip on Day 1 (no live "active day" tracking).
-  setCurrentTrip: (tripId) => set({ currentTripId: tripId, currentDay: 0 }),
+  // Open a trip on its DESTINATION-current day (timezone-aware): a Happening trip lands on
+  // today's day there, upcoming/past on Day 1. The matching now/next activity scroll is wired
+  // in TripScreen (it owns the highlight state). null tripId → reset to Day 1.
+  setCurrentTrip: (tripId) => set((s) => {
+    const trip = tripId ? s.trips.find(t => t.id === tripId) : null;
+    return { currentTripId: tripId, currentDay: trip ? openFocusFor(trip).dayIndex : 0 };
+  }),
   setCurrentDay: (day) => set({ currentDay: day }),
   setPlanMode: (mode) => set({ planMode: mode }),
   markPlanDayNoteSeen: () => set({ planDayNoteSeen: true }),

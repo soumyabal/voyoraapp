@@ -1,3 +1,5 @@
+import { deviceTz, zonedNowDate, zonedNowMinutes } from './tz';
+
 // Generate a short random ID
 export function uid() {
   return 'x' + Math.random().toString(36).slice(2, 9);
@@ -208,6 +210,25 @@ export function defaultDayFor(trip, today = todayISO()) {
  * minute-of-day. Returns { now, next, empty } — `now` = the latest activity that
  * has started, `next` = the first still upcoming. Skipped/notes are ignored.
  */
+/**
+ * Where to land when a trip is OPENED — timezone-aware (doc Phase 2). Uses the destination's
+ * current civil date (trip.defaultTz), so a Happening trip opens on the day it actually is THERE
+ * (Tokyo can be a day ahead of your phone), and on the now/next activity within it:
+ *   active → { dayIndex: today's index, activityId: the current (or next) stop } — drives the
+ *            scroll-to-current so you land on "what's happening now", not Day 1.
+ *   upcoming / past / undated → { dayIndex: 0, activityId: null } (plan / recap from the top).
+ * Pure: pass `nowMs` to test. Falls back to the device zone when the trip has none.
+ */
+export function openFocusFor(trip, nowMs = Date.now()) {
+  const tz = trip?.defaultTz || trip?.homeTz || deviceTz() || null;
+  const today = zonedNowDate(tz, nowMs);
+  const dayIndex = defaultDayFor(trip, today);
+  if (tripPhase(trip, today) !== 'active') return { dayIndex, activityId: null };
+  const nowMin = zonedNowMinutes(tz, nowMs);
+  const { now, next } = nowNextOf(trip.days?.[dayIndex], nowMin);
+  return { dayIndex, activityId: (now || next)?.id || null };
+}
+
 export function nowNextOf(day, nowMin) {
   const tMin = (t) => { if (!t) return null; const [h, m] = t.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
   const acts = (day?.activities || [])

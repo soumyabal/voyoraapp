@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   StatusBar, Alert, Share,
@@ -15,7 +15,7 @@ import AgenticPlannerModal from '../modals/AgenticPlannerModal';
 import TripValidationModal from '../modals/TripValidationModal';
 import { colors, spacing, typography, radius, gradients, shadow } from '../theme';
 import Icon from '../components/ui/Icon';
-import { fmt, getAllMembers } from '../utils/helpers';
+import { fmt, getAllMembers, openFocusFor } from '../utils/helpers';
 import { exportTripAsPDF } from '../utils/exportPlan';
 import { RELEASE_FLAGS, APP_NAME } from '../config';
 
@@ -49,6 +49,21 @@ export default function TripScreen({ navigation }) {
   const [showValidation,    setShowValidation]    = useState(false);
   const [highlightedActIds, setHighlightedActIds] = useState([]);
   const trip = getCurrentTrip();
+
+  // Open to "now": when a trip is opened (or another is switched in), land on the destination's
+  // current day + scroll to its now/next activity. setCurrentTrip already set the day; this also
+  // sets it (covers app relaunch with a persisted trip) and drives the activity highlight, which
+  // TripScreen owns. Active trips only (openFocusFor returns no activity otherwise); brief 3s cue.
+  useEffect(() => {
+    if (!trip) return undefined;
+    const { dayIndex, activityId } = openFocusFor(trip);
+    setCurrentDay(dayIndex);
+    if (!activityId) return undefined;
+    setHighlightedActIds([activityId]);
+    const t = setTimeout(() => setHighlightedActIds([]), 3000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip?.id]);
 
   if (!trip) {
     return (

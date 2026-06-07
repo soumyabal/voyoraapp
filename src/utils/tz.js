@@ -20,14 +20,32 @@
 // ── low-level: render a UTC instant's wall-clock parts in a zone ───────────────────────────
 function partsInZone(ms, tz) {
   // h23 → hours 00–23 (avoids the '24:00' some engines emit for midnight).
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hourCycle: 'h23',
+  const opts = {
+    hourCycle: 'h23',
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
-  });
+  };
+  if (tz) opts.timeZone = tz;   // falsy tz → device-local parts (graceful fallback)
+  const dtf = new Intl.DateTimeFormat('en-US', opts);
   const out = {};
   for (const p of dtf.formatToParts(new Date(ms))) out[p.type] = p.value;
   return out;
+}
+
+/**
+ * The civil date 'YYYY-MM-DD' in `tz` at instant `nowMs` — i.e. "what day is it at the
+ * destination right now". Drives the timezone-aware "open to today" (a trip in Tokyo can be a
+ * calendar day ahead of the device). Falsy tz → device-local date (graceful).
+ */
+export function zonedNowDate(tz, nowMs = Date.now()) {
+  const p = partsInZone(nowMs, tz);
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+/** Minute-of-day (0–1439) in `tz` at instant `nowMs` — the destination's wall-clock minute. */
+export function zonedNowMinutes(tz, nowMs = Date.now()) {
+  const p = partsInZone(nowMs, tz);
+  return (+p.hour) * 60 + (+p.minute);
 }
 
 /**

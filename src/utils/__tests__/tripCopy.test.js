@@ -59,4 +59,21 @@ describe('dayVibe — categories + per-day variety', () => {
     const d = { activities: food(2) };
     expect(dayVibe(d, 2)).toBe(dayVibe(d, 2));
   });
+
+  test('each rule-derived category produces its own pool', () => {
+    const A = (name) => ({ type: 'activity', name });
+    const vibe = (acts) => dayVibe({ activities: acts }, 0);
+    // arrival: a stay + transport on the same day
+    expect(vibe([{ type: 'stay', name: 'Hotel' }, { type: 'transport', name: 'Flight' }])).toMatch(/Arrival|Touchdown|ease in/i);
+    // travel: a lone transport (≤2 stops, no stay)
+    expect(vibe([{ type: 'transport', name: 'Drive' }])).toMatch(/travel day|Wheels up|Getting there/i);
+    // packed: 4+ activities
+    expect(vibe([A('a'), A('b'), A('c'), A('d')])).toMatch(/full one|Big day|Lots on/i);
+    // culture: museum/gallery/cathedral keywords
+    expect(vibe([A('City Museum'), A('Art Gallery'), A('Old Cathedral')])).toMatch(/wandering|stories|Curiosity/i);
+    // relaxed: a single low-key, non-themed stop
+    expect(vibe([A('Spa morning')])).toMatch(/easy one|Low-key|gentle/i);
+    // mixed: a few generic stops, no strong signal
+    expect(vibe([A('Generic stop'), A('Another stop'), A('Third stop')])).toMatch(/good mix|bit of everything|See some/i);
+  });
 });

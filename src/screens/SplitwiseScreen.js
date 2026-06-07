@@ -49,6 +49,20 @@ export default function SplitwiseScreen({ trip, onOpenActivity }) {
   // warning style with swipe-to-resolve). The split engine stays clock-free + deterministic.
   const splitTrip = withUnconfirmedExcluded(trip, now);
 
+  // Resolve an unconfirmed item via a tap (bulletproof) — the same three actions the
+  // swipe offers. Swipe can be flaky inside the scroll list (Expo Go), so tap is the
+  // reliable primary path and swipe is a bonus.
+  const askResolve = (exp, u) => Alert.alert(
+    u.activity.name,
+    `${fmtM(exp.amount)} · not checked off, so it's left out of the split until you confirm.`,
+    [
+      { text: '✓ Mark checked (count it)', onPress: () => updateActivity(trip.id, u.activity.id, { status: 'done' }) },
+      { text: '🚫 Exclude from split',     style: 'destructive', onPress: () => toggleExpenseExcluded(trip.id, exp.id) },
+      { text: '➜ Open in itinerary',       onPress: () => onOpenActivity?.(u.dayIndex, u.activity.id) },
+      { text: 'Cancel', style: 'cancel' },
+    ],
+  );
+
   // Lists render from the real trip (so unconfirmed rows still show); totals/counts come
   // from the counted-only view so the numbers reflect what will actually be split.
   const { itinExpenses, manualExpenses, itinSkipped } = summariseExpenses(trip);
@@ -172,6 +186,7 @@ export default function SplitwiseScreen({ trip, onOpenActivity }) {
               const card = (
                 <ExpenseCard
                   exp={exp} trip={trip} warn={!!u}
+                  onResolve={u ? () => askResolve(exp, u) : undefined}
                   onDelete={() => deleteExpense(trip.id, exp.id)}
                   onToggleFamily={(famId, v) => toggleFamilySplit(trip.id, exp.id, famId, v)}
                   onToggleMember={(mId, v) => toggleExpenseMember(trip.id, exp.id, mId, v)}
@@ -465,7 +480,7 @@ export default function SplitwiseScreen({ trip, onOpenActivity }) {
 // ExpenseCard
 // ─────────────────────────────────────────────────────────────────
 function ExpenseCard({
-  exp, trip, warn = false,
+  exp, trip, warn = false, onResolve,
   onDelete, onToggleFamily, onToggleMember,
   onChangePayer, onChangeSplitMode,
   onToggleExcluded, onUpdateAmount, onUpdateCustomShares,
@@ -526,7 +541,14 @@ function ExpenseCard({
   return (
     <View style={[styles.expCard, isExcluded && styles.expCardExcluded, warn && !isExcluded && styles.expCardWarn]}>
       {warn && !isExcluded && (
-        <Text style={styles.warnHint}>⚠️ Not counted — wasn’t checked off. Swipe ← to resolve.</Text>
+        <TouchableOpacity
+          onPress={onResolve}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Resolve this unconfirmed item — mark checked, exclude, or open in the itinerary"
+        >
+          <Text style={styles.warnHint}>⚠️ Not counted — wasn’t checked off.  Tap to resolve ▸</Text>
+        </TouchableOpacity>
       )}
       {/* ── Collapsed header ── */}
       <TouchableOpacity

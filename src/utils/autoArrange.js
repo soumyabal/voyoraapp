@@ -526,6 +526,12 @@ export function scheduleDay(activities, opts = {}) {
   const text = a => `${a.name || ''} ${a.detail || ''}`;
 
   const occ = [];
+  // Plan only the REMAINING day: reserve all already-passed time as one occupied block so no
+  // stop is scheduled into the past. opts.earliestMin = "now" as minutes-of-day in the day's
+  // zone (set by Plan-my-day on the current day of a live trip). No-op otherwise → identical.
+  // LOCKED past stops keep their real (earlier) times via step 0 below; only the FREE placement
+  // of remaining stops is floored.
+  if (opts.earliestMin > DAY_START_MIN) addInterval(occ, 0, opts.earliestMin);
   const place = (a, target) => {
     const need = Math.max(BUFFER_MIN, estimateDuration(a));
     const start = findSlotMin(occ, target, need, DAY_END_MIN)

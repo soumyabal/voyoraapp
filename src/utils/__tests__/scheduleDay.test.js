@@ -7,6 +7,33 @@ import { scheduleDay } from '../autoArrange';
 
 const a = (name, type = 'activity', extra = {}) => ({ id: name, name, type, time: '00:00', ...extra });
 
+describe('scheduleDay — earliestMin floor (plan only the remaining day)', () => {
+  test('free stops are scheduled at/after the floor, never into the past', () => {
+    // "now" = 14:00 (840). Two free morning-ish sights should both land after 14:00.
+    const out = scheduleDay([a('Sight A', 'activity'), a('Sight B', 'activity')], { earliestMin: 14 * 60 });
+    for (const x of out) expect(x.time >= '14:00').toBe(true);
+  });
+
+  test('a LOCKED past stop keeps its earlier time; free stops still floor after now', () => {
+    const out = scheduleDay([
+      a('Done', 'activity', { time: '10:00', timeLocked: true }),   // already happened, locked
+      a('Next', 'activity'),                                         // free → after the floor
+    ], { earliestMin: 14 * 60 });
+    expect(out.find(x => x.name === 'Done').time).toBe('10:00');     // locked anchor stays
+    expect(out.find(x => x.name === 'Next').time >= '14:00').toBe(true);
+  });
+
+  test('no earliestMin → unchanged (morning placement as before)', () => {
+    const out = scheduleDay([a('Sight', 'activity')], {});
+    expect(out[0].time).toBe('09:00');
+  });
+
+  test('an early floor (before 09:00) is a no-op', () => {
+    const out = scheduleDay([a('Sight', 'activity')], { earliestMin: 7 * 60 });
+    expect(out[0].time).toBe('09:00');
+  });
+});
+
 describe('scheduleDay', () => {
   test('hotel check-in lands in the late afternoon; sights flow before it', () => {
     const out = scheduleDay([a('Hotel', 'stay'), a('Museum', 'activity')], { dayRole: 'normal' });

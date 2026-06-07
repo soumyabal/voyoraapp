@@ -8,6 +8,7 @@
  */
 import { tzForDay } from './tz';
 import { summariseExpenses } from './expenses';
+import { calcFamilyExpenseTotal } from './costs';
 
 const PLACE_TYPES = new Set(['activity', 'food', 'stay']);
 
@@ -39,6 +40,19 @@ export function computeTripStats(trip) {
 
   const { grandTotal } = summariseExpenses(trip);
 
+  // Per-family spend (reuses the existing moat math — read-only, never re-implemented). Guarded
+  // so a trip with no expenses/families is fine.
+  const safeTrip = { ...trip, days, expenses: trip?.expenses || [], families: trip?.families || [] };
+  const perFamily = safeTrip.families.map(f => ({
+    id: f.id,
+    name: f.name,
+    color: f.color,
+    total: Math.round(calcFamilyExpenseTotal(f, safeTrip) * 100) / 100,
+  }));
+  const topSpender = perFamily.length
+    ? perFamily.reduce((a, b) => (b.total > a.total ? b : a))
+    : null;
+
   return {
     days: days.length,
     nights: Math.max(0, days.length - 1),
@@ -54,6 +68,8 @@ export function computeTripStats(trip) {
     busiestDay,
     totalSpend: grandTotal,
     hasSpend: grandTotal > 0,
+    perFamily,
+    topSpender,
   };
 }
 

@@ -75,6 +75,36 @@ describe('computeTripStats', () => {
   });
 });
 
+describe('computeTripStats — per-family spend (reuses the moat math)', () => {
+  const twoFam = {
+    families: [
+      { id: 'fa', name: 'Aye', color: '#a00', members: [{ id: 'a1', name: 'A1' }] },
+      { id: 'fb', name: 'Bee', color: '#0a0', members: [{ id: 'b1', name: 'B1' }] },
+    ],
+    days: [{ label: 'Day 1', date: '2026-07-10', activities: [] }],
+    expenses: [
+      // A $100 family-split expense shared by both families → $50 each.
+      { id: 'e', source: 'manual', amount: 100, excluded: false, splitMode: 'family',
+        participatingFamilies: ['fa', 'fb'], participatingMembers: null, paidBy: 'a1' },
+    ],
+  };
+
+  test('splits per family and flags the top spender', () => {
+    const s = computeTripStats(twoFam);
+    expect(s.perFamily).toHaveLength(2);
+    const byId = Object.fromEntries(s.perFamily.map(p => [p.id, p.total]));
+    expect(byId.fa).toBeCloseTo(50, 2);
+    expect(byId.fb).toBeCloseTo(50, 2);
+    expect(s.topSpender.id).toBeTruthy();
+  });
+
+  test('no families / no expenses → empty perFamily, null topSpender', () => {
+    const s = computeTripStats({ days: [] });
+    expect(s.perFamily).toEqual([]);
+    expect(s.topSpender).toBeNull();
+  });
+});
+
 describe('tripStatLines', () => {
   test('produces human one-liners incl. zones, flights, spend', () => {
     const lines = tripStatLines(computeTripStats(trip));

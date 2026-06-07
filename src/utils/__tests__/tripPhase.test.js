@@ -2,7 +2,7 @@
  * tripPhase.test.js — trip lifecycle (before/during/after) + the landing-day fix
  * for "a not-started trip opens on Day 2".
  */
-import { tripPhase, defaultDayFor, daysBetweenISO, nowNextOf, openFocusFor, dayZoneLabel, resolveDayZones } from '../helpers';
+import { tripPhase, defaultDayFor, daysBetweenISO, nowNextOf, openFocusFor, dayZoneLabel, resolveDayZones, pastActivityIds, isDayInPast, planFloorMin } from '../helpers';
 
 const trip = (start, end, nDays) => ({
   startDate: start, endDate: end,
@@ -177,6 +177,53 @@ describe('resolveDayZones — smart per-day vs per-activity timezone', () => {
       { date: '2026-07-12', activities: [{ id: 'y', time: '10:00' }] },           // no coords → Eastern
     ] };
     expect(resolveDayZones(t, 1).dayBadge).toBe('EDT');
+  });
+});
+
+describe('pastActivityIds / isDayInPast / planFloorMin — clock-aware locking (TZ)', () => {
+  const LA = { lat: 34.05, lng: -118.24 };  // PDT (-7) in July
+  // A day in LA on 2026-07-11 with stops at 09:00, 13:00, 18:00 (local).
+  const trip = {
+    homeTz: 'America/Los_Angeles', defaultTz: 'America/Los_Angeles',
+    startDate: '2026-07-10', endDate: '2026-07-13',
+    days: [
+      { date: '2026-07-10', activities: [{ id: 'd0', time: '10:00', ...LA }] },
+      { date: '2026-07-11', activities: [
+        { id: 'morning',   time: '09:00', ...LA },
+        { id: 'afternoon', time: '13:00', ...LA },
+        { id: 'evening',   time: '18:00', ...LA },
+      ] },
+      { date: '2026-07-12', activities: [{ id: 'd2', time: '10:00', ...LA }] },
+    ],
+  };
+  // 2026-07-11 14:00 PDT = 21:00 UTC
+  const NOW = Date.UTC(2026, 6, 11, 21, 0);
+
+  test('pastActivityIds: stops whose local start has passed are flagged', () => {
+    const past = pastActivityIds(trip, 1, NOW);
+    expect(past.has('morning')).toBe(true);    // 09:00 < 14:00
+    expect(past.has('afternoon')).toBe(true);  // 13:00 < 14:00
+    expect(past.has('evening')).toBe(false);   // 18:00 > 14:00
+  });
+
+  test('isDayInPast: yesterday past, today not, tomorrow not', () => {
+    expect(isDayInPast(trip, 0, NOW)).toBe(true);   // 07-10 < 07-11
+    expect(isDayInPast(trip, 1, NOW)).toBe(false);  // today
+    expect(isDayInPast(trip, 2, NOW)).toBe(false);  // tomorrow
+  });
+
+  test('planFloorMin: past day → 1440, today → now-minute, future → 0', () => {
+    expect(planFloorMin(trip, 0, NOW)).toBe(24 * 60);   // past
+    expect(planFloorMin(trip, 1, NOW)).toBe(14 * 60);   // today, 14:00 PDT
+    expect(planFloorMin(trip, 2, NOW)).toBe(0);         // future
+  });
+
+  test('timezone matters: the same instant is "earlier" in a more-eastern destination', () => {
+    // If the trip were in New York (EDT, +3h vs LA), 14:00 PDT = 17:00 EDT → the 13:00 NY stop
+    // is past but so is more of the day.
+    const nyTrip = { ...trip, homeTz: 'America/New_York', defaultTz: 'America/New_York',
+      days: trip.days.map(d => ({ ...d, activities: d.activities.map(a => ({ ...a, lat: 40.71, lng: -74.0 })) })) };
+    expect(planFloorMin(nyTrip, 1, NOW)).toBe(17 * 60);  // 17:00 EDT
   });
 });
 

@@ -262,6 +262,22 @@ function _zoneCarriedInto(trip, dayIndex) {
   return carry;
 }
 
+// Per-activity IANA zone for a day's TIMED stops: each takes its own location's zone, a
+// location-less one inherits the previous (carrying across days from _zoneCarriedInto). The one
+// source of truth for both the display (resolveDayZones) and the clock (pastActivityIds), so
+// "what zone is shown" and "is it past" can never diverge. Returns { acts (time-sorted), zoneOf }.
+function _activityZones(trip, dayIndex) {
+  const acts = (trip?.days?.[dayIndex]?.activities || [])
+    .filter(a => a.time && a.status !== 'skipped').slice().sort((a, b) => _tMin(a.time) - _tMin(b.time));
+  let carry = _zoneCarriedInto(trip, dayIndex);
+  const zoneOf = {};
+  for (const a of acts) {
+    if (a.lat != null && a.lng != null) carry = tzForCoords(a.lat, a.lng) || carry;
+    zoneOf[a.id] = carry;
+  }
+  return { acts, zoneOf, carry };
+}
+
 /**
  * Per-day timezone resolution for the itinerary (the "smart" display). Each timed activity takes
  * the zone of ITS OWN location (offline tzForCoords); a location-less activity inherits the
@@ -273,18 +289,9 @@ function _zoneCarriedInto(trip, dayIndex) {
  * Returns { spans, dayBadge, zoneById }.
  */
 export function resolveDayZones(trip, dayIndex) {
-  const day  = trip?.days?.[dayIndex];
-  const date = day?.date;
+  const date = trip?.days?.[dayIndex]?.date;
   const home = trip?.homeTz || deviceTz();
-  const acts = (day?.activities || [])
-    .filter(a => a.time && a.status !== 'skipped').slice().sort((a, b) => _tMin(a.time) - _tMin(b.time));
-
-  let carry = _zoneCarriedInto(trip, dayIndex);
-  const zoneOf = {};
-  for (const a of acts) {
-    if (a.lat != null && a.lng != null) carry = tzForCoords(a.lat, a.lng) || carry;
-    zoneOf[a.id] = carry;
-  }
+  const { acts, zoneOf, carry } = _activityZones(trip, dayIndex);
   const offAt = (tz) => (tz && date) ? offsetMinutes(tz, zonedWallToUtcMs(date, '12:00', tz)) : null;
   const homeOff = offAt(home);
   const distinct = [...new Set(acts.map(a => offAt(zoneOf[a.id])))];
@@ -297,6 +304,50 @@ export function resolveDayZones(trip, dayIndex) {
   const tz = zoneOf[acts[0]?.id] || carry;
   const badge = (offAt(tz) != null && homeOff != null && offAt(tz) !== homeOff) ? zoneShortLabel(tz, date, '12:00') : '';
   return { spans: false, dayBadge: badge, zoneById: {} };
+}
+
+/**
+ * IDs of a day's timed stops whose START has already PASSED, in the stop's OWN timezone (so a
+ * live trip auto-locks what's done as the clock crosses each stop). Clock-injected (`nowMs`) so
+ * it stays pure/testable. The UI treats these as locked (can't be moved without a warning) and
+ * Plan-my-day anchors them. Empty for a day with no date / no timed stops.
+ */
+export function pastActivityIds(trip, dayIndex, nowMs = Date.now()) {
+  const date = trip?.days?.[dayIndex]?.date;
+  const out = new Set();
+  if (!date) return out;
+  const { acts, zoneOf } = _activityZones(trip, dayIndex);
+  for (const a of acts) {
+    const inst = zonedWallToUtcMs(date, a.time, zoneOf[a.id]);
+    if (!Number.isNaN(inst) && inst <= nowMs) out.add(a.id);
+  }
+  return out;
+}
+
+/**
+ * Is this whole day already in the PAST (its civil date is before "today" in the day's zone)?
+ * Drives the Plan-my-day lock on past days of an ongoing trip + every day of a finished trip.
+ * Clock-injected. A future or current day → false.
+ */
+export function isDayInPast(trip, dayIndex, nowMs = Date.now()) {
+  const date = trip?.days?.[dayIndex]?.date;
+  if (!date) return false;
+  return date < zonedNowDate(tzForDay(trip, dayIndex), nowMs);
+}
+
+/**
+ * The earliest minute-of-day Plan-my-day may schedule INTO for a day — so it only arranges the
+ * REMAINING time, never the past. Past day → 1440 (nothing schedulable; the caller disables the
+ * button). Future day → 0 (no floor). Today → "now" in the day's zone. Clock-injected.
+ */
+export function planFloorMin(trip, dayIndex, nowMs = Date.now()) {
+  const date = trip?.days?.[dayIndex]?.date;
+  if (!date) return 0;
+  const tz = tzForDay(trip, dayIndex);
+  const today = zonedNowDate(tz, nowMs);
+  if (date < today) return 24 * 60;
+  if (date > today) return 0;
+  return zonedNowMinutes(tz, nowMs);
 }
 
 export function nowNextOf(day, nowMin) {

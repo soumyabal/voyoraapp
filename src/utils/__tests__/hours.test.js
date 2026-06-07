@@ -2,11 +2,33 @@
  * hours.test.js — opening-hours helpers + the closed_venue Trip Check rule.
  * 2026-06-12 is a Friday (weekday 5).
  */
-import { weekdayOf, isOpenAt, hoursLabel, weeklyHoursLabel, compactHours } from '../hours';
+import { weekdayOf, isOpenAt, hoursLabel, weeklyHoursLabel, compactHours, dayName } from '../hours';
 import { validateTrip } from '../tripValidator';
 
 const FRI = 5;
 const NINE_TO_FIVE = [{ d: FRI, o: 9 * 60, c: 17 * 60 }];
+
+describe('dayName', () => {
+  test('maps weekday index → full name', () => {
+    expect(dayName(0)).toBe('Sunday');
+    expect(dayName(5)).toBe('Friday');
+    expect(dayName(6)).toBe('Saturday');
+  });
+  test('null / out-of-range → empty string', () => {
+    expect(dayName(null)).toBe('');
+    expect(dayName(undefined)).toBe('');
+    expect(dayName(7)).toBe('');
+  });
+});
+
+describe('hoursLabel clock formatting (minutes, midnight, noon)', () => {
+  test('non-whole-hour times keep the minutes', () => {
+    expect(hoursLabel([{ d: FRI, o: 9 * 60 + 30, c: 17 * 60 + 15 }], FRI)).toBe('9:30 AM–5:15 PM');
+  });
+  test('midnight reads 12 AM and noon reads 12 PM', () => {
+    expect(hoursLabel([{ d: FRI, o: 0, c: 12 * 60 }], FRI)).toBe('12 AM–12 PM');
+  });
+});
 
 describe('compactHours (the 24/7 "shows Closed" bug)', () => {
   test('a 24/7 place (single open period, NO close) is open EVERY day, all day', () => {

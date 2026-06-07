@@ -18,6 +18,14 @@ test('no Arrives → falls back to the per-mode default', () => {
   expect(estimateDuration({ type: 'transport', subtype: 'flight' })).toBe(180);
 });
 
+test('every transport sub-mode has its own default', () => {
+  expect(estimateDuration({ type: 'transport', subtype: 'train' })).toBe(90);
+  expect(estimateDuration({ type: 'transport', subtype: 'ship' })).toBe(240);   // ferry/cruise
+  expect(estimateDuration({ type: 'transport', subtype: 'pitstop' })).toBe(15);
+  expect(estimateDuration({ type: 'transport', subtype: 'bus' })).toBe(120);     // unknown sub-mode → default
+  expect(estimateDuration({ type: 'transport' })).toBe(120);                     // no sub-mode → default
+});
+
 test('an explicit duration override still wins over the span', () => {
   expect(estimateDuration({ type: 'transport', subtype: 'flight', time: '08:00', arriveTime: '18:00', durationMins: 240 })).toBe(240);
 });

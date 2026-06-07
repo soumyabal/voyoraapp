@@ -19,8 +19,13 @@
 > `tzForDay(trip, i)` (day.tz → defaultTz → homeTz → device) is the one resolution rule. 34 tz
 > tests + the persisted-shape guard updated.
 >
-> **Next: Phase 2** — UI zone badges (show `7:00 PM PDT` only where the zone differs; travel-leg
-> arrival labels). Device-verified; gated on the on-device spike result.
+> **Phase 2 — IN PROGRESS.** First piece DONE: **open to "now"** — `setCurrentTrip` lands a
+> Happening trip on the DESTINATION's current day (via `tz.zonedNowDate(trip.defaultTz)`, so
+> Tokyo can be a day ahead of the phone) and TripScreen scrolls to that day's now/next activity
+> (`helpers.openFocusFor` + `tz.zonedNowMinutes` + the existing highlight). Wires up the long-dead
+> `defaultDayFor` (every trip used to open on Day 1). Still TODO: **zone badges** (`7:00 PM PDT`
+> only where the zone differs) + travel-leg arrival labels. Device-verified; degrades gracefully
+> if Hermes lacks `Intl` timeZone.
 
 ---
 

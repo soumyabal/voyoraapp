@@ -406,7 +406,8 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
       // viewport's page-Y, plus the current offset, is the row's Y in the scroll content.
       scrollHost.measure((sx, sy, sw, sh, scPageX, scPageY) => {
         node.measure((x, y, w, h, rowPageX, rowPageY) => {
-          const target = scrollYRef.current + (rowPageY - scPageY) - 80;
+          // Leave room for the pinned day-nav bar at the top of the viewport (~150px).
+          const target = scrollYRef.current + (rowPageY - scPageY) - 150;
           sc.scrollTo({ y: Math.max(0, target), animated: true });
         });
       });
@@ -868,28 +869,33 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
         onScroll={(e) => { scrollYRef.current = e.nativeEvent.contentOffset.y; }}
+        stickyHeaderIndices={[0]}
       >
 
-        {/* Day Navigation — pick any day to plan it (no live "today" tracking in the planner) */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayNav} contentContainerStyle={{ paddingHorizontal: spacing.xxl }}>
-          {trip.days.map((d, i) => {
-            const dc = calcDayCostForTrip(d, trip);
-            const healthDot = HEALTH_DOT[healthByDay[i]];   // undefined for clean/empty/tip → calm
-            return (
-              <TouchableOpacity
-                key={d.date}
-                style={[styles.dayBtn, i === currentDay && styles.dayBtnActive]}
-                onPress={() => setCurrentDay(i)}
-              >
-                {healthDot && <View style={[styles.dayHealthDot, { backgroundColor: healthDot }]} />}
-                <Text style={[styles.dayBtnLabel, i === currentDay && styles.dayBtnLabelActive]}>{d.label}</Text>
-                <Text style={[styles.dayBtnWeekday, i === currentDay && { color: colors.primary }]}>{WD_SHORT[weekdayOf(d.date)] || ''}</Text>
-                <Text style={[styles.dayBtnDate, i === currentDay && { color: colors.primary }]}>{fmt(d.date)}</Text>
-                {dc > 0 && <Text style={styles.dayCost}>{fmtM(dc)}</Text>}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {/* Day Navigation — PINNED (sticky) so you can hop between days without scrolling back
+            to the top, even on long photo-forward days. Solid bar so content doesn't bleed
+            through when stuck. (no live "today" tracking in the planner) */}
+        <View style={styles.dayNavBar}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xxl }}>
+            {trip.days.map((d, i) => {
+              const dc = calcDayCostForTrip(d, trip);
+              const healthDot = HEALTH_DOT[healthByDay[i]];   // undefined for clean/empty/tip → calm
+              return (
+                <TouchableOpacity
+                  key={d.date}
+                  style={[styles.dayBtn, i === currentDay && styles.dayBtnActive]}
+                  onPress={() => setCurrentDay(i)}
+                >
+                  {healthDot && <View style={[styles.dayHealthDot, { backgroundColor: healthDot }]} />}
+                  <Text style={[styles.dayBtnLabel, i === currentDay && styles.dayBtnLabelActive]}>{d.label}</Text>
+                  <Text style={[styles.dayBtnWeekday, i === currentDay && { color: colors.primary }]}>{WD_SHORT[weekdayOf(d.date)] || ''}</Text>
+                  <Text style={[styles.dayBtnDate, i === currentDay && { color: colors.primary }]}>{fmt(d.date)}</Text>
+                  {dc > 0 && <Text style={styles.dayCost}>{fmtM(dc)}</Text>}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
 
         {/* ── Must-dos strip ── */}
         {(() => {
@@ -2282,6 +2288,15 @@ const styles = StyleSheet.create({
   todayDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#15803d', marginTop: 3 },
   dayHealthDot: { position: 'absolute', top: 5, right: 5, width: 7, height: 7, borderRadius: 4 },
   dayNav: { marginTop: spacing.xl },
+  // Pinned day-switcher bar (stickyHeaderIndices target) — solid bg + hairline so it reads as
+  // a fixed bar over scrolling content and the white day pills stay legible.
+  dayNavBar: {
+    backgroundColor: colors.bg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.hairline,
+  },
   dayBtn: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,

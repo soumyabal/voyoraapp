@@ -8,10 +8,19 @@
 > **Phase 0 (spike) — DONE.** The engine `src/utils/tz.js` is built (pure, zero-dep, Intl-based)
 > with the capability check `tzSupported()` baked in as runtime feature-detection, so the app
 > degrades gracefully instead of getting blocked. App.js logs the result once in `__DEV__`
-> (`[tz spike] Intl timeZone supported: …`). 19 unit tests in `tz.test.js`. API: `offsetMinutes`,
-> `zonedWallToUtcMs`, `tzAbbr`, `zoneShortLabel`, `formatGmtOffset`, `crossZoneLegMinutes`,
-> `deviceTz`, `tzSupported`. **Next: Phase 1** (store v6 schema + migrate; coords→tz inference —
-> still needs the offline-table-vs-Google-API call in §9.1) then **Phase 2** (UI zone badges).
+> (`[tz spike] Intl timeZone supported: …`). API: `offsetMinutes`, `zonedWallToUtcMs`, `tzAbbr`,
+> `zoneShortLabel`, `formatGmtOffset`, `crossZoneLegMinutes`, `deviceTz`, `tzSupported`.
+>
+> **Phase 1 (model) — DONE.** Owner chose the **offline table** for inference (§9.1): added
+> `tz-lookup` (pure-JS, ~1 MB, Expo-Go safe) + `tzForCoords(lat,lng)` (lazy-required, guards bad
+> coords → null). Store **v5 → v6**: trips gain `homeTz` + `defaultTz`; `createTrip` infers
+> `defaultTz` from the origin's coords (else device zone), `updateTrip` keeps it in sync with the
+> origin; `migrate` backfills both to the device zone (additive — single-zone trips unchanged).
+> `tzForDay(trip, i)` (day.tz → defaultTz → homeTz → device) is the one resolution rule. 34 tz
+> tests + the persisted-shape guard updated.
+>
+> **Next: Phase 2** — UI zone badges (show `7:00 PM PDT` only where the zone differs; travel-leg
+> arrival labels). Device-verified; gated on the on-device spike result.
 
 ---
 

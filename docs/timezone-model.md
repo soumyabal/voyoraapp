@@ -39,9 +39,16 @@
 >   day drops the badge and tags each activity's time with its own zone (`9:00 AM CDT … 2:00 PM
 >   EDT`). `ActivityCard` renders a `zoneLabel` in the eyebrow.
 >
-> Still TODO Phase 2: **travel-leg arrival labels** ("lands 2:00 PM EDT · 5h", red-eye/+1-day) +
-> an optional **manual zone picker** on Edit Trip. Device-verified; degrades gracefully without
-> `Intl` timeZone.
+> - **Travel-leg arrival labels (Phase 2f) — DONE.** `helpers.crossZoneLeg` + the eyebrow render:
+>   a transport crossing zones shows `9:00 AM PDT → 5:00 PM EDT · 5h` with a `🌙 +1 day` red-eye
+>   marker. Depart zone = the zone before the leg; arrive zone = the destination's (or the next
+>   differing stop). DST-correct, clock-free, unit-tested.
+> - **Per-activity zone flag (Phase 2g) — DONE.** Every timed stop shows its own zone abbr (CDT
+>   etc.) in the eyebrow — the smart badge-suppression was dropped (a same-zone trip read blank
+>   next to a zone-crossing one).
+>
+> Phase 2 is essentially complete. Optional remaining: a **manual zone picker** on Edit Trip (for
+> the rare unknowable case / override). Device-verified; degrades gracefully without `Intl`.
 
 ---
 

@@ -413,14 +413,9 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     }, 350);   // let the tab become visible (display:flex) + lay out first
     return () => clearTimeout(t);
   }, [highlightedActIds, currentDay]);
-  const [collapsedSlots,        setCollapsedSlots]        = useState({});
   const [mustDosDismissed,      setMustDosDismissed]      = useState(false);
   const [mustDosChecked,        setMustDosChecked]        = useState({});
   const [celebrate,             setCelebrate]             = useState(false);  // one-shot when Trip Check turns all-green
-
-  const toggleSlot = (key) =>
-    setCollapsedSlots(prev => ({ ...prev, [key]: !prev[key] }));
-
 
   const day = trip.days[currentDay] || trip.days[0];
 
@@ -1133,170 +1128,111 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
               ))}
             </View>
           ) : (
-            // Has activities — group by slot
-            // Find the index of the last slot that has activities (trailing empties collapse)
+            // Has activities — ONE chronological timeline. Soft time-of-day dividers
+            // (Morning/Afternoon/Evening/Night) appear only where the part of day changes,
+            // replacing the old four fixed sections — so a sparse day shows its photos, not
+            // empty section chrome. Only TIMED stops sit here; unscheduled (time=null) stops
+            // live in the "Doesn't fit" tray above.
             (() => {
-              const slotActsMap = DAY_SLOTS.map(slot => ({
-                slot,
-                // Only TIMED stops sit in a slot. Unscheduled stops (time=null — the planner
-                // couldn't fit them in their open hours) go in the "Doesn't fit" tray below.
-                acts: [...day.activities]
-                  .filter(a => a.time && getSlotKey(a.time) === slot.key)
-                  .sort((a, b) => timeToMin(a.time) - timeToMin(b.time)),
-              }));
-              const lastFilledIdx = slotActsMap.reduce((best, { acts }, i) => acts.length > 0 ? i : best, -1);
-              return slotActsMap.map(({ slot, acts }, slotIdx) => {
-              const slotActs     = acts;
-              const doneCount    = slotActs.filter(a => a.status === 'done').length;
-              const skippedCount = slotActs.filter(a => a.status === 'skipped').length;
-              // Last stop of the nearest earlier section — for the cross-section travel leg.
-              let prevSlotLast = null;
-              for (let k = slotIdx - 1; k >= 0; k--) {
-                if (slotActsMap[k].acts.length) { prevSlotLast = slotActsMap[k].acts[slotActsMap[k].acts.length - 1]; break; }
-              }
-              // Trailing empty slot — render compact add button instead of full card
-              if (slotActs.length === 0 && slotIdx > lastFilledIdx) {
+              const timed = [...day.activities]
+                .filter(a => a.time)
+                .sort((a, b) => timeToMin(a.time) - timeToMin(b.time));
+              const orderedIds = timed.map(a => a.id);
+
+              // Day has only unscheduled stops (all in the tray above) → a calm add row.
+              if (timed.length === 0) {
                 return (
-                  <TouchableOpacity
-                    key={slot.key}
-                    style={styles.slotCompact}
-                    onPress={() => openAddInSlot(slot.defaultTime)}
-                    activeOpacity={0.6}
-                  >
-                    <Icon name={slot.icon} size={14} color={slot.tint} />
-                    <Text style={styles.slotCompactText}>Add {slot.label}</Text>
-                    <Icon name="add" size={14} color={colors.subtle} />
+                  <TouchableOpacity style={styles.slotCompact} onPress={() => openAddInSlot('09:00')} activeOpacity={0.6}>
+                    <Icon name="add" size={14} color={colors.accent} />
+                    <Text style={styles.slotCompactText}>Add a stop</Text>
                   </TouchableOpacity>
                 );
               }
 
-              const isCollapsed = !!collapsedSlots[slot.key];
+              let lastSlotKey = null;
               return (
-                <View key={slot.key} style={styles.slotSection}>
-                  {/* Slot header — tap to collapse/expand */}
-                  <TouchableOpacity
-                    style={styles.slotHeader}
-                    onPress={() => toggleSlot(slot.key)}
-                    activeOpacity={0.7}
-                  >
-                    {/* Row 1: emoji · label · [+ Add here pill] · chevron.
-                        "here" = this slot — distinguishes it from the global "Discover"
-                        FAB (which adds to the day with no slot), since both open Discover. */}
-                    <View style={styles.slotHeaderRow}>
-                      <Icon name={slot.icon} size={17} color={slot.tint} style={{ marginRight: spacing.xs }} />
-                      <Text style={styles.slotLabel}>{slot.label}</Text>
-                      {!isCollapsed && (
-                        <TouchableOpacity
-                          style={styles.slotAddBtn}
-                          onPress={() => openAddInSlot(slot.defaultTime)}
-                          hitSlop={{ top: 10, bottom: 10, left: 8, right: 4 }}
-                        >
-                          <Text style={styles.slotAddBtnText}>+ Add here</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-
-                    {/* Row 2: muted meta — time hint · item count · status badges */}
-                    <View style={styles.slotMetaRow}>
-                      {isCollapsed ? (
-                        <>
-                          <Text style={styles.slotMetaText}>
-                            {slotActs.length} item{slotActs.length !== 1 ? 's' : ''}
-                          </Text>
-                          {doneCount > 0    && <Text style={styles.slotDoneText}>  ✅ {doneCount} done</Text>}
-                          {skippedCount > 0 && <Text style={styles.slotSkipText}>  ↩️ {skippedCount} skipped</Text>}
-                        </>
-                      ) : (
-                        <>
-                          <Text style={styles.slotMetaText}>{slot.hint}</Text>
-                          {slotActs.length > 0 && (
-                            <Text style={styles.slotMetaText}>
-                              {'  ·  '}{slotActs.length} item{slotActs.length !== 1 ? 's' : ''}
+                <View>
+                  {timed.map((act, index) => {
+                    const prev     = index > 0 ? timed[index - 1] : null;
+                    const slotKey  = getSlotKey(act.time);
+                    const newPart  = slotKey !== lastSlotKey;
+                    lastSlotKey    = slotKey;
+                    const slotMeta = DAY_SLOTS.find(s => s.key === slotKey);
+                    return (
+                      <React.Fragment key={act.id}>
+                        {/* Soft divider — only when the part of day changes */}
+                        {newPart && (
+                          <View style={styles.tlDivider}>
+                            <Icon name={slotMeta?.icon} size={13} color={slotMeta?.tint || colors.subtle} />
+                            <Text style={[styles.tlDividerLabel, { color: slotMeta?.tint || colors.subtle }]}>
+                              {slotMeta?.label}
                             </Text>
-                          )}
-                          {doneCount > 0    && <Text style={styles.slotDoneText}>  ✅ {doneCount}</Text>}
-                          {skippedCount > 0 && <Text style={styles.slotSkipText}>  ↩️ {skippedCount}</Text>}
-                        </>
-                      )}
-                    </View>
-                  </TouchableOpacity>
+                            <View style={styles.tlDividerLine} />
+                            <TouchableOpacity
+                              onPress={() => openAddInSlot(slotMeta?.defaultTime || act.time)}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Text style={styles.tlDividerAdd}>+ add</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
 
-                  {/* First stop of the day: travel leg from where you WOKE — origin on
-                      Day 1, last night's hotel / friends-camping address otherwise. */}
-                  {!isCollapsed && slotActs.length > 0 && !prevSlotLast && startAnchor?.lat != null && (
-                    <OriginConnector origin={startAnchor} to={slotActs[0]} />
-                  )}
-                  {/* Woke somewhere we can't map (friends/camping, no address) → an honest,
-                      self-explaining invite instead of a silently dropped first leg. */}
-                  {!isCollapsed && slotActs.length > 0 && !prevSlotLast && priorNightNeedsAddr && (
-                    <TouchableOpacity style={styles.wakeAskRow} onPress={() => openNightPlan(currentDay - 1)} activeOpacity={0.7}
-                      accessibilityRole="button" accessibilityLabel="Morning starts at your first stop. Add where you stayed last night to map the drive.">
-                      <Text style={styles.wakeAskText}>🌅 Morning starts at your first stop · <Text style={styles.wakeAskLink}>add where you stayed ›</Text></Text>
-                    </TouchableOpacity>
-                  )}
+                        {/* First stop: travel leg from where you WOKE — origin on Day 1,
+                            last night's hotel / friends-camping address otherwise. */}
+                        {index === 0 && startAnchor?.lat != null && (
+                          <OriginConnector origin={startAnchor} to={act} />
+                        )}
+                        {/* Woke somewhere we can't map (friends/camping, no address) → an
+                            honest, self-explaining invite instead of a dropped first leg. */}
+                        {index === 0 && startAnchor?.lat == null && priorNightNeedsAddr && (
+                          <TouchableOpacity style={styles.wakeAskRow} onPress={() => openNightPlan(currentDay - 1)} activeOpacity={0.7}
+                            accessibilityRole="button" accessibilityLabel="Morning starts at your first stop. Add where you stayed last night to map the drive.">
+                            <Text style={styles.wakeAskText}>🌅 Morning starts at your first stop · <Text style={styles.wakeAskLink}>add where you stayed ›</Text></Text>
+                          </TouchableOpacity>
+                        )}
+                        {/* Travel leg between consecutive stops (now uniform across the whole day) */}
+                        {index > 0 && <TravelConnector from={prev} to={act} />}
 
-                  {/* Travel from the previous section's last stop into this one */}
-                  {!isCollapsed && slotActs.length > 0 && prevSlotLast && (
-                    <TravelConnector from={prevSlotLast} to={slotActs[0]} />
-                  )}
-
-                  {!isCollapsed && slotActs.length === 0 ? (
-                    <TouchableOpacity
-                      style={styles.slotEmpty}
-                      onPress={() => openAddInSlot(slot.defaultTime)}
-                      activeOpacity={0.6}
-                    >
-                      <Text style={styles.slotEmptyText}>Nothing planned for {slot.label.toLowerCase()} · tap to add</Text>
-                    </TouchableOpacity>
-                  ) : !isCollapsed ? (
-                    <FlatList
-                      data={slotActs}
-                      keyExtractor={(act) => act.id}
-                      scrollEnabled={false}
-                      renderItem={({ item: act, index }) => (
-                        <>
-                        {index > 0 && <TravelConnector from={slotActs[index - 1]} to={act} />}
+                        {/* The stop */}
                         <View collapsable={false} ref={(n) => { rowRefs.current[act.id] = n; }}>
-                        <ActivityCard
-                          activity={act}
-                          trip={trip}
-                          dayDate={day.date}
-                          originStop={index > 0 ? slotActs[index - 1] : prevSlotLast}
-                          isHighlighted={highlightedActIds.includes(act.id)}
-                          isFirst={index === 0}
-                          isLast={index === slotActs.length - 1}
-                          onMoveUp={() => {
-                            if (index === 0) return;
-                            guardSwap(act, slotActs[index - 1], () => {
-                              const newOrder = [...slotActs];
-                              [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
-                              reorderSlotActivities(trip.id, currentDay, newOrder.map(a => a.id));
-                            });
-                          }}
-                          onMoveDown={() => {
-                            if (index === slotActs.length - 1) return;
-                            guardSwap(act, slotActs[index + 1], () => {
-                              const newOrder = [...slotActs];
-                              [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
-                              reorderSlotActivities(trip.id, currentDay, newOrder.map(a => a.id));
-                            });
-                          }}
-                          onMarkDone={() => setDone(act)}
-                          onEdit={() => openEdit(act)}
-                          onDelete={() => deleteWithUndo(act)}
-                          onMoveRequest={() => guardMove(act, () => setMovingAct(act))}
-                          onSlotMove={() => guardMove(act, () => openSlotMove(act))}
-                          onToggleLock={() => toggleLock(act)}
-                          onExploreNearby={() => exploreNearby(act)}
-                        />
+                          <ActivityCard
+                            activity={act}
+                            trip={trip}
+                            dayDate={day.date}
+                            originStop={prev}
+                            isHighlighted={highlightedActIds.includes(act.id)}
+                            isFirst={index === 0}
+                            isLast={index === timed.length - 1}
+                            onMoveUp={() => {
+                              if (index === 0) return;
+                              guardSwap(act, timed[index - 1], () => {
+                                const newOrder = [...orderedIds];
+                                [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+                                reorderSlotActivities(trip.id, currentDay, newOrder);
+                              });
+                            }}
+                            onMoveDown={() => {
+                              if (index === timed.length - 1) return;
+                              guardSwap(act, timed[index + 1], () => {
+                                const newOrder = [...orderedIds];
+                                [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+                                reorderSlotActivities(trip.id, currentDay, newOrder);
+                              });
+                            }}
+                            onMarkDone={() => setDone(act)}
+                            onEdit={() => openEdit(act)}
+                            onDelete={() => deleteWithUndo(act)}
+                            onMoveRequest={() => guardMove(act, () => setMovingAct(act))}
+                            onSlotMove={() => guardMove(act, () => openSlotMove(act))}
+                            onToggleLock={() => toggleLock(act)}
+                            onExploreNearby={() => exploreNearby(act)}
+                          />
                         </View>
-                        </>
-                      )}
-                    />
-                  ) : null}
+                      </React.Fragment>
+                    );
+                  })}
                 </View>
               );
-            });
             })()
           )}
 
@@ -2569,6 +2505,15 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   slotCompactText: { ...typography.caption, color: colors.muted },
+  // Soft time-of-day divider in the chronological timeline (replaces the 4 fixed sections).
+  tlDivider: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginHorizontal: spacing.xxl,
+    marginTop: spacing.md, marginBottom: spacing.xs,
+  },
+  tlDividerLabel: { ...typography.caption, fontWeight: '800', letterSpacing: 0.3, textTransform: 'uppercase', fontSize: 11 },
+  tlDividerLine:  { flex: 1, height: 1, backgroundColor: colors.hairline },
+  tlDividerAdd:   { ...typography.caption, color: colors.accent, fontWeight: '700' },
   emptySlot: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     marginHorizontal: spacing.xxl,

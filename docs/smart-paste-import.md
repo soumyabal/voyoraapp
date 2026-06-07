@@ -1,10 +1,20 @@
 # Smart Paste — "paste an itinerary, get a trip" (design + honest assessment)
 
-> Status: **ASSESSMENT / DESIGN.** Written 2026-06-07 at the owner's request: can a pasted
-> natural-language itinerary (e.g. a Gemini/ChatGPT trip plan) be turned into a Voyara trip
-> **deterministically — knowledge-graph + rules, no AI**? How much effort? What's Supabase's role?
-> A pure-JS proof-of-concept of the hardest claim (the structure parse) ships alongside this doc:
-> `src/utils/itineraryParser.js` + `itineraryParser.test.js`.
+> Status: **MVP BUILT (deterministic, behind `RELEASE_FLAGS.smartPaste`).** Written 2026-06-07 as
+> an assessment; the owner then green-lit building it. Shipped this session:
+> - `src/utils/itineraryParser.js` — parse (stages A–C): markdown bullets/bold, `Day N` + calendar
+>   headers, **wall-of-text re-segmentation**, segments, slots, stops, Option A/B, type lexicon,
+>   candidate-place extraction + alias/stop-list. (14 tests)
+> - `src/utils/itineraryImport.js` — assemble (stage E): parsed → real trip via createTrip +
+>   addActivity, OFFLINE (dates→days, slot/explicit→times, type, Option B as skipped, vague→note).
+>   (6 tests)
+> - `src/modals/PasteImportModal.js` + Home "Paste a plan" button — the end-to-end flow (F).
+> - `src/utils/devSeed.js` — a `__DEV__` demo menu incl. a paste-built trip.
+>
+> **Still TODO: stage D (Places resolution)** — candidate name → coords/hours/cost, which also
+> lights up the timezone features. Deliberately deferred (Google Places **API cost** — needs the
+> owner present to greenlight + a caching strategy). Until then, imported trips are a complete
+> reviewable skeleton (no coords). The rest of this doc is the original assessment.
 
 ---
 

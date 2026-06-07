@@ -49,7 +49,7 @@ const useStore = create(
       // shape changes (the store.test.js shape guard will fail to remind you).
       // Previously there was NO version → the only way to change shape was to
       // rename the key, which WIPES every user's trips. Versioning fixes that.
-      version: 6,
+      version: 7,
       // v0 (unversioned, older builds) → v1: backfill optional trip fields.
       // v1 → v2: added per-day `day.nightPlan` (hotel-less-but-covered nights).
       // v2 → v3: `day.nightPlan` widened from a STRING to { type, label?, lat?, lng? }
@@ -65,6 +65,8 @@ const useStore = create(
       // v5 → v6: TIMEZONES (docs/timezone-model.md) — trips gain homeTz + defaultTz (backfilled
       // to the device zone; days inherit via day.tz which stays absent until set). Additive +
       // read-time-resolved (tzForDay), so no behaviour change for single-zone trips.
+      // v6 → v7: Smart Packing List — trips gain `packing` ({} check-state map). Additive; the
+      // suggestions are derived (buildPackingList), only ticks persist.
       migrate: (state) => {
         if (!state) return state;
         const dz = deviceTz();
@@ -79,6 +81,7 @@ const useStore = create(
           expenses: [],
           homeTz: dz,
           defaultTz: dz,
+          packing: {},
           ...t, // existing values always win over the backfilled defaults
           days: (t.days || []).map((d) => ({
             ...d,

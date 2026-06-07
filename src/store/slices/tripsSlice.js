@@ -21,6 +21,16 @@ export const createTripsSlice = (set, get) => ({
     currentTripId: s.currentTripId === tripId ? null : s.currentTripId,
   })),
 
+  // Toggle a Smart Packing List item's checked state (persisted per trip).
+  togglePackingItem: (tripId, key) => set(s => ({
+    trips: s.trips.map(t => {
+      if (t.id !== tripId || !key) return t;
+      const packing = { ...(t.packing || {}) };
+      if (packing[key]) delete packing[key]; else packing[key] = true;
+      return { ...t, packing };
+    }),
+  })),
+
   updateTrip: (tripId, updates) => set(s => ({
     trips: s.trips.map(t => {
       if (t.id !== tripId) return t;
@@ -121,6 +131,9 @@ export const createTripsSlice = (set, get) => ({
       // creation, else the device zone; kept in sync by updateTrip when the origin changes.
       homeTz: deviceTz(),
       defaultTz: (origin && origin.lat != null ? tzForCoords(origin.lat, origin.lng) : null) || deviceTz() || null,
+      // Smart Packing List check-state: { [itemKey]: true } for ticked items (suggestions
+      // themselves are derived by buildPackingList — only the checks are persisted).
+      packing: {},
     };
 
     set(s => ({ trips: [trip, ...s.trips] }));

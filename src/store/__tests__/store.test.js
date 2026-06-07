@@ -52,6 +52,15 @@ describe('createTrip', () => {
     // Timezones backfilled (no origin coords → device zone). Just assert they're present strings.
     expect(typeof t.homeTz).toBe('string');
     expect(typeof t.defaultTz).toBe('string');
+    expect(t.packing).toEqual({});           // smart-packing check-state starts empty
+  });
+
+  test('togglePackingItem ticks/unticks a packing key (persisted on the trip)', () => {
+    const t = makeTrip();
+    S().togglePackingItem(t.id, 'sunscreen');
+    expect(tripById(t.id).packing.sunscreen).toBe(true);
+    S().togglePackingItem(t.id, 'sunscreen');
+    expect(tripById(t.id).packing.sunscreen).toBeUndefined();
   });
 
   test('persisted trip shape is locked — adding/removing a field must bump the storage version', () => {
@@ -62,7 +71,7 @@ describe('createTrip', () => {
     expect(Object.keys(t).sort()).toEqual([
       'bgColors', 'budget', 'days', 'defaultTz', 'destination', 'emoji', 'endDate', 'expenses',
       'families', 'focus', 'homeTz', 'id', 'itineraryPushed', 'mode', 'name', 'origin',
-      'pace', 'seenPlaces', 'splitMode', 'startDate',
+      'pace', 'packing', 'seenPlaces', 'splitMode', 'startDate',
     ]);
   });
 });

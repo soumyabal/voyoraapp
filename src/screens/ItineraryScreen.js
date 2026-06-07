@@ -14,7 +14,7 @@ import { colors, spacing, radius, typography, shadow, activityColors } from '../
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
 import ConfettiBurst from '../components/ui/ConfettiBurst';
-import { fmt, fmtM, uid, checkOutOf, resolveDayZones, pastActivityIds, isDayInPast, planFloorMin } from '../utils/helpers';
+import { fmt, fmtM, uid, checkOutOf, resolveDayZones, pastActivityIds, isDayInPast, planFloorMin, crossZoneLeg } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost } from '../utils/costs';
 import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
@@ -1274,6 +1274,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                             trip={trip}
                             dayDate={day.date}
                             zoneLabel={dayZones.zoneById[act.id]}
+                            leg={act.type === 'transport' ? crossZoneLeg(trip, dayIdx, act) : null}
                             autoLocked={pastIds.has(act.id)}
                             originStop={prev}
                             isHighlighted={highlightedActIds.includes(act.id)}
@@ -1626,7 +1627,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   );
 }
 
-function ActivityCard({ activity: act, trip, dayDate, zoneLabel, autoLocked, originStop, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onEdit, onDelete, onMoveRequest, onSlotMove, onToggleLock, onExploreNearby }) {
+function ActivityCard({ activity: act, trip, dayDate, zoneLabel, leg, autoLocked, originStop, isHighlighted, isFirst, isLast, onMoveUp, onMoveDown, onMarkDone, onEdit, onDelete, onMoveRequest, onSlotMove, onToggleLock, onExploreNearby }) {
   const status    = act.status ?? null;
   const isDone    = status === 'done';
   const isSkipped = status === 'skipped';
@@ -1802,10 +1803,21 @@ function ActivityCard({ activity: act, trip, dayDate, zoneLabel, autoLocked, ori
             {!dimmed && (
               <Text style={styles.actEyebrow} numberOfLines={1}>
                 <Text style={styles.actEyebrowTime}>{act.time}</Text>
-                {zoneLabel ? <Text style={styles.actEyebrowZone}> {zoneLabel}</Text> : null}
+                {/* A cross-zone leg shows BOTH endpoints' zones (depart in its zone, arrive in
+                    the destination's) + true duration + a red-eye/+1-day marker. Otherwise the
+                    stop just carries its own zone flag. */}
+                {leg
+                  ? <Text style={styles.actEyebrowZone}> {leg.departLabel}</Text>
+                  : (zoneLabel ? <Text style={styles.actEyebrowZone}> {zoneLabel}</Text> : null)}
                 {act.timeLocked ? '  🔒' : (autoLocked ? '  🕒' : '')}
-                {act.type === 'transport' && !!act.arriveTime ? ` → ${act.arriveTime}` : ''}
-                {durationLabel ? `  ·  ~${durationLabel}` : ''}
+                {leg && act.arriveTime ? (
+                  <Text>
+                    {'  →  '}{act.arriveTime}<Text style={styles.actEyebrowZone}> {leg.arriveLabel}</Text>
+                    {leg.durationMin ? `  ·  ${formatDuration(leg.durationMin)}` : ''}
+                    {leg.redEye ? '  🌙 +1 day' : ''}
+                  </Text>
+                ) : (act.type === 'transport' && !!act.arriveTime ? ` → ${act.arriveTime}` : '')}
+                {!leg && durationLabel ? `  ·  ~${durationLabel}` : ''}
               </Text>
             )}
             <View style={styles.actNameRow}>

@@ -719,6 +719,20 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     );
   };
 
+  // A locked stop is a fixed anchor — block MANUAL moves too (up/down, another day,
+  // another slot), not just Plan my day. Warn and require an explicit unlock first.
+  const guardMove = (act, move) => {
+    if (!act.timeLocked) { move(); return; }
+    Alert.alert(
+      `🔒 ${(act.name || 'This stop').slice(0, 40)} is locked`,
+      `Its ${act.time} start time is locked, so it stays put. Unlock it first to move it.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Unlock', onPress: () => toggleActivityLock(trip.id, act.id) },
+      ],
+    );
+  };
+
   // Long-press → move activity to a different time slot (same day)
   const openSlotMove = (act) => {
     const currentSlot = getSlotKey(act.time);
@@ -1196,23 +1210,23 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                           isHighlighted={highlightedActIds.includes(act.id)}
                           isFirst={index === 0}
                           isLast={index === slotActs.length - 1}
-                          onMoveUp={() => {
+                          onMoveUp={() => guardMove(act, () => {
                             if (index === 0) return;
                             const newOrder = [...slotActs];
                             [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
                             reorderSlotActivities(trip.id, currentDay, newOrder.map(a => a.id));
-                          }}
-                          onMoveDown={() => {
+                          })}
+                          onMoveDown={() => guardMove(act, () => {
                             if (index === slotActs.length - 1) return;
                             const newOrder = [...slotActs];
                             [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
                             reorderSlotActivities(trip.id, currentDay, newOrder.map(a => a.id));
-                          }}
+                          })}
                           onMarkDone={() => setDone(act)}
                           onEdit={() => openEdit(act)}
                           onDelete={() => deleteWithUndo(act)}
-                          onMoveRequest={() => setMovingAct(act)}
-                          onSlotMove={() => openSlotMove(act)}
+                          onMoveRequest={() => guardMove(act, () => setMovingAct(act))}
+                          onSlotMove={() => guardMove(act, () => openSlotMove(act))}
                           onToggleLock={() => toggleLock(act)}
                           onExploreNearby={() => exploreNearby(act)}
                         />

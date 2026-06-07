@@ -114,6 +114,16 @@ describe('planDay — a locked stop is intent, not overflow', () => {
     expect(r.overflow.find((o) => o.actId === 'Booked Tour')).toBeFalsy();
     expect(r.scheduled.find((a) => a.id === 'Booked Tour').time).toBe('20:00'); // locked, unmoved
   });
+
+  test('a locked stop is never a movable leftover — not day_full, not checkout_heavy', () => {
+    const at = (id, time, lat, lng, extra = {}) =>
+      ({ id, type: 'activity', name: id, time, durationMins: 300, lat, lng, ...extra });
+    // A locked 5-hour stop at 20:00 runs past day-end, and it's far on a checkout day —
+    // but it's pinned intent, so neither flag should fire for it.
+    const acts = [at('Pinned Late Far', '20:00', 1, 1, { timeLocked: true })];
+    const r = planDay(acts, { date: FRI, pace: 'moderate', dayRole: 'departure', anchor: { lat: 0, lng: 0 } });
+    expect(r.unresolved.some((u) => u.actId === 'Pinned Late Far')).toBe(false);
+  });
 });
 
 describe('planDay — checkout-day intelligence', () => {

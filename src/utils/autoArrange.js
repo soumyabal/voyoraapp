@@ -873,8 +873,10 @@ export function planDay(activities, opts = {}) {
   // end (e.g. the 6th long sight on a packed day ends after 22:00) WITHOUT comfortPass
   // ever pushing it — so the day_full guard there never fires. Catch it here too, so a
   // crammed-late stop is honestly reported as day_full instead of looking "planned ✓".
+  // A LOCKED stop is fixed user intent — like overflow, never flag it as a movable
+  // leftover (Plan my day won't move it and a manual move is blocked too).
   const lateRunovers = substantial
-    .filter((a) => a.time && timeToMin(a.time) + Math.max(BUFFER_MIN, estimateDuration(a)) > DAY_END_MIN)
+    .filter((a) => a.time && !a.timeLocked && timeToMin(a.time) + Math.max(BUFFER_MIN, estimateDuration(a)) > DAY_END_MIN)
     .filter((a) => !comfort.unresolved.some((u) => u.actId === a.id))
     .map((a) => ({ actId: a.id, name: a.name, reason: 'day_full' }));
   // Checkout-day too-heavy: on a departure morning, a stop a long way from where you wake
@@ -882,7 +884,7 @@ export function planDay(activities, opts = {}) {
   // never schedule a 3-hour round trip before heading home. Reported, not dropped.
   const checkoutHeavy = (opts.dayRole === 'departure' && opts.anchor)
     ? substantial
-        .filter((a) => a.time && a.lat != null && a.lng != null)
+        .filter((a) => a.time && !a.timeLocked && a.lat != null && a.lng != null)
         .map((a) => ({ a, leg: travelLeg(opts.anchor, a) }))
         .filter(({ leg }) => leg && leg.min >= FAR_CHECKOUT_MIN)
         .map(({ a, leg }) => ({ actId: a.id, name: a.name, reason: 'checkout_heavy', travelMin: Math.round(leg.min) }))

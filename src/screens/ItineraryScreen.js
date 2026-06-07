@@ -1173,7 +1173,9 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             // Completely empty day — show AI/manual prompts then slot template
             <View>
               <View style={styles.empty}>
-                <Text style={styles.emptyText}>No activities planned yet</Text>
+                <Text style={styles.emptyEmoji}>🗺️</Text>
+                <Text style={styles.emptyText}>Let&apos;s fill {day?.label || 'this day'}</Text>
+                <Text style={styles.emptyHint}>Pick a time of day below, or tap Discover to find places nearby.</Text>
                 {!!onPlanWithAI && (
                   <TouchableOpacity style={styles.emptyAiBtn} onPress={onPlanWithAI} activeOpacity={0.85}>
                     <Icon name="sparkles" size={16} color="#fff" />
@@ -2558,7 +2560,9 @@ const styles = StyleSheet.create({
   originAddChip: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'center', marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, borderWidth: 1, borderColor: colors.hairline, borderStyle: 'dashed', backgroundColor: 'transparent' },
   originAddText: { ...typography.caption, color: colors.subtle, fontWeight: '600' },
   empty: { alignItems: 'center', paddingVertical: 40 },
-  emptyText: { ...typography.body, color: colors.muted, marginBottom: spacing.lg },
+  emptyEmoji: { fontSize: 30, marginBottom: spacing.sm },
+  emptyText: { ...typography.h3, color: colors.ink, fontWeight: '800', marginBottom: 4 },
+  emptyHint: { ...typography.caption, color: colors.subtle, textAlign: 'center', marginBottom: spacing.lg, maxWidth: 260, lineHeight: 18 },
   emptyAiBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     backgroundColor: colors.smart,

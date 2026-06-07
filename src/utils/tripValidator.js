@@ -41,6 +41,7 @@
 import { travelLeg, formatMi } from './geo';
 import { weekdayOf, isOpenAt, hoursLabel, dayIntervals } from './hours';
 import { checkOutOf } from './helpers';
+import { tzForCoords, offsetMinutes, zonedWallToUtcMs, zoneShortLabel } from './tz';
 
 // ─── Dietary conflict patterns ────────────────────────────────────
 const MEAT_RE = /\b(beef|pork|lamb|chicken|mutton|fish|prawn|shrimp|seafood|lobster|crab|oyster|sashimi|sushi|steak|burger|bbq|barbecue|bacon|ham|salami|pepperoni|chorizo|meat|non.?veg)\b/i;
@@ -788,6 +789,43 @@ function ruleMultiCity(ctx) {
   return warnings;
 }
 
+// ── Rule 12b: Day crosses a time zone (jet-lag / DST heads-up) ──
+// Pure + offline: each located stop's IANA zone (tzForCoords) → if the day's stops span
+// different UTC offsets (a Chicago→New York drive, an east/west flight), the wall clock shifts.
+// Soft 'info' tip — the itinerary already shows each stop in its own zone; this just names the
+// shift so nobody mis-sets an alarm. No net shift (there-and-back) → silent. DST-correct (offset
+// is computed at the day's date). Distinct from multi_city_day (city tags ≠ zone change).
+function ruleTimezoneShift(ctx) {
+  const { acts, day, dayIndex } = ctx;
+  const warnings = [];
+  const date = day.date;
+  const located = acts.filter(a => a.lat != null && a.lng != null);
+  if (located.length < 2) return warnings;
+  const zoned = located
+    .map(a => {
+      const tz = tzForCoords(a.lat, a.lng);
+      return tz ? { tz, off: offsetMinutes(tz, zonedWallToUtcMs(date, a.time || '12:00', tz)) } : null;
+    })
+    .filter(Boolean);
+  if (zoned.length < 2) return warnings;
+  const first = zoned[0], last = zoned[zoned.length - 1];
+  if (first.off === last.off) return warnings;     // no NET shift across the day
+  const deltaH = Math.abs(last.off - first.off) / 60;
+  const hLabel = Number.isInteger(deltaH) ? `${deltaH}h` : `${deltaH.toFixed(1)}h`;
+  const dir = last.off > first.off ? 'forward' : 'back';
+  warnings.push({
+    type:     'timezone_shift',
+    severity: 'info',
+    icon:     '🕐',
+    title:    'You cross a time zone',
+    message:  `This day moves into ${zoneShortLabel(last.tz, date, '12:00')} — local clocks go ${dir} ${hLabel}.`,
+    hint:     'Each stop’s time is shown in its own zone; set alarms to local time.',
+    dayIndex,
+    actIds:   located.map(a => a.id),
+  });
+  return warnings;
+}
+
 // ── Rule 13a: Permanently / temporarily closed (Google businessStatus) ──
 // A date-INDEPENDENT, high-signal fact — unlike weekly hours it isn't a seasonal
 // snapshot. Only set on places added from Discover after this shipped.
@@ -877,6 +915,7 @@ const DAY_RULES = [
   ruleDietary,
   ruleDuplicate,
   ruleMultiCity,
+  ruleTimezoneShift,
   ruleBusinessStatus,
   ruleClosedVenue,
 ];

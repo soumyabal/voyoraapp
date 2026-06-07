@@ -33,6 +33,12 @@
 >   even when `defaultTz` = home (the origin=home case), and multi-city trips vary by day. Order:
 >   day.tz override → inferred-from-stops → defaultTz → homeTz → device.
 >
+> - **Per-activity zones + smart display (Phase 2d)** — `helpers.resolveDayZones(trip, i)`: each
+>   activity takes its own location's zone; a location-less one inherits the previous activity's
+>   zone (carried across days). A one-zone day shows the single 🕘 badge; a zone-SPANNING travel
+>   day drops the badge and tags each activity's time with its own zone (`9:00 AM CDT … 2:00 PM
+>   EDT`). `ActivityCard` renders a `zoneLabel` in the eyebrow.
+>
 > Still TODO Phase 2: **travel-leg arrival labels** ("lands 2:00 PM EDT · 5h", red-eye/+1-day) +
 > an optional **manual zone picker** on Edit Trip. Device-verified; degrades gracefully without
 > `Intl` timeZone.

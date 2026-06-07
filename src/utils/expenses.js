@@ -91,6 +91,25 @@ export function unconfirmedSplitItems(trip, now) {
   return out;
 }
 
+/**
+ * A SPLIT-tab VIEW of the trip in which past, unchecked itinerary items are treated as
+ * excluded — so the money math (balances / settlement / totals) doesn't divide spend we
+ * can't confirm happened, until the user checks it off. PURE + clock-injected (`now` ms):
+ * the split engine stays deterministic (no clock inside costs.js); the time-awareness lives
+ * at the caller. Returns the SAME trip object when nothing is unconfirmed (no needless clone).
+ * The stored trip is never mutated — checking an item off (status:'done') restores it to the
+ * split automatically next render.
+ */
+export function withUnconfirmedExcluded(trip, now) {
+  const unconfirmed = unconfirmedSplitItems(trip, now);
+  if (!unconfirmed.length) return trip;
+  const ids = new Set(unconfirmed.map(u => u.expense.id));
+  return {
+    ...trip,
+    expenses: (trip.expenses || []).map(e => (ids.has(e.id) ? { ...e, excluded: true } : e)),
+  };
+}
+
 /** Rebuild a trip's itinerary expenses from its costed activities. Manual
  *  expenses (source !== 'itinerary') are preserved. */
 export function rebuildItineraryExpenses(t) {

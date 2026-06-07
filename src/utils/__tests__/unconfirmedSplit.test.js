@@ -2,7 +2,7 @@
  * unconfirmedSplit.test.js — unconfirmedSplitItems(): past activities that carry a split
  * expense but were never checked off. Time-aware + pure (now passed in), so fully deterministic.
  */
-import { unconfirmedSplitItems } from '../expenses';
+import { unconfirmedSplitItems, withUnconfirmedExcluded } from '../expenses';
 
 const NOW = new Date('2026-06-13T12:00:00').getTime();   // "past" = ends before this
 const PAST = '2026-06-12';
@@ -61,5 +61,42 @@ describe('unconfirmedSplitItems', () => {
 
   test('a trip with no itinerary expenses → empty fast-path', () => {
     expect(ids(trip(PAST, [act('A')], undefined))).toEqual([]);
+  });
+});
+
+describe('withUnconfirmedExcluded — auto-exclude past unchecked items from the split view', () => {
+  const exId = (id) => `e_${id}`;
+
+  test('marks a past, unchecked itinerary expense excluded in the view', () => {
+    const t = trip(PAST, [act('A')], [exp('A')]);
+    const v = withUnconfirmedExcluded(t, NOW);
+    expect(v.expenses.find(e => e.id === exId('A')).excluded).toBe(true);
+  });
+
+  test('does NOT touch the stored trip (immutable view)', () => {
+    const t = trip(PAST, [act('A')], [exp('A')]);
+    withUnconfirmedExcluded(t, NOW);
+    expect(t.expenses[0].excluded).toBe(false);     // original untouched
+  });
+
+  test('a checked-off item is left counted (not excluded)', () => {
+    const t = trip(PAST, [act('A', { status: 'done' })], [exp('A')]);
+    const v = withUnconfirmedExcluded(t, NOW);
+    expect(v.expenses.find(e => e.id === exId('A')).excluded).toBe(false);
+  });
+
+  test('a future item is left counted (not yet over)', () => {
+    const t = trip(FUTURE, [act('A')], [exp('A')]);
+    expect(withUnconfirmedExcluded(t, NOW)).toBe(t);  // nothing unconfirmed → same ref
+  });
+
+  test('returns the SAME trip object when nothing is unconfirmed', () => {
+    const t = trip(PAST, [act('A', { status: 'done' })], [exp('A')]);
+    expect(withUnconfirmedExcluded(t, NOW)).toBe(t);
+  });
+
+  test('null clock → no-op (same trip), deterministic', () => {
+    const t = trip(PAST, [act('A')], [exp('A')]);
+    expect(withUnconfirmedExcluded(t, null)).toBe(t);
   });
 });

@@ -199,7 +199,17 @@ export default function TripScreen({ navigation }) {
           />
         </View>
         <View style={{ flex: 1, display: activeTab === 'splitwise' ? 'flex' : 'none' }}>
-          <SplitwiseScreen trip={trip} />
+          <SplitwiseScreen
+            trip={trip}
+            onOpenActivity={(dayIndex, actId) => {
+              setActiveTab('itinerary');
+              setCurrentDay(dayIndex ?? 0);
+              if (actId) {
+                setHighlightedActIds([actId]);
+                setTimeout(() => setHighlightedActIds([]), 3000);
+              }
+            }}
+          />
         </View>
       </View>
 

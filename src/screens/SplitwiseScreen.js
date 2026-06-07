@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Switch, TextInput, Alert,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import useStore from '../store';
 import AddExpenseModal from '../modals/AddExpenseModal';
 import { colors, spacing, radius, typography, shadow } from '../theme';
@@ -14,14 +15,14 @@ import {
   calcFamilyExpenseTotal, calcMemberExpenseShare,
   calcTripItineraryTotal, calcBalances, calcSettlements,
 } from '../utils/costs';
-import { summariseExpenses, unconfirmedSplitItems } from '../utils/expenses';
+import { summariseExpenses, unconfirmedSplitItems, withUnconfirmedExcluded } from '../utils/expenses';
 import { exportSettlementAsPDF } from '../utils/exportPlan';
 
 // Expense category emoji (stored in exp.category) → Icon name + tint
 const CAT_ICON = { '🏨': 'hotel', '✈️': 'plane', '🍽️': 'food', '🎯': 'activity', '💊': 'medkit-outline', '🚗': 'transport' };
 const CAT_TINT = { '🏨': colors.smart, '✈️': colors.expert, '🍽️': '#e17055', '🎯': colors.success, '💊': colors.danger, '🚗': colors.expert };
 
-export default function SplitwiseScreen({ trip }) {
+export default function SplitwiseScreen({ trip, onOpenActivity }) {
   const {
     pushItineraryToSplitwise, clearPushedItinerary,
     deleteExpense, toggleFamilySplit, toggleExpenseMember,
@@ -33,14 +34,28 @@ export default function SplitwiseScreen({ trip }) {
   const [headTipDismissed, setHeadTipDismissed] = useState(false);
 
   const tripMode = trip.splitMode || 'individual';
-  const { itinExpenses, manualExpenses, itinIncluded, itinSkipped, itinTotal, manualTotal, grandTotal } = summariseExpenses(trip);
 
   // Past activities whose split expense was never checked off — only surfaced here, on the
   // Split tab, so non-split users never see it. Needs the wall clock (post-event check).
   // eslint-disable-next-line react-hooks/purity -- intentional: time-aware check while the Split tab is on screen
-  const unconfirmed = unconfirmedSplitItems(trip, Date.now());
+  const now = Date.now();
+  const unconfirmed = unconfirmedSplitItems(trip, now);
+  const unconfirmedExpIds = new Set(unconfirmed.map(u => u.expense.id));
+  const unconfirmedByExpId = new Map(unconfirmed.map(u => [u.expense.id, u]));
 
-  const balances = calcBalances(trip);
+  // Auto-exclude semantics: past + unchecked items are NOT divided until confirmed.
+  // We feed a derived "counted-only" view to ALL the money math (totals, balances,
+  // settlement, the PDF) while still LISTING every item below (unconfirmed ones in a
+  // warning style with swipe-to-resolve). The split engine stays clock-free + deterministic.
+  const splitTrip = withUnconfirmedExcluded(trip, now);
+
+  // Lists render from the real trip (so unconfirmed rows still show); totals/counts come
+  // from the counted-only view so the numbers reflect what will actually be split.
+  const { itinExpenses, manualExpenses, itinSkipped } = summariseExpenses(trip);
+  const { itinTotal, manualTotal, grandTotal } = summariseExpenses(splitTrip);
+  const itinIncluded = itinExpenses.filter(e => !e.excluded && !unconfirmedExpIds.has(e.id));
+
+  const balances = calcBalances(splitTrip);
   const settlements = calcSettlements([...balances]);
 
   const modeLabel = tripMode === 'family'
@@ -51,40 +66,20 @@ export default function SplitwiseScreen({ trip }) {
     <View style={{ flex: 1 }}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
-        {/* ── Unconfirmed spend — past activities in the split that weren't checked off ── */}
+        {/* ── Unconfirmed spend — past activities in the split that weren't checked off.
+            With auto-exclude, these are NOT in the total until confirmed; each is flagged
+            in the list below (warning style) with swipe → Checked / Exclude / Open. ── */}
         {unconfirmed.length > 0 && (
           <View style={styles.unconfBanner}>
             <View style={styles.unconfHead}>
               <Text style={styles.unconfIcon}>⚠️</Text>
               <Text style={styles.unconfTitle}>
-                {unconfirmed.length} past {unconfirmed.length === 1 ? 'activity is' : 'activities are'} in the split but not checked off
+                {unconfirmed.length} past {unconfirmed.length === 1 ? 'activity isn’t' : 'activities aren’t'} counted yet
               </Text>
             </View>
             <Text style={styles.unconfSub}>
-              Confirm they happened (check them off in Plan) or remove them, so the split only divides what actually occurred.
+              They have an expense but weren’t checked off, so they’re left out of the split until you confirm. Swipe a flagged row below → Checked, Exclude, or Open.
             </Text>
-            {unconfirmed.slice(0, 4).map(({ activity, expense, dayLabel }) => (
-              <TouchableOpacity
-                key={activity.id}
-                style={styles.unconfRow}
-                activeOpacity={0.7}
-                onPress={() => Alert.alert(
-                  activity.name,
-                  `${dayLabel} · ${fmtM(expense.amount)} is in the split. Did this happen?`,
-                  [
-                    { text: '✓ Yes, it happened', onPress: () => updateActivity(trip.id, activity.id, { status: 'done' }) },
-                    { text: 'Remove from split', style: 'destructive', onPress: () => toggleExpenseExcluded(trip.id, expense.id) },
-                    { text: 'Cancel', style: 'cancel' },
-                  ],
-                )}
-              >
-                <Text style={styles.unconfItem} numberOfLines={1}>•  {activity.name} · {dayLabel} · {fmtM(expense.amount)}</Text>
-                <Text style={styles.unconfResolve}>Resolve ›</Text>
-              </TouchableOpacity>
-            ))}
-            {unconfirmed.length > 4 && (
-              <Text style={styles.unconfMore}>…and {unconfirmed.length - 4} more</Text>
-            )}
           </View>
         )}
 
@@ -172,19 +167,57 @@ export default function SplitwiseScreen({ trip }) {
                 <Text style={styles.clearText}>✕ Clear all</Text>
               </TouchableOpacity>
             </View>
-            {itinExpenses.map(exp => (
-              <ExpenseCard
-                key={exp.id} exp={exp} trip={trip}
-                onDelete={() => deleteExpense(trip.id, exp.id)}
-                onToggleFamily={(famId, v) => toggleFamilySplit(trip.id, exp.id, famId, v)}
-                onToggleMember={(mId, v) => toggleExpenseMember(trip.id, exp.id, mId, v)}
-                onChangePayer={mId => updateExpensePayer(trip.id, exp.id, mId)}
-                onChangeSplitMode={m => updateExpenseSplitMode(trip.id, exp.id, m)}
-                onToggleExcluded={() => toggleExpenseExcluded(trip.id, exp.id)}
-                onUpdateAmount={amt => updateExpenseAmount(trip.id, exp.id, amt)}
-                onUpdateCustomShares={(shares, uneven) => updateExpenseCustomShares(trip.id, exp.id, shares, uneven)}
-              />
-            ))}
+            {itinExpenses.map(exp => {
+              const u = unconfirmedByExpId.get(exp.id);
+              const card = (
+                <ExpenseCard
+                  exp={exp} trip={trip} warn={!!u}
+                  onDelete={() => deleteExpense(trip.id, exp.id)}
+                  onToggleFamily={(famId, v) => toggleFamilySplit(trip.id, exp.id, famId, v)}
+                  onToggleMember={(mId, v) => toggleExpenseMember(trip.id, exp.id, mId, v)}
+                  onChangePayer={mId => updateExpensePayer(trip.id, exp.id, mId)}
+                  onChangeSplitMode={m => updateExpenseSplitMode(trip.id, exp.id, m)}
+                  onToggleExcluded={() => toggleExpenseExcluded(trip.id, exp.id)}
+                  onUpdateAmount={amt => updateExpenseAmount(trip.id, exp.id, amt)}
+                  onUpdateCustomShares={(shares, uneven) => updateExpenseCustomShares(trip.id, exp.id, shares, uneven)}
+                />
+              );
+              if (!u) return <View key={exp.id}>{card}</View>;
+              // Unconfirmed → swipe to resolve without leaving the Split tab.
+              return (
+                <Swipeable
+                  key={exp.id}
+                  overshootRight={false}
+                  renderRightActions={() => (
+                    <View style={styles.swipeActions}>
+                      <TouchableOpacity
+                        style={[styles.swipeBtn, styles.swipeCheck]}
+                        onPress={() => updateActivity(trip.id, u.activity.id, { status: 'done' })}
+                        accessibilityRole="button" accessibilityLabel="Mark this activity checked — count it in the split"
+                      >
+                        <Text style={styles.swipeBtnText}>✓{'\n'}Checked</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.swipeBtn, styles.swipeExclude]}
+                        onPress={() => toggleExpenseExcluded(trip.id, exp.id)}
+                        accessibilityRole="button" accessibilityLabel="Exclude this from the split for good"
+                      >
+                        <Text style={styles.swipeBtnText}>🚫{'\n'}Exclude</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.swipeBtn, styles.swipeOpen]}
+                        onPress={() => onOpenActivity?.(u.dayIndex, u.activity.id)}
+                        accessibilityRole="button" accessibilityLabel="Open this activity in the itinerary"
+                      >
+                        <Text style={styles.swipeBtnText}>➜{'\n'}Open</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                >
+                  {card}
+                </Swipeable>
+              );
+            })}
           </>
         )}
 
@@ -232,7 +265,7 @@ export default function SplitwiseScreen({ trip }) {
             </View>
 
             {trip.families.map(fam => {
-              const famTotal = calcFamilyExpenseTotal(fam, trip);
+              const famTotal = calcFamilyExpenseTotal(fam, splitTrip);
               const isFamily = tripMode === 'family';
               const head = fam.members[0];
               return (
@@ -255,7 +288,7 @@ export default function SplitwiseScreen({ trip }) {
                       <>
                         <Text style={styles.famMeta}>{fam.members.length} members</Text>
                         {fam.members.map(m => {
-                          const ms = calcMemberExpenseShare(m, trip);
+                          const ms = calcMemberExpenseShare(m, splitTrip);
                           return (
                             <View key={m.id} style={styles.memberShareRow}>
                               <View style={[styles.memberAvatar, { backgroundColor: avatarColor(m.name) }]}>
@@ -380,7 +413,7 @@ export default function SplitwiseScreen({ trip }) {
                 the money artifact a captain sends the group to settle up. */}
             <TouchableOpacity
               style={styles.shareSettleBtn}
-              onPress={() => exportSettlementAsPDF(trip)}
+              onPress={() => exportSettlementAsPDF(splitTrip)}
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityLabel="Share the settlement as a PDF"
@@ -397,7 +430,7 @@ export default function SplitwiseScreen({ trip }) {
         <View style={styles.stickyFooter}>
           <View style={styles.stickyFooterLeft}>
             <Text style={styles.stickyFooterLabel}>
-              {trip.expenses.filter(e => !e.excluded).length} expenses
+              {splitTrip.expenses.filter(e => !e.excluded).length} expenses
             </Text>
             <Text style={styles.stickyFooterTotal}>{fmtM(grandTotal)}</Text>
           </View>
@@ -423,7 +456,7 @@ export default function SplitwiseScreen({ trip }) {
 // ExpenseCard
 // ─────────────────────────────────────────────────────────────────
 function ExpenseCard({
-  exp, trip,
+  exp, trip, warn = false,
   onDelete, onToggleFamily, onToggleMember,
   onChangePayer, onChangeSplitMode,
   onToggleExcluded, onUpdateAmount, onUpdateCustomShares,
@@ -482,7 +515,10 @@ function ExpenseCard({
   const isLodging = exp.category === '🏨';
 
   return (
-    <View style={[styles.expCard, isExcluded && styles.expCardExcluded]}>
+    <View style={[styles.expCard, isExcluded && styles.expCardExcluded, warn && !isExcluded && styles.expCardWarn]}>
+      {warn && !isExcluded && (
+        <Text style={styles.warnHint}>⚠️ Not counted — wasn’t checked off. Swipe ← to resolve.</Text>
+      )}
       {/* ── Collapsed header ── */}
       <TouchableOpacity
         style={styles.expHeader}
@@ -940,6 +976,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg, marginBottom: spacing.md, overflow: 'hidden', ...shadow.sm,
   },
   expCardExcluded: { backgroundColor: colors.surface2, borderColor: colors.border, borderStyle: 'dashed' },
+  expCardWarn: { borderColor: colors.warn, backgroundColor: colors.warnSoft },
+  warnHint: { ...typography.tiny, color: colors.warn, fontWeight: '700', paddingHorizontal: spacing.md, paddingTop: spacing.sm },
+  // Swipe-to-resolve actions for an unconfirmed itinerary row (Checked / Exclude / Open).
+  swipeActions: { flexDirection: 'row', alignItems: 'stretch', marginBottom: spacing.md },
+  swipeBtn: { width: 76, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  swipeBtnText: { color: '#fff', fontSize: 11, fontWeight: '800', textAlign: 'center' },
+  swipeCheck: { backgroundColor: colors.green },
+  swipeExclude: { backgroundColor: colors.danger },
+  swipeOpen: { backgroundColor: colors.smart, borderTopRightRadius: radius.lg, borderBottomRightRadius: radius.lg },
   expHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: spacing.md },
   expIcon: { width: 40, height: 40, backgroundColor: colors.surface2, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   expInfo: { flex: 1 },

@@ -3,7 +3,6 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Switch, TextInput, Alert,
 } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
 import useStore from '../store';
 import AddExpenseModal from '../modals/AddExpenseModal';
 import { colors, spacing, radius, typography, shadow } from '../theme';
@@ -183,8 +182,13 @@ export default function SplitwiseScreen({ trip, onOpenActivity }) {
             </View>
             {itinExpenses.map(exp => {
               const u = unconfirmedByExpId.get(exp.id);
-              const card = (
+              // Tap-to-resolve only (the "Not counted" hint is the tap target). The swipe
+              // (gesture-handler Swipeable) was removed: it didn't survive the always-mounted
+              // display:none tab toggling — it left the row disabled, then frozen after
+              // navigating away and back. Tap is bulletproof and offers the same 3 actions.
+              return (
                 <ExpenseCard
+                  key={exp.id}
                   exp={exp} trip={trip} warn={!!u}
                   onResolve={u ? () => askResolve(exp, u) : undefined}
                   onDelete={() => deleteExpense(trip.id, exp.id)}
@@ -196,41 +200,6 @@ export default function SplitwiseScreen({ trip, onOpenActivity }) {
                   onUpdateAmount={amt => updateExpenseAmount(trip.id, exp.id, amt)}
                   onUpdateCustomShares={(shares, uneven) => updateExpenseCustomShares(trip.id, exp.id, shares, uneven)}
                 />
-              );
-              if (!u) return <View key={exp.id}>{card}</View>;
-              // Unconfirmed → swipe to resolve without leaving the Split tab.
-              return (
-                <Swipeable
-                  key={exp.id}
-                  overshootRight={false}
-                  renderRightActions={() => (
-                    <View style={styles.swipeActions}>
-                      <TouchableOpacity
-                        style={[styles.swipeBtn, styles.swipeCheck]}
-                        onPress={() => updateActivity(trip.id, u.activity.id, { status: 'done' })}
-                        accessibilityRole="button" accessibilityLabel="Mark this activity checked — count it in the split"
-                      >
-                        <Text style={styles.swipeBtnText}>✓{'\n'}Checked</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.swipeBtn, styles.swipeExclude]}
-                        onPress={() => toggleExpenseExcluded(trip.id, exp.id)}
-                        accessibilityRole="button" accessibilityLabel="Exclude this from the split for good"
-                      >
-                        <Text style={styles.swipeBtnText}>🚫{'\n'}Exclude</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.swipeBtn, styles.swipeOpen]}
-                        onPress={() => onOpenActivity?.(u.dayIndex, u.activity.id)}
-                        accessibilityRole="button" accessibilityLabel="Open this activity in the itinerary"
-                      >
-                        <Text style={styles.swipeBtnText}>➜{'\n'}Open</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                >
-                  {card}
-                </Swipeable>
               );
             })}
           </>
@@ -1009,13 +978,6 @@ const styles = StyleSheet.create({
   expCardExcluded: { backgroundColor: colors.surface2, borderColor: colors.border, borderStyle: 'dashed' },
   expCardWarn: { borderColor: colors.warn, backgroundColor: colors.warnSoft },
   warnHint: { ...typography.tiny, color: colors.warn, fontWeight: '700', paddingHorizontal: spacing.md, paddingTop: spacing.sm },
-  // Swipe-to-resolve actions for an unconfirmed itinerary row (Checked / Exclude / Open).
-  swipeActions: { flexDirection: 'row', alignItems: 'stretch', marginBottom: spacing.md },
-  swipeBtn: { width: 76, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
-  swipeBtnText: { color: '#fff', fontSize: 11, fontWeight: '800', textAlign: 'center' },
-  swipeCheck: { backgroundColor: colors.green },
-  swipeExclude: { backgroundColor: colors.danger },
-  swipeOpen: { backgroundColor: colors.smart, borderTopRightRadius: radius.lg, borderBottomRightRadius: radius.lg },
   expHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: spacing.md },
   expIcon: { width: 40, height: 40, backgroundColor: colors.surface2, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   expInfo: { flex: 1 },

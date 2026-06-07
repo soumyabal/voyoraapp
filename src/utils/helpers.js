@@ -295,6 +295,62 @@ export function resolveDayZones(trip, dayIndex) {
   return { zoneById };
 }
 
+// 'YYYY-MM-DD' + n days, in local civil terms (parsed at local midnight to avoid TZ drift).
+function _addDaysISO(iso, n) {
+  const [y, m, d] = String(iso || '').split('-').map(Number);
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  dt.setDate(dt.getDate() + n);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Cross-zone travel-leg label for a transport stop: when a flight/drive bridges two timezones,
+ * returns the depart/arrive zones, true elapsed duration, and a +1-day / red-eye marker —
+ * "depart 9:00 AM PDT → land 5:00 PM EDT · 5h" (or "🌙 +1 day" overnight). The depart zone is the
+ * zone in effect just before the leg (the previous stop, else the day's carry-in); the arrive
+ * zone is the leg's own destination zone if it has coords, else the next stop in a different
+ * offset. null when it's not a transport, has no time, or doesn't cross a zone. Pure + DST-correct.
+ */
+export function crossZoneLeg(trip, dayIndex, act) {
+  if (!act || act.type !== 'transport' || !act.time) return null;
+  const date = trip?.days?.[dayIndex]?.date;
+  if (!date) return null;
+  const { acts, zoneOf } = _activityZones(trip, dayIndex);
+  const idx = acts.findIndex(a => a.id === act.id);
+  if (idx < 0) return null;
+  const offAt = (tz) => (tz ? offsetMinutes(tz, zonedWallToUtcMs(date, '12:00', tz)) : null);
+
+  const departZone = idx > 0 ? zoneOf[acts[idx - 1].id] : _zoneCarriedInto(trip, dayIndex);
+  const dOff = offAt(departZone);
+  if (dOff == null) return null;
+  // Arrive zone: the leg's own destination (if it switched the carry there), else the first
+  // later stop in a different offset (the crossing this leg bridges).
+  let arriveZone = offAt(zoneOf[act.id]) !== dOff ? zoneOf[act.id] : null;
+  if (!arriveZone) {
+    for (let j = idx + 1; j < acts.length; j++) {
+      if (offAt(zoneOf[acts[j].id]) !== dOff) { arriveZone = zoneOf[acts[j].id]; break; }
+    }
+  }
+  if (!arriveZone || offAt(arriveZone) === dOff) return null;
+
+  const departInst = zonedWallToUtcMs(date, act.time, departZone);
+  let dayOffset = 0;
+  let durationMin = null;
+  if (act.arriveTime) {
+    let arriveInst = zonedWallToUtcMs(date, act.arriveTime, arriveZone);
+    if (arriveInst < departInst) {           // landed the next calendar day (red-eye)
+      dayOffset = 1;
+      arriveInst = zonedWallToUtcMs(_addDaysISO(date, 1), act.arriveTime, arriveZone);
+    }
+    durationMin = Math.round((arriveInst - departInst) / 60000);
+  }
+  return {
+    departZone, departLabel: zoneShortLabel(departZone, date, act.time),
+    arriveZone, arriveLabel: zoneShortLabel(arriveZone, date, act.arriveTime || act.time),
+    durationMin, dayOffset, redEye: dayOffset === 1,
+  };
+}
+
 /**
  * IDs of a day's timed stops whose START has already PASSED, in the stop's OWN timezone (so a
  * live trip auto-locks what's done as the clock crosses each stop). Clock-injected (`nowMs`) so

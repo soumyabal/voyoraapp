@@ -2,7 +2,7 @@
  * tripPhase.test.js — trip lifecycle (before/during/after) + the landing-day fix
  * for "a not-started trip opens on Day 2".
  */
-import { tripPhase, defaultDayFor, daysBetweenISO, nowNextOf, openFocusFor, dayZoneLabel, resolveDayZones, pastActivityIds, isDayInPast, planFloorMin } from '../helpers';
+import { tripPhase, defaultDayFor, daysBetweenISO, nowNextOf, openFocusFor, dayZoneLabel, resolveDayZones, pastActivityIds, isDayInPast, planFloorMin, crossZoneLeg } from '../helpers';
 
 const trip = (start, end, nDays) => ({
   startDate: start, endDate: end,
@@ -211,6 +211,57 @@ describe('pastActivityIds / isDayInPast / planFloorMin — clock-aware locking (
     const nyTrip = { ...trip, homeTz: 'America/New_York', defaultTz: 'America/New_York',
       days: trip.days.map(d => ({ ...d, activities: d.activities.map(a => ({ ...a, lat: 40.71, lng: -74.0 })) })) };
     expect(planFloorMin(nyTrip, 1, NOW)).toBe(17 * 60);  // 17:00 EDT
+  });
+});
+
+describe('crossZoneLeg — travel-leg arrival label across timezones', () => {
+  const LA = { lat: 34.05, lng: -118.24 };  // PDT (-7)
+  const NYC = { lat: 40.71, lng: -74.0 };   // EDT (-4)
+  // Trip starts in LA (defaultTz LA), so a first-leg's depart zone carries in as Pacific.
+  const tripWith = (flight) => ({
+    defaultTz: 'America/Los_Angeles', homeTz: 'America/Los_Angeles',
+    days: [{ date: '2026-07-11', activities: [flight, { id: 'hotel', type: 'activity', time: '20:00', ...NYC }] }],
+  });
+
+  test('a day flight LA→NYC: depart PDT → arrive EDT, 5h, no day offset', () => {
+    const leg = crossZoneLeg(tripWith(
+      { id: 'fl', type: 'transport', time: '09:00', arriveTime: '17:00', ...NYC }), 0,
+      { id: 'fl', type: 'transport', time: '09:00', arriveTime: '17:00', ...NYC });
+    expect(leg.departLabel).toBe('PDT');
+    expect(leg.arriveLabel).toBe('EDT');
+    expect(leg.durationMin).toBe(300);   // 16:00Z → 21:00Z
+    expect(leg.dayOffset).toBe(0);
+    expect(leg.redEye).toBe(false);
+  });
+
+  test('a red-eye lands the next calendar day (+1, 5h)', () => {
+    // Flight alone on its day (its destination NYC coords reveal the arrive zone).
+    const fl = { id: 'fl', type: 'transport', time: '23:00', arriveTime: '07:00', ...NYC };
+    const t = { defaultTz: 'America/Los_Angeles', days: [{ date: '2026-07-11', activities: [fl] }] };
+    const leg = crossZoneLeg(t, 0, fl);
+    expect(leg.dayOffset).toBe(1);
+    expect(leg.redEye).toBe(true);
+    expect(leg.durationMin).toBe(300);   // 06:00Z+1 → 11:00Z+1
+  });
+
+  test('detects the crossing from the NEXT stop when the leg itself has no coords', () => {
+    const fl = { id: 'fl', type: 'transport', time: '09:00', arriveTime: '17:00' }; // no coords
+    const leg = crossZoneLeg(tripWith(fl), 0, fl);   // next stop = NYC hotel
+    expect(leg.departLabel).toBe('PDT');
+    expect(leg.arriveLabel).toBe('EDT');
+  });
+
+  test('a same-zone transport (no crossing) → null', () => {
+    const fl = { id: 'fl', type: 'transport', time: '09:00', arriveTime: '11:00', ...LA };
+    const t = { defaultTz: 'America/Los_Angeles', days: [{ date: '2026-07-11', activities: [
+      fl, { id: 'h', type: 'activity', time: '13:00', ...LA },
+    ] }] };
+    expect(crossZoneLeg(t, 0, fl)).toBeNull();
+  });
+
+  test('a non-transport, or a leg with no time → null', () => {
+    expect(crossZoneLeg(tripWith({ id: 'x', type: 'activity', time: '09:00', ...NYC }), 0,
+      { id: 'x', type: 'activity', time: '09:00', ...NYC })).toBeNull();
   });
 });
 

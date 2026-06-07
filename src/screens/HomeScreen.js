@@ -29,6 +29,7 @@ import Icon from '../components/ui/Icon';
 import PressableScale from '../components/ui/PressableScale';
 import KithovaWordmark from '../components/ui/KithovaWordmark';
 import KithovaMark from '../components/ui/KithovaMark';
+import FamilyStack from '../components/ui/FamilyStack';
 import { select } from '../utils/feedback';
 
 const PACE_LABELS = { relaxed: '🐢 Relaxed', moderate: '🚶 Moderate', packed: '🏃 Packed' };
@@ -541,7 +542,7 @@ function NextTripSpotlight({ trip, status, onOpen }) {
         </View>
         <View style={styles.spotFooter}>
           <View style={styles.spotMetaRow}>
-            <Icon name="people" size={14} color={colors.subtle} />
+            <FamilyStack families={trip.families} size={26} />
             <Text style={styles.spotPeople}>
               {famCount} famil{famCount !== 1 ? 'ies' : 'y'} · {allMembers.length} {allMembers.length !== 1 ? 'people' : 'person'}
             </Text>

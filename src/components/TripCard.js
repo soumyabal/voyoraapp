@@ -5,6 +5,7 @@ import { colors, spacing, radius, typography, shadow } from '../theme';
 import { getAllMembers, fmt, fmtM } from '../utils/helpers';
 import { calcTripItineraryTotal } from '../utils/costs';
 import Icon from './ui/Icon';
+import FamilyStack from './ui/FamilyStack';
 
 // Compact list row: gradient emoji thumbnail · name + status pill · destination/dates ·
 // a family avatar stack (who's going) · total. Kept to a row on purpose — the spotlight
@@ -26,9 +27,7 @@ export default function TripCard({ trip, onPress, style, status }) {
   const hasAccessible = trip.families.some(f => f.members.some(m => m.needs.length > 0));
   const tone          = status ? (PILL_TONE[status.phase] || PILL_TONE.upcoming) : null;
 
-  const fams      = trip.families || [];
-  const shownFams = fams.slice(0, 4);
-  const extraFams = fams.length - shownFams.length;
+  const fams = trip.families || [];
 
   return (
     <TouchableOpacity
@@ -64,20 +63,7 @@ export default function TripCard({ trip, onPress, style, status }) {
 
         {/* Who's going — a stack of family-colored chips + a headcount */}
         <View style={styles.metaRow}>
-          {shownFams.length > 0 && (
-            <View style={styles.stack}>
-              {shownFams.map((f, i) => (
-                <View key={f.id} style={[styles.stackDot, { backgroundColor: f.color || colors.subtle, marginLeft: i ? -7 : 0, zIndex: shownFams.length - i }]}>
-                  <Text style={styles.stackInitial}>{(f.name || '?')[0].toUpperCase()}</Text>
-                </View>
-              ))}
-              {extraFams > 0 && (
-                <View style={[styles.stackDot, styles.stackMore, { marginLeft: -7 }]}>
-                  <Text style={styles.stackMoreText}>+{extraFams}</Text>
-                </View>
-              )}
-            </View>
-          )}
+          {fams.length > 0 && <FamilyStack families={fams} />}
           <Text style={styles.meta} numberOfLines={1}>
             {allMembers.length} {allMembers.length !== 1 ? 'people' : 'person'}
           </Text>
@@ -115,15 +101,6 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.1 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   meta: { ...typography.small, color: colors.subtle, flexShrink: 1 },
-  stack: { flexDirection: 'row', alignItems: 'center' },
-  stackDot: {
-    width: 22, height: 22, borderRadius: 11,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: colors.surface,
-  },
-  stackInitial: { color: '#fff', fontSize: 10, fontWeight: '800' },
-  stackMore: { backgroundColor: colors.surface2, borderColor: colors.surface },
-  stackMoreText: { color: colors.body, fontSize: 9, fontWeight: '800' },
   right: { alignItems: 'flex-end', minWidth: 52 },
   totalAmt: { ...typography.bodyBold, color: colors.ink },
   totalLabel: { ...typography.tiny, color: colors.subtle },

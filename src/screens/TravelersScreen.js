@@ -19,6 +19,7 @@ import AddFamilyModal from '../modals/AddFamilyModal';
 import SelectTravelersModal from '../modals/SelectTravelersModal';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import Icon from '../components/ui/Icon';
+import FamilyStack from '../components/ui/FamilyStack';
 import { avatarColor, effectiveMember, NEEDS_OPTIONS, fmtM } from '../utils/helpers';
 import { ChipSelector } from '../components/ui';
 import { useKeyboardOffset } from '../utils/useKeyboardOffset';
@@ -330,11 +331,16 @@ export default function TravelersScreen({ trip, onUpdatePlan }) {
 
         {/* ── Header ─────────────────────────────────────── */}
         <View style={styles.header}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.title}>Who&apos;s Coming</Text>
             <Text style={styles.subtitle}>
               {trip.families.length} group{trip.families.length !== 1 ? 's' : ''} · {totalTravelers} traveler{totalTravelers !== 1 ? 's' : ''}
             </Text>
+            {trip.families.length > 0 && (
+              <View style={{ marginTop: spacing.sm }}>
+                <FamilyStack families={trip.families} size={28} max={6} />
+              </View>
+            )}
           </View>
           <TouchableOpacity style={styles.outlineBtn} onPress={() => setShowAddFamily(true)}>
             <Text style={styles.outlineBtnText}>+ Group</Text>

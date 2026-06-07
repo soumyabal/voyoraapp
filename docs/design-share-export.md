@@ -34,7 +34,9 @@ does.
 - **`buildSettlementHTML(trip, travelers)`** — the Settlement doc. Every figure comes from the
   **deterministic split engine** (`calcSettlements` / `calcBalances` / `calcFamilyBalances` in
   `costs.js`), so the PDF **agrees with the in-app Split tab exactly**. No photos / no API keys → safe
-  to share.
+  to share. The Split tab passes the **counted-only view** (`withUnconfirmedExcluded(trip, now)`) into
+  `exportSettlementAsPDF`, so past, unchecked itinerary items are left out of the shared settlement
+  too — the PDF divides only confirmed spend (see `rule-engine.md` §3).
 - **Entry points:** trip ⋮ menu → `exportTripAsPDF` (plan); **Split tab** → `exportSettlementAsPDF`
   (shown only when there's an actual balance to settle).
 - **Locked by** `exportPlan.test.js`: the who-owes-whom transfer renders, per-family net renders,

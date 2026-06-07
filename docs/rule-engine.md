@@ -99,7 +99,8 @@ books can never leak.
 
 ```mermaid
 flowchart TD
-  inp["expense + trip<br/>amount · paidBy · participatingFamilies / Members<br/>splitMode · unevenSplit · customShares"]
+  view["Split-tab COUNTED-ONLY view<br/>withUnconfirmedExcluded(trip, now)<br/>past + unchecked itinerary items → excluded"]
+  view --> inp["expense + trip<br/>amount · paidBy · participatingFamilies / Members<br/>splitMode · unevenSplit · customShares · excluded"]
   inp --> rm{"resolveMode<br/>exp.splitMode ▸ trip.splitMode ▸ 'individual'"}
   rm --> ef["effective participants<br/>getEffectiveFamilies / getEffectiveMembers<br/>(an EMPTY family carries NO share → no leak)"]
   ef --> un{"unevenActive?<br/>custom shares sum to the frozen total"}
@@ -119,11 +120,34 @@ flowchart TD
 | **Family mode** | `amount ÷ paying families` | `customShares[familyId]` (head carries) |
 | **Individual mode** | `involved members × (amount ÷ members)` | Σ family's members' `customShares[memberId]` |
 
+**Mode is a trip default, overridable per expense.** `By Person` / `By Group` is the trip-level
+`splitMode`; any single expense can override it (`exp.splitMode`) and can be **even or custom**
+(uneven) — e.g. an Airbnb split *by room* in `By Group`. The toggle copy says "equal by default —
+open any expense to set custom amounts" so users know custom exists.
+
 **Invariants the engine guarantees** (and that `costs.test.js` pins):
 - **No leak:** an empty participating family — or an expense nobody shares — is *not* in the ledger; crediting the payer for it would invent money (Σ net ≠ 0).
+- **Excluded never counts:** an `excluded` expense is out of every total / balance / transfer. The Split tab feeds a **counted-only view** (`withUnconfirmedExcluded`, see below) so the split divides only confirmed spend.
 - **Uneven only when balanced:** custom shares drive settlement *only* if they sum to the (frozen) `amount`; an in-progress edit safely falls back to the even split.
 - **Family mode → only the head** of a family carries its share; dependents owe 0.
 - **`estimatedAmount` is frozen** — only `amount` ever changes (see AGENTS.md invariants).
+
+**Unconfirmed spend — auto-excluded until checked (the "did this happen?" rule).** Once an
+activity's time has **passed**, if it was never checked off (`status` ≠ `done`/`skipped`) but
+carries a non-excluded itinerary expense, it **drops out of the split until confirmed** — so the
+group never divides money for something we can't confirm happened. Mechanics, kept off the moat:
+- `unconfirmedSplitItems(trip, now)` (in `expenses.js`) finds them — **pure + time-aware** (`now`
+  is passed in, never read inside the engine). Only **past** events qualify; **future** items always
+  count (they're the pre-trip estimate).
+- `withUnconfirmedExcluded(trip, now)` returns a **view** of the trip where those expenses are
+  marked `excluded`. The Split tab feeds this view to *all* the money math (totals, balances,
+  settlement, per-family/-member) **and** the settlement PDF — so on-screen and shared numbers agree.
+  `costs.js` is **untouched**: the engine stays clock-free + deterministic; the time-awareness lives
+  entirely at the caller.
+- **Surface:** each unconfirmed row shows amber + "⚠️ Not counted" with a left-**swipe** →
+  **✓ Checked** (mark done → counts) · **🚫 Exclude** (out for good) · **➜ Open** (jump to the
+  itinerary), plus a summary banner. Checking it off restores it to the split automatically next
+  render (no stored mutation). Decision (owner): **post-event only** — never nags about a future stop.
 
 **Multiple payers (engine + store ready; UI deferred).** An expense can carry `payments:
 [{ memberId, amount }]` so a single bill can be **co-paid** (e.g. a $300 restaurant split 3 ways
@@ -136,7 +160,8 @@ Set via `updateExpensePayments`; member-delete re-homes a payer's amount to the 
 stays the default; the multi-payer *UI* is intentionally not built yet.**
 
 **Locked by:** `costs.test.js` (direct, 99% stmts) + `splitEngine.regression.test.js` /
-`splitDelete.regression.test.js` (every mode, a 500-trip property fuzz, delete-flow balance).
+`splitDelete.regression.test.js` (every mode, a 500-trip property fuzz, delete-flow balance) +
+`unconfirmedSplit.test.js` (the time-aware unconfirmed finder + the counted-only view).
 
 > ⚠️ Per the roadmap: **never let AI touch the money inside this engine.** It stays deterministic.
 

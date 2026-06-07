@@ -26,6 +26,7 @@ import { colors, spacing, radius, typography, shadow, gradients } from '../theme
 import { RELEASE_FLAGS } from '../config';
 import { avatarColor, getAllMembers, fmt } from '../utils/helpers';
 import { seedCrossZoneDemo } from '../utils/devSeed';
+import PasteImportModal from '../modals/PasteImportModal';
 import Icon from '../components/ui/Icon';
 import PressableScale from '../components/ui/PressableScale';
 import KithovaWordmark from '../components/ui/KithovaWordmark';
@@ -560,6 +561,7 @@ export default function HomeScreen({ navigation }) {
   const { trips, account, travelers, setCurrentTrip, deleteTrip, updateTrip } = useStore();
   const [activeTab, setActiveTab]       = useState('trips');
   const [showNewTrip, setShowNewTrip]   = useState(false);
+  const [showPaste, setShowPaste]       = useState(false);
   const [showAuth, setShowAuth]         = useState(false);
   const [seg, setSeg]                   = useState('upcoming');
 
@@ -787,6 +789,18 @@ export default function HomeScreen({ navigation }) {
         </PressableScale>
       )}
 
+      {/* Paste-a-plan import — sits just above New Trip. Deterministic (no AI), flag-gated. */}
+      {activeTab === 'trips' && RELEASE_FLAGS.smartPaste && (
+        <TouchableOpacity
+          style={[styles.pasteFab, { bottom: insets.bottom + TAB_BAR_HEIGHT + 64 }]}
+          onPress={() => setShowPaste(true)}
+          activeOpacity={0.85}
+        >
+          <Icon name="sparkles" size={15} color={colors.accent} />
+          <Text style={styles.pasteFabText}>Paste a plan</Text>
+        </TouchableOpacity>
+      )}
+
       {/* DEV-ONLY: one-tap demo trip for on-device timezone verification (never ships — __DEV__). */}
       {__DEV__ && activeTab === 'trips' && (
         <TouchableOpacity
@@ -803,6 +817,11 @@ export default function HomeScreen({ navigation }) {
         onClose={() => setShowNewTrip(false)}
         onCreated={(trip) => { setShowNewTrip(false); openTrip(trip.id); }}
         onNeedAuth={() => { setShowNewTrip(false); setShowAuth(true); }}
+      />
+      <PasteImportModal
+        visible={showPaste}
+        onClose={() => setShowPaste(false)}
+        onCreated={(trip) => { setShowPaste(false); openTrip(trip.id); }}
       />
       <AuthModal visible={showAuth} onClose={() => setShowAuth(false)} />
     </View>
@@ -939,8 +958,14 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 2, borderBottomRightRadius: 2,
   },
 
-  devSeedBtn: { position: 'absolute', right: 16, backgroundColor: '#1e293b', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, opacity: 0.9 },
+  devSeedBtn: { position: 'absolute', left: 16, backgroundColor: '#1e293b', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, opacity: 0.9 },
   devSeedText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  pasteFab: {
+    position: 'absolute', right: 16, flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: colors.accentSoft, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 11,
+    borderWidth: 1, borderColor: colors.accent,
+  },
+  pasteFabText: { color: colors.accent, fontWeight: '800', fontSize: 14 },
   fab: {
     position: 'absolute', right: 20,
     flexDirection: 'row', alignItems: 'center', gap: 6,

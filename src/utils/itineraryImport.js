@@ -10,6 +10,7 @@
  */
 import { parseItineraryText } from './itineraryParser';
 import { minToTime } from './slots';
+import { lookupPlace } from './gazetteer';
 
 const SLOT_BASE = { morning: 9 * 60, afternoon: 13 * 60, evening: 18 * 60, night: 21 * 60 };
 
@@ -68,6 +69,7 @@ export function buildTripFromParsed(store, parsed, opts = {}) {
     if (di == null) continue;
     const slotCount = {};
     let cursor = 9 * 60;   // fallback sequential time for slot-less lines
+    const segGeo = pd.segment ? lookupPlace(pd.segment) : null;   // day's city → coords fallback
     for (const item of pd.items) {
       // Decide a time: explicit > slot-based (staggered) > sequential fallback.
       let mins = parseClock(item.time);
@@ -88,6 +90,15 @@ export function buildTripFromParsed(store, parsed, opts = {}) {
       };
       if (item.sub) act.subtype = item.sub;
       if (item.type === 'stay') act.nights = 1;
+
+      // Offline coords from the gazetteer (airport codes / major cities) — no API. Gives flights
+      // + city stops real lat/lng so the timezone features light up; specific POIs still need
+      // Places resolution later. Try the name, then the source text, then candidate places.
+      const geo = lookupPlace(act.name)
+        || lookupPlace(item.text)
+        || (item.candidates || []).map(lookupPlace).find(Boolean)
+        || segGeo;   // fall back to the segment's city so a known-city stop still gets its zone
+      if (geo) { act.lat = geo.lat; act.lng = geo.lng; }
       // Option B (and beyond) are alternatives → import as skipped so the choice is visible
       // without double-booking the day.
       if (item.kind === 'option' && item.optionKey && item.optionKey !== 'A') act.status = 'skipped';

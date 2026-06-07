@@ -75,6 +75,16 @@ describe('importTripFromText — paste an AI plan → a real trip', () => {
     }
   });
 
+  test('offline gazetteer gives flights + city stops coords (timezone lights up, no API)', () => {
+    const jun30 = dayByDate('2026-06-30');
+    const flight = jun30.activities.find(a => /LAX/.test(a.name));
+    expect(flight.lat).not.toBeNull();           // LAX resolved from the gazetteer
+    expect(flight.lng).not.toBeNull();
+    // A San Diego stop should resolve to a Pacific-zone coordinate.
+    const jul3 = dayByDate('2026-07-03');
+    expect(jul3.activities.some(a => a.lat != null)).toBe(true);
+  });
+
   test('reports an honest summary', () => {
     expect(result.summary.days).toBe(5);   // Jun30, Jul1, Jul2, Jul3, Jul4
     expect(result.summary.imported).toBeGreaterThan(6);

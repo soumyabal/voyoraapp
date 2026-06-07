@@ -60,6 +60,31 @@ function toISO(monthName, day, year) {
   return `${year}-${String(mo + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+function addDaysISO(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + n);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
+// Today (local) as YYYY-MM-DD — the base date for "Day 1/2/3" itineraries with no calendar dates.
+function todayISO() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+}
+
+// Strip common markdown/bullets so pasted ChatGPT/Gemini output parses: leading "-", "*", "•",
+// "+", "1.", "#" headings, and **bold**/__bold__ markers.
+function normalizeLine(line) {
+  return line
+    .replace(/^\s*[-*•+]\s+/, '')
+    .replace(/^\s*\d+\.\s+/, '')
+    .replace(/^\s*#{1,6}\s+/, '')
+    .replace(/\*\*/g, '')
+    .replace(/__/g, '')
+    .trim();
+}
+
 /**
  * Pull candidate place names from a line: runs of Capitalised words (allowing lowercase
  * connectors de/del/of/the), kept when they have ≥2 capitalised tokens OR carry a POI suffix.
@@ -100,7 +125,8 @@ export function extractCandidates(text) {
  */
 export function parseItineraryText(text, opts = {}) {
   const year = opts.year || 2026;
-  const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const base = opts.startDate || todayISO();   // base date for "Day N" (no-calendar) itineraries
+  const lines = String(text || '').split(/\r?\n/).map(l => normalizeLine(l)).filter(Boolean);
 
   const segments = [];
   const days = [];
@@ -109,6 +135,7 @@ export function parseItineraryText(text, opts = {}) {
   let curDay = null;
 
   const reSegment = /^Segment\s+\d+\s*:\s*(.+?)\s*\((.+?)\)\s*$/i;
+  const reDayN    = /^Day\s+(\d+)\b\s*[:\-–(]?\s*(.*)$/i;          // "Day 1: …" / "Day 1 – …" / "Day 1 (July 1): …"
   const reDay     = /^([A-Za-z]+)\s+(\d{1,2})\s*:\s*(.+)$/;        // "July 1: Hollywood & ..."
   const reSlot    = /^(Morning|Afternoon|Evening|Night)\s*:\s*(.+)$/i;
   const reStop    = /^Stop\s+\d+\s*\(([^)]+)\)\s*:\s*(.+)$/i;
@@ -127,6 +154,20 @@ export function parseItineraryText(text, opts = {}) {
       const cityHit = name.match(/(Los Angeles|San Diego|San Francisco|New York|Chicago)/i);
       curSegment = { name, dateText: m[2], city: cityHit ? cityHit[1] : name };
       segments.push(curSegment);
+      continue;
+    }
+    if ((m = line.match(reDayN))) {
+      // "Day N" itineraries (very common in AI output): use an embedded calendar date if present,
+      // else synthesise consecutive dates from the base (Day 1 = base, Day 2 = base+1, …).
+      const n = parseInt(m[1], 10);
+      let rest = (m[2] || '').replace(/^\)?\s*[:\-–]?\s*/, '').replace(/\)\s*$/, '').trim();
+      const dm = rest.match(/([A-Za-z]+)\s+(\d{1,2})/);
+      const date = (dm && MONTHS[dm[1].toLowerCase()] != null) ? toISO(dm[1], parseInt(dm[2], 10), year) : addDaysISO(base, n - 1);
+      const title = rest || `Day ${n}`;
+      curDay = { date, dateText: `Day ${n}`, title, segment: curSegment?.city || null, items: [] };
+      days.push(curDay);
+      const cands = extractCandidates(title);
+      if (cands.length) curDay.titleCandidates = cands;
       continue;
     }
     if ((m = line.match(reDay)) && MONTHS[m[1].toLowerCase()] != null) {

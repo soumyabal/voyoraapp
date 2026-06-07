@@ -105,6 +105,46 @@ describe('parseItineraryText — type classification', () => {
   });
 });
 
+describe('parseItineraryText — real-world formats (markdown + "Day N")', () => {
+  // The common ChatGPT shape: markdown bullets/bold + "Day N" headers (no calendar dates).
+  const MD = `
+# Tokyo Trip
+
+**Day 1: Arrival in Tokyo**
+- Morning: Land at Narita and take the train to Shinjuku.
+- Afternoon: Explore Shinjuku Gardens.
+- Evening: Dinner in Shibuya.
+
+**Day 2: Temples & Culture**
+- Visit Sensoji Temple.
+- Afternoon: the Meiji Shrine.
+
+**Day 3: Day Trip**
+1. Morning: Take the bullet train to Hakone.
+2. Evening: Return to Tokyo.
+`;
+
+  test('parses "Day N" headers and synthesises consecutive dates from the base', () => {
+    const r = parseItineraryText(MD, { startDate: '2026-09-10' });
+    expect(r.days).toHaveLength(3);
+    expect(r.days.map(d => d.date)).toEqual(['2026-09-10', '2026-09-11', '2026-09-12']);
+    expect(r.days[0].title).toMatch(/Arrival in Tokyo/);
+  });
+
+  test('strips markdown bullets/bold and still classifies + finds slots', () => {
+    const r = parseItineraryText(MD, { startDate: '2026-09-10' });
+    const d1 = r.days[0];
+    expect(d1.items.filter(i => i.kind === 'slot').map(i => i.slot)).toEqual(['morning', 'afternoon', 'evening']);
+    expect(d1.items.find(i => /Land at Narita/.test(i.text)).type).toBe('transport');
+    expect(d1.items.find(i => /Dinner in Shibuya/.test(i.text)).type).toBe('food');
+  });
+
+  test('an embedded calendar date in a "Day N" header wins over the synthesised one', () => {
+    const r = parseItineraryText('Day 1 (July 4): Fireworks\nEvening: Watch the show.', { year: 2026, startDate: '2026-01-01' });
+    expect(r.days[0].date).toBe('2026-07-04');
+  });
+});
+
 describe('parseItineraryText — entity candidates (heuristic recall)', () => {
   const r = parseItineraryText(SAMPLE, { year: 2026 });
   const allCands = r.days.flatMap(d => [...(d.titleCandidates || []), ...d.items.flatMap(i => i.candidates || [])]);

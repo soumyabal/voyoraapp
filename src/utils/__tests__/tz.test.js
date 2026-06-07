@@ -4,7 +4,7 @@
  */
 import {
   offsetMinutes, zonedWallToUtcMs, tzAbbr, zoneShortLabel,
-  formatGmtOffset, crossZoneLegMinutes, tzForCoords, deviceTz, tzSupported, _resetTzSupportCache,
+  formatGmtOffset, crossZoneLegMinutes, tzForCoords, tzForDay, deviceTz, tzSupported, _resetTzSupportCache,
 } from '../tz';
 
 describe('offsetMinutes — DST-correct minutes ahead of UTC', () => {
@@ -108,6 +108,21 @@ describe('tzForCoords — offline coords → IANA zone', () => {
   });
   test('accepts numeric strings (geocode output is sometimes stringy)', () => {
     expect(tzForCoords('34.05', '-118.24')).toBe('America/Los_Angeles');
+  });
+});
+
+describe('tzForDay — the single zone-resolution rule', () => {
+  test('day override wins over the trip default', () => {
+    const trip = { defaultTz: 'America/Chicago', days: [{ tz: 'America/New_York' }] };
+    expect(tzForDay(trip, 0)).toBe('America/New_York');
+  });
+  test('falls back to defaultTz, then homeTz', () => {
+    expect(tzForDay({ defaultTz: 'Asia/Tokyo', days: [{}] }, 0)).toBe('Asia/Tokyo');
+    expect(tzForDay({ homeTz: 'Europe/Paris', days: [{}] }, 0)).toBe('Europe/Paris');
+  });
+  test('no zones anywhere → device zone (never crashes)', () => {
+    expect(typeof tzForDay({ days: [{}] }, 0)).toBe('string');
+    expect(typeof tzForDay(null, 0)).toBe('string');
   });
 });
 

@@ -125,6 +125,15 @@ export function tzForCoords(lat, lng) {
   }
 }
 
+/**
+ * The zone a given day happens in: the day's own override, else the trip default, else the
+ * trip's home zone, else the device zone. This is the single resolution rule for the whole app
+ * (doc §3) — UI + future leg math read zones through here, never trip.defaultTz directly.
+ */
+export function tzForDay(trip, dayIndex) {
+  return trip?.days?.[dayIndex]?.tz || trip?.defaultTz || trip?.homeTz || deviceTz() || null;
+}
+
 /** The device's own IANA zone, e.g. 'America/Chicago'. null if unavailable. */
 export function deviceTz() {
   try {

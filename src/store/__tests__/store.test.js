@@ -49,6 +49,9 @@ describe('createTrip', () => {
     expect(t.itineraryPushed).toBe(false);
     expect(t.expenses).toEqual([]);
     expect(t.origin).toBeNull();
+    // Timezones backfilled (no origin coords → device zone). Just assert they're present strings.
+    expect(typeof t.homeTz).toBe('string');
+    expect(typeof t.defaultTz).toBe('string');
   });
 
   test('persisted trip shape is locked — adding/removing a field must bump the storage version', () => {
@@ -57,8 +60,8 @@ describe('createTrip', () => {
     // MUST be updated too, or existing users rehydrate a stale shape. See
     // src/store/index.js persist({ name: 'voyara-storage' }).
     expect(Object.keys(t).sort()).toEqual([
-      'bgColors', 'budget', 'days', 'destination', 'emoji', 'endDate', 'expenses',
-      'families', 'focus', 'id', 'itineraryPushed', 'mode', 'name', 'origin',
+      'bgColors', 'budget', 'days', 'defaultTz', 'destination', 'emoji', 'endDate', 'expenses',
+      'families', 'focus', 'homeTz', 'id', 'itineraryPushed', 'mode', 'name', 'origin',
       'pace', 'seenPlaces', 'splitMode', 'startDate',
     ]);
   });

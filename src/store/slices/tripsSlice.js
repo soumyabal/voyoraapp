@@ -10,6 +10,7 @@
  * Gated by: store.test (createTrip shape + day generation + persisted-shape guard).
  */
 import { uid, TRIP_EMOJIS, TRIP_BG_COLORS, familyPalette } from '../../utils/helpers';
+import { deviceTz, tzForCoords } from '../../utils/tz';
 
 export const createTripsSlice = (set, get) => ({
   // ── TRIPS ───────────────────────────────────────────────
@@ -21,7 +22,16 @@ export const createTripsSlice = (set, get) => ({
   })),
 
   updateTrip: (tripId, updates) => set(s => ({
-    trips: s.trips.map(t => t.id === tripId ? { ...t, ...updates } : t),
+    trips: s.trips.map(t => {
+      if (t.id !== tripId) return t;
+      const next = { ...t, ...updates };
+      // Keep the trip's default zone in sync with where it STARTS: when the origin gains
+      // coords (and the caller didn't explicitly set a zone), infer defaultTz from them.
+      if (updates.origin?.lat != null && updates.defaultTz === undefined) {
+        next.defaultTz = tzForCoords(updates.origin.lat, updates.origin.lng) || next.defaultTz || null;
+      }
+      return next;
+    }),
   })),
 
   // Resize a trip to a new date range, PRESERVING content by day-index. The first N days keep
@@ -105,6 +115,12 @@ export const createTripsSlice = (set, get) => ({
       // Where Day 1 begins (arrival airport / hotel / home) → anchors the
       // first stop's travel leg + auto-arrange. { label, lat, lng } | null.
       origin: origin && origin.label ? origin : null,
+      // Timezones (docs/timezone-model.md): homeTz = the traveler's own zone (for "now" +
+      // pre-trip planning); defaultTz = the destination's zone, the fallback for every day
+      // (each day may override via day.tz). Inferred from the origin's coords when known at
+      // creation, else the device zone; kept in sync by updateTrip when the origin changes.
+      homeTz: deviceTz(),
+      defaultTz: (origin && origin.lat != null ? tzForCoords(origin.lat, origin.lng) : null) || deviceTz() || null,
     };
 
     set(s => ({ trips: [trip, ...s.trips] }));

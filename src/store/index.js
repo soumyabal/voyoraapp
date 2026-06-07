@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sampleTrips, sampleTravelers, sampleGroups } from '../data/sampleData';
+import { deviceTz } from '../utils/tz';
 import { createTripsSlice } from './slices/tripsSlice';
 import { createPeopleSlice } from './slices/peopleSlice';
 import { createActivitiesSlice } from './slices/activitiesSlice';
@@ -48,7 +49,7 @@ const useStore = create(
       // shape changes (the store.test.js shape guard will fail to remind you).
       // Previously there was NO version → the only way to change shape was to
       // rename the key, which WIPES every user's trips. Versioning fixes that.
-      version: 5,
+      version: 6,
       // v0 (unversioned, older builds) → v1: backfill optional trip fields.
       // v1 → v2: added per-day `day.nightPlan` (hotel-less-but-covered nights).
       // v2 → v3: `day.nightPlan` widened from a STRING to { type, label?, lat?, lng? }
@@ -61,8 +62,12 @@ const useStore = create(
       // v4 → v5: REPAIR openHours for 24/7 places. The old hours parser recorded a no-close
       // (open-24/7) Google period for SUNDAY ONLY, so a 24/7 bridge/lighthouse wrongly read
       // "Closed" Mon–Sat. Detect that exact signature and expand it to all seven days.
+      // v5 → v6: TIMEZONES (docs/timezone-model.md) — trips gain homeTz + defaultTz (backfilled
+      // to the device zone; days inherit via day.tz which stays absent until set). Additive +
+      // read-time-resolved (tzForDay), so no behaviour change for single-zone trips.
       migrate: (state) => {
         if (!state) return state;
+        const dz = deviceTz();
         const fix247 = (oh) =>
           (Array.isArray(oh) && oh.length === 1 && oh[0] && oh[0].d === 0 && oh[0].o === 0 && oh[0].c >= 1440)
             ? [0, 1, 2, 3, 4, 5, 6].map((d) => ({ d, o: 0, c: 1440 }))
@@ -72,6 +77,8 @@ const useStore = create(
           ignoredWarnings: [],
           origin: null,
           expenses: [],
+          homeTz: dz,
+          defaultTz: dz,
           ...t, // existing values always win over the backfilled defaults
           days: (t.days || []).map((d) => ({
             ...d,

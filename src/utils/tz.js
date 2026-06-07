@@ -144,12 +144,22 @@ export function tzForCoords(lat, lng) {
 }
 
 /**
- * The zone a given day happens in: the day's own override, else the trip default, else the
- * trip's home zone, else the device zone. This is the single resolution rule for the whole app
- * (doc §3) — UI + future leg math read zones through here, never trip.defaultTz directly.
+ * The zone a given day happens in — the single resolution rule for the whole app (doc §3); UI +
+ * leg math read zones through here, never trip.defaultTz directly. Order:
+ *   1. day.tz — an explicit per-day override (manual, future), always wins.
+ *   2. INFERRED from where the day's stops actually are — the first located activity's coords
+ *      (tz-lookup, offline). This makes a real cross-zone trip light up automatically (a Tokyo
+ *      day shows JST from its Tokyo stops, no reliance on the origin) and lets a multi-city trip
+ *      vary by day. A travel day takes its FIRST stop's zone (where the day begins); the
+ *      cross-zone arrival is surfaced separately by the travel-leg labels.
+ *   3. trip.defaultTz → trip.homeTz → device zone (fallbacks when the day has no located stop).
  */
 export function tzForDay(trip, dayIndex) {
-  return trip?.days?.[dayIndex]?.tz || trip?.defaultTz || trip?.homeTz || deviceTz() || null;
+  const day = trip?.days?.[dayIndex];
+  if (day?.tz) return day.tz;
+  const stop = (day?.activities || []).find(a => a && a.lat != null && a.lng != null);
+  const inferred = stop ? tzForCoords(stop.lat, stop.lng) : null;
+  return inferred || trip?.defaultTz || trip?.homeTz || deviceTz() || null;
 }
 
 /** The device's own IANA zone, e.g. 'America/Chicago'. null if unavailable. */

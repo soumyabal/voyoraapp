@@ -115,6 +115,15 @@ describe('dayZoneLabel — badge only when the day differs from home', () => {
   test('missing zones/date → empty (no crash)', () => {
     expect(dayZoneLabel({ days: [{}] }, 0)).toBe('');
   });
+  test('lights up from a day\'s located stops even when defaultTz = home (the origin=home case)', () => {
+    // Home + defaultTz both Chicago (origin was home), but the day's stop is in Tokyo →
+    // the badge appears from the stop, not the (home) defaultTz.
+    const t = {
+      homeTz: 'America/Chicago', defaultTz: 'America/Chicago',
+      days: [{ date: '2026-07-11', activities: [{ lat: 35.68, lng: 139.76 }] }],  // Tokyo
+    };
+    expect(dayZoneLabel(t, 0)).toBe('GMT+9');
+  });
 });
 
 describe('daysBetweenISO', () => {

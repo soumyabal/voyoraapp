@@ -146,6 +146,20 @@ describe('tzForDay — the single zone-resolution rule', () => {
     expect(typeof tzForDay({ days: [{}] }, 0)).toBe('string');
     expect(typeof tzForDay(null, 0)).toBe('string');
   });
+  test('INFERS from the day\'s first located stop (overrides defaultTz)', () => {
+    const trip = {
+      defaultTz: 'America/Chicago',
+      days: [{ activities: [{ name: 'a', lat: 35.68, lng: 139.76 }] }],  // Tokyo
+    };
+    expect(tzForDay(trip, 0)).toBe('Asia/Tokyo');
+  });
+  test('explicit day.tz still wins over inferred stops', () => {
+    const trip = { days: [{ tz: 'Europe/Paris', activities: [{ lat: 35.68, lng: 139.76 }] }] };
+    expect(tzForDay(trip, 0)).toBe('Europe/Paris');
+  });
+  test('a day with no located stop falls back to defaultTz', () => {
+    expect(tzForDay({ defaultTz: 'Asia/Tokyo', days: [{ activities: [{ name: 'x' }] }] }, 0)).toBe('Asia/Tokyo');
+  });
 });
 
 describe('tzSupported (the runtime spike) + deviceTz', () => {

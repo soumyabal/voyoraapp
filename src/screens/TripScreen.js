@@ -4,6 +4,7 @@ import {
   StatusBar, Alert, Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import useStore from '../store';
 import ItineraryScreen from './ItineraryScreen';
 import TravelersScreen from './TravelersScreen';
@@ -12,7 +13,7 @@ import EditTripModal from '../modals/EditTripModal';
 import ChangeModeModal from '../modals/ChangeModeModal';
 import AgenticPlannerModal from '../modals/AgenticPlannerModal';
 import TripValidationModal from '../modals/TripValidationModal';
-import { colors, spacing, typography, radius } from '../theme';
+import { colors, spacing, typography, radius, gradients, shadow } from '../theme';
 import Icon from '../components/ui/Icon';
 import { fmt, getAllMembers } from '../utils/helpers';
 import { exportTripAsPDF } from '../utils/exportPlan';
@@ -24,6 +25,19 @@ const TABS = [
   { key: 'travelers', label: 'People', icon: 'people' },
   { key: 'splitwise', label: 'Split',  icon: 'wallet' },
 ];
+
+// Compact header countdown (module fn → pure at the call site, no render-time impurity flag).
+function tripCountdown(trip) {
+  const DAY = 86400000;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = new Date(trip.startDate + 'T00:00:00');
+  const end   = new Date(trip.endDate + 'T00:00:00');
+  if (trip.archived) return '✓ Completed';
+  if (today > end)   return '✓ Ended';
+  if (today >= start && today <= end) return '🟢 Happening now';
+  const d = Math.round((start - today) / DAY);
+  return d === 0 ? '📅 Starts today' : d === 1 ? '📅 Tomorrow' : `📅 In ${d} days`;
+}
 
 export default function TripScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -65,7 +79,7 @@ export default function TripScreen({ navigation }) {
   const hasAccessible = trip.families.some(f => f.members.some(m => m.needs.length > 0));
   const modeLabel = trip.mode === 'ai' ? 'AI Planned' : trip.mode === 'expert' ? 'Expert' : 'Manual';
   const modeIcon  = trip.mode === 'ai' ? 'sparkles' : trip.mode === 'expert' ? 'briefcase-outline' : 'create-outline';
-  const modeColor = trip.mode === 'ai' ? colors.ai : trip.mode === 'expert' ? colors.expert : colors.primary;
+  const statusLabel = tripCountdown(trip);
 
   const handleShare = async () => {
     const members = getAllMembers(trip);
@@ -111,10 +125,14 @@ export default function TripScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="light-content" />
 
-      {/* Trip Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      {/* Trip Header — gradient cover (per-trip emoji tile + countdown) */}
+      <LinearGradient
+        colors={gradients.hero}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={[styles.hero, { paddingTop: insets.top + 8 }]}
+      >
         <View style={styles.headerTop}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Text style={styles.backText}>← Back</Text>
@@ -125,24 +143,31 @@ export default function TripScreen({ navigation }) {
         </View>
 
         <View style={styles.tripInfo}>
-          <Text style={styles.emoji}>{trip.emoji}</Text>
+          <LinearGradient
+            colors={trip.bgColors || ['#e17055', '#fdcb6e']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={styles.emojiTile}
+          >
+            <Text style={styles.emoji}>{trip.emoji}</Text>
+          </LinearGradient>
           <View style={{ flex: 1 }}>
-            <View style={styles.tripNameRow}>
-              <Text style={styles.tripName} numberOfLines={1}>{trip.name}</Text>
-            </View>
+            <Text style={styles.tripName} numberOfLines={1}>{trip.name}</Text>
             <View style={styles.tripMetaRow}>
-              <Icon name="location" size={13} color={colors.subtle} />
+              <Icon name="location" size={13} color="rgba(255,255,255,0.75)" />
               <Text style={styles.tripMeta} numberOfLines={1}>{trip.destination}  ·  {fmt(trip.startDate)} – {fmt(trip.endDate)}</Text>
             </View>
             <View style={styles.tags}>
-              <View style={[styles.tag, { backgroundColor: trip.mode === 'ai' ? colors.aiLight : trip.mode === 'expert' ? colors.expertLight : colors.primaryLight }]}>
-                <Icon name={modeIcon} size={11} color={modeColor} />
-                <Text style={[styles.tagText, { color: modeColor }]}>{modeLabel}</Text>
+              <View style={styles.statusPill}>
+                <Text style={styles.statusPillText}>{statusLabel}</Text>
+              </View>
+              <View style={styles.tag}>
+                <Icon name={modeIcon} size={11} color="#fff" />
+                <Text style={styles.tagText}>{modeLabel}</Text>
               </View>
               {hasAccessible && (
-                <View style={[styles.tag, { backgroundColor: '#fff8e6' }]}>
-                  <Icon name="accessible" size={11} color="#9b6e00" />
-                  <Text style={[styles.tagText, { color: '#9b6e00' }]}>Needs</Text>
+                <View style={styles.tag}>
+                  <Icon name="accessible" size={11} color="#fff" />
+                  <Text style={styles.tagText}>Needs</Text>
                 </View>
               )}
 
@@ -162,8 +187,10 @@ export default function TripScreen({ navigation }) {
             </View>
           </View>
         </View>
+      </LinearGradient>
 
-        {/* Tab Bar */}
+      {/* Tab Bar — on white, directly below the cover */}
+      <View style={styles.tabBarWrap}>
         <View style={styles.tabBar}>
           {TABS.map(tab => {
             const active = activeTab === tab.key;
@@ -238,13 +265,10 @@ const styles = StyleSheet.create({
   noTrip: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   noTripText: { ...typography.h3, color: colors.muted, marginBottom: spacing.lg },
 
-  // ── Header ──────────────────────────────────────────────────────
-  header: {
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  // ── Header (gradient cover) ─────────────────────────────────────
+  hero: {
     paddingHorizontal: spacing.xxl,
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.lg,
   },
   headerTop: {
     flexDirection: 'row',
@@ -253,18 +277,30 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   backBtn: { paddingVertical: spacing.xs },
-  backText: { ...typography.bodyBold, color: colors.primary },
+  backText: { ...typography.bodyBold, color: '#fff' },
   menuBtn: { paddingVertical: spacing.xs },
-  menuText: { fontSize: 22, color: colors.text, fontWeight: '700' },
-  tripInfo: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  menuText: { fontSize: 22, color: '#fff', fontWeight: '700' },
+  tripInfo: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  emojiTile: {
+    width: 50, height: 50, borderRadius: radius.md,
+    alignItems: 'center', justifyContent: 'center', ...shadow.sm,
+  },
   emoji: { fontSize: 26 },
-  tripNameRow: { flexDirection: 'row', alignItems: 'center' },
-  tripName: { fontSize: 16, fontWeight: '700', color: colors.text, flex: 1 },
-  tripMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  tripMeta: { fontSize: 11, color: colors.muted, flexShrink: 1 },
+  tripName: { fontSize: 19, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
+  tripMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  tripMeta: { fontSize: 11, color: 'rgba(255,255,255,0.8)', flexShrink: 1 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm, alignItems: 'center' },
-  tag: { flexDirection: 'row', alignItems: 'center', gap: 3, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 3 },
-  tagText: { ...typography.caption, fontWeight: '700', fontSize: 11 },
+  statusPill: {
+    backgroundColor: 'rgba(255,255,255,0.20)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)',
+    borderRadius: radius.full, paddingHorizontal: 9, paddingVertical: 3,
+  },
+  statusPillText: { color: '#fff', fontWeight: '800', fontSize: 11 },
+  tag: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm, paddingVertical: 3,
+  },
+  tagText: { ...typography.caption, fontWeight: '700', fontSize: 11, color: '#fff' },
 
   // Plan with AI / Update Plan button (inline with tags)
   planBtn: {
@@ -277,10 +313,14 @@ const styles = StyleSheet.create({
   planBtnUpdate: { backgroundColor: colors.primary },
   planBtnText: { ...typography.caption, color: '#fff', fontWeight: '800', fontSize: 11 },
 
-  // ── Tab bar ──────────────────────────────────────────────────────
+  // ── Tab bar (white surface below the cover) ─────────────────────
+  tabBarWrap: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+    paddingHorizontal: spacing.xxl,
+  },
   tabBar: {
     flexDirection: 'row',
-    marginTop: spacing.md,
   },
   tab: {
     flex: 1,

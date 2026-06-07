@@ -143,6 +143,18 @@ describe('parseItineraryText — real-world formats (markdown + "Day N")', () =>
     const r = parseItineraryText('Day 1 (July 4): Fireworks\nEvening: Watch the show.', { year: 2026, startDate: '2026-01-01' });
     expect(r.days[0].date).toBe('2026-07-04');
   });
+
+  test('WALL OF TEXT: parses even when newlines are lost (markers run together)', () => {
+    // The same plan as one paragraph (the common "paste lost its newlines" case).
+    const wall = 'Segment 1: Los Angeles (June 30 – July 3) June 30: Arrival Land at LAX. ' +
+      'Morning: Santa Monica Pier. July 1: Hollywood Afternoon: Griffith Observatory. ' +
+      'Stop 1 (Laguna Beach): Heisler Park.';
+    const r = parseItineraryText(wall, { year: 2026 });
+    expect(r.segments).toHaveLength(1);
+    expect(r.days.map(d => d.date)).toEqual(['2026-06-30', '2026-07-01']);
+    expect(r.days[1].items.some(i => i.slot === 'afternoon')).toBe(true);
+    expect(r.days[1].items.some(i => i.kind === 'stop' && i.place === 'Laguna Beach')).toBe(true);
+  });
 });
 
 describe('parseItineraryText — entity candidates (heuristic recall)', () => {

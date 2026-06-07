@@ -73,6 +73,20 @@ function todayISO() {
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
 }
 
+// Wall-of-text rescue: pasted text often loses newlines (markers run together). Insert a line
+// break before each STRONG header/marker (those carrying a colon / paren / dash, so we don't
+// split mid-sentence). Idempotent on already-newlined text (extra blank lines are filtered).
+function presegment(text) {
+  const monthAlt = Object.keys(MONTHS).join('|');
+  return String(text || '')
+    .replace(/\s+(Segment\s+\d+\s*:)/g, '\n$1')
+    .replace(/\s+(Day\s+\d+\s*[:\-–(])/g, '\n$1')
+    .replace(/\s+(Stop\s+\d+\s*\()/g, '\n$1')
+    .replace(/\s+(Option\s+[A-Z]\s*:)/g, '\n$1')
+    .replace(/\s+(Morning|Afternoon|Evening|Night)(\s*:)/g, '\n$1$2')
+    .replace(new RegExp(`\\s+((?:${monthAlt})\\s+\\d{1,2}\\s*:)`, 'gi'), '\n$1');
+}
+
 // Strip common markdown/bullets so pasted ChatGPT/Gemini output parses: leading "-", "*", "•",
 // "+", "1.", "#" headings, and **bold**/__bold__ markers.
 function normalizeLine(line) {
@@ -126,7 +140,7 @@ export function extractCandidates(text) {
 export function parseItineraryText(text, opts = {}) {
   const year = opts.year || 2026;
   const base = opts.startDate || todayISO();   // base date for "Day N" (no-calendar) itineraries
-  const lines = String(text || '').split(/\r?\n/).map(l => normalizeLine(l)).filter(Boolean);
+  const lines = presegment(text).split(/\r?\n/).map(l => normalizeLine(l)).filter(Boolean);
 
   const segments = [];
   const days = [];

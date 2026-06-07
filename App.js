@@ -10,6 +10,13 @@ import AppNavigator from './src/navigation/AppNavigator';
 import ToastProvider from './src/components/Toast';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import LoadingScreen from './src/components/LoadingScreen';
+import { tzSupported, deviceTz } from './src/utils/tz';
+
+// Phase-0 timezone spike (docs/timezone-model.md §4): report whether THIS runtime's Hermes
+// honors Intl { timeZone }. Dev-only, runs once. PASS → the tz engine works in pure JS (no lib).
+if (__DEV__) {
+  console.log(`[tz spike] Intl timeZone supported: ${tzSupported()} · device zone: ${deviceTz()}`);
+}
 
 export default function App() {
   const [ready, setReady] = useState(false);

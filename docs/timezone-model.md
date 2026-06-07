@@ -1,9 +1,17 @@
 # Timezone Model — Design (proposed)
 
-> Status: **DESIGN ONLY — not implemented.** Written 2026-06-07 at the owner's request before
-> any code. Decides how Voyara handles trips that cross timezones (a 3pm flight that lands "5
-> hours later" in another zone) and how every time is stored + displayed. Supersedes the single
-> line in `geo.js` ("Timezone handling is deferred").
+> Status: **IN PROGRESS.** Written 2026-06-07 at the owner's request. Decides how Voyara handles
+> trips that cross timezones (a 3pm flight that lands "5 hours later" in another zone) and how
+> every time is stored + displayed. Supersedes the single line in `geo.js` ("Timezone handling
+> is deferred").
+>
+> **Phase 0 (spike) — DONE.** The engine `src/utils/tz.js` is built (pure, zero-dep, Intl-based)
+> with the capability check `tzSupported()` baked in as runtime feature-detection, so the app
+> degrades gracefully instead of getting blocked. App.js logs the result once in `__DEV__`
+> (`[tz spike] Intl timeZone supported: …`). 19 unit tests in `tz.test.js`. API: `offsetMinutes`,
+> `zonedWallToUtcMs`, `tzAbbr`, `zoneShortLabel`, `formatGmtOffset`, `crossZoneLegMinutes`,
+> `deviceTz`, `tzSupported`. **Next: Phase 1** (store v6 schema + migrate; coords→tz inference —
+> still needs the offline-table-vs-Google-API call in §9.1) then **Phase 2** (UI zone badges).
 
 ---
 

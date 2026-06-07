@@ -107,6 +107,24 @@ export function crossZoneLegMinutes(from, to) {
   return Math.round((b - a) / 60000);
 }
 
+// ── coords → IANA zone (offline) ───────────────────────────────────────────────────────────
+// Lazy-required so the ~1MB tz-lookup boundary data loads only on first inference (trip
+// creation), NOT at app start — keeps cold-start light.
+let _tzlookup;
+/**
+ * Infer an IANA zone from coordinates (offline, via tz-lookup). null for missing/invalid coords
+ * or if the lookup can't resolve (e.g. out-of-range lat/lng → tz-lookup throws → caught).
+ */
+export function tzForCoords(lat, lng) {
+  if (lat == null || lng == null || !Number.isFinite(+lat) || !Number.isFinite(+lng)) return null;
+  try {
+    if (!_tzlookup) _tzlookup = require('tz-lookup');
+    return _tzlookup(+lat, +lng) || null;
+  } catch {
+    return null;
+  }
+}
+
 /** The device's own IANA zone, e.g. 'America/Chicago'. null if unavailable. */
 export function deviceTz() {
   try {

@@ -46,6 +46,7 @@
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-webview": "13.15.0",
+    "tz-lookup": "^6.1.25",
     "zustand": "^5.0.14"
   },
   "private": true,

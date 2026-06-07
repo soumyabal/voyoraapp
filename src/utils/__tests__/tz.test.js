@@ -4,7 +4,7 @@
  */
 import {
   offsetMinutes, zonedWallToUtcMs, tzAbbr, zoneShortLabel,
-  formatGmtOffset, crossZoneLegMinutes, deviceTz, tzSupported, _resetTzSupportCache,
+  formatGmtOffset, crossZoneLegMinutes, tzForCoords, deviceTz, tzSupported, _resetTzSupportCache,
 } from '../tz';
 
 describe('offsetMinutes — DST-correct minutes ahead of UTC', () => {
@@ -89,6 +89,25 @@ describe('crossZoneLegMinutes — true elapsed time of a cross-zone leg', () => 
   });
   test('missing endpoint → NaN', () => {
     expect(Number.isNaN(crossZoneLegMinutes(null, { date: '2025-07-01', time: '09:00', tz: 'UTC' }))).toBe(true);
+  });
+});
+
+describe('tzForCoords — offline coords → IANA zone', () => {
+  test('resolves well-known cities', () => {
+    expect(tzForCoords(34.05, -118.24)).toBe('America/Los_Angeles');
+    expect(tzForCoords(40.71, -74.00)).toBe('America/New_York');
+    expect(tzForCoords(51.5, -0.12)).toBe('Europe/London');
+  });
+  test('null for missing / non-numeric coords', () => {
+    expect(tzForCoords(null, -118)).toBeNull();
+    expect(tzForCoords(34, undefined)).toBeNull();
+    expect(tzForCoords('x', 'y')).toBeNull();
+  });
+  test('out-of-range coords are guarded (no throw → null)', () => {
+    expect(tzForCoords(999, 999)).toBeNull();
+  });
+  test('accepts numeric strings (geocode output is sometimes stringy)', () => {
+    expect(tzForCoords('34.05', '-118.24')).toBe('America/Los_Angeles');
   });
 });
 

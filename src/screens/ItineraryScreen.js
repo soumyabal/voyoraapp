@@ -418,14 +418,24 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const [mustDosChecked,        setMustDosChecked]        = useState({});
   const [celebrate,             setCelebrate]             = useState(false);  // one-shot when Trip Check turns all-green
 
-  const day = trip.days[currentDay] || trip.days[0];
+  // The effective day index: clamp a stale/out-of-range currentDay (e.g. switching to another
+  // trip that has FEWER days than the day you were on) to a valid one. EVERY per-day derivation
+  // below must use dayIdx — not the raw currentDay — or the rendered day and its zone/past/warning
+  // data fall out of sync (the "2nd trip shows no EDT/CDT" bug: day fell back to 0 while the zone
+  // memo still computed for the out-of-range index). The effect re-syncs the store so the
+  // interaction handlers (which write via currentDay) target the same day.
+  const dayIdx = trip.days[currentDay] ? currentDay : 0;
+  const day = trip.days[dayIdx];
+  useEffect(() => {
+    if (currentDay !== dayIdx) setCurrentDay(dayIdx);
+  }, [currentDay, dayIdx, setCurrentDay]);
 
   // Phase-1 planner: no live "today / active day" tracking inside a trip — you pick any day
   // and plan it. (Active trips are surfaced on the Home screen instead.)
 
   // Where you woke today (Day 1 → origin; else last night's hotel / friends-camping
   // address / home). Drives the first-stop travel leg for ANY day, not just Day 1.
-  const startAnchor = day ? dayStartAnchor(trip, currentDay) : null;
+  const startAnchor = day ? dayStartAnchor(trip, dayIdx) : null;
   // A located night (friends/camping) with NO address yet → we can't map the morning;
   // offer to add it instead of silently dropping the first leg.
   const priorNight = (day && currentDay > 0) ? lodgingForNight(trip, currentDay - 1) : null;
@@ -461,20 +471,20 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
 
   // This day's warnings (re-sliced cheaply when the day changes; no extra validateTrip call).
   const dayWarnings = React.useMemo(
-    () => (warningsByDay[currentDay] || []).slice().sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity]),
-    [warningsByDay, currentDay]
+    () => (warningsByDay[dayIdx] || []).slice().sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity]),
+    [warningsByDay, dayIdx]
   );
 
   // Per-day timezone resolution: a single day badge for a one-zone day, or per-activity zone
   // tags when the day spans zones (a travel day). Drives both the header chip + the card eyebrows.
-  const dayZones = React.useMemo(() => resolveDayZones(trip, currentDay), [trip, currentDay]);
+  const dayZones = React.useMemo(() => resolveDayZones(trip, dayIdx), [trip, dayIdx]);
 
   // Clock-aware locking (TZ): on a live trip, a stop whose local start has passed is auto-locked
   // (can't be moved without a warning) and Plan-my-day only arranges the remaining time. Date.now()
   // is read at render so it stays current as the day progresses (re-read on each interaction).
   const nowMs = Date.now();
-  const pastIds = React.useMemo(() => pastActivityIds(trip, currentDay, nowMs), [trip, currentDay, nowMs]);
-  const dayPast = React.useMemo(() => isDayInPast(trip, currentDay, nowMs), [trip, currentDay, nowMs]);
+  const pastIds = React.useMemo(() => pastActivityIds(trip, dayIdx, nowMs), [trip, dayIdx, nowMs]);
+  const dayPast = React.useMemo(() => isDayInPast(trip, dayIdx, nowMs), [trip, dayIdx, nowMs]);
 
   const handlePush = () => { pushItineraryToSplitwise(trip.id); switchTab('splitwise'); };
 

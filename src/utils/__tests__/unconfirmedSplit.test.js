@@ -2,7 +2,7 @@
  * unconfirmedSplit.test.js — unconfirmedSplitItems(): past activities that carry a split
  * expense but were never checked off. Time-aware + pure (now passed in), so fully deterministic.
  */
-import { unconfirmedSplitItems, withUnconfirmedExcluded } from '../expenses';
+import { unconfirmedSplitItems, pendingSplitItems, withUnconfirmedExcluded } from '../expenses';
 
 const NOW = new Date('2026-06-13T12:00:00').getTime();   // "past" = ends before this
 const PAST = '2026-06-12';
@@ -71,6 +71,50 @@ describe('unconfirmedSplitItems', () => {
 
   test('an unparseable date is guarded (no crash, not flagged)', () => {
     expect(ids(trip('not-a-date', [act('A')], [exp('A')]))).toEqual([]);
+  });
+});
+
+describe('pendingSplitItems — every unchecked/orphaned itinerary expense is resolvable (no time gate)', () => {
+  const pIds = (t) => pendingSplitItems(t).map(x => x.expense.id);
+
+  test('a FUTURE unchecked item is resolvable (unconfirmedSplitItems would skip it)', () => {
+    const t = trip(FUTURE, [act('A')], [exp('A')]);
+    expect(unconfirmedSplitItems(t, NOW)).toEqual([]);   // time-gated: not flagged
+    expect(pIds(t)).toEqual(['e_A']);                    // but still resolvable
+  });
+
+  test('a still-upcoming item later TODAY is resolvable (the reported "middle row" case)', () => {
+    const t = trip(TODAY, [act('A', { time: '14:00' })], [exp('A')]);
+    expect(unconfirmedSplitItems(t, NOW)).toEqual([]);
+    expect(pIds(t)).toEqual(['e_A']);
+  });
+
+  test('an ORPHANED link (no matching activity) is resolvable, activity null', () => {
+    const t = { days: [{ label: 'Day 1', date: PAST, activities: [] }], expenses: [exp('GONE')] };
+    const items = pendingSplitItems(t);
+    expect(items.map(i => i.expense.id)).toEqual(['e_GONE']);
+    expect(items[0].activity).toBeNull();
+    expect(items[0].dayIndex).toBe(-1);
+  });
+
+  test('done / skipped → not resolvable', () => {
+    expect(pIds(trip(PAST, [act('A', { status: 'done' })], [exp('A')]))).toEqual([]);
+    expect(pIds(trip(PAST, [act('A', { status: 'skipped' })], [exp('A')]))).toEqual([]);
+  });
+
+  test('excluded expense / manual expense → not resolvable', () => {
+    expect(pIds(trip(PAST, [act('A')], [exp('A', { excluded: true })]))).toEqual([]);
+    expect(pIds(trip(PAST, [act('A')], [exp('A', { source: 'manual' })]))).toEqual([]);
+  });
+
+  test('carries the day label + index for the "Go to <day>" action', () => {
+    const t = trip(PAST, [act('A')], [exp('A')]);
+    expect(pendingSplitItems(t)[0]).toMatchObject({ dayIndex: 0, dayLabel: 'Day 1' });
+  });
+
+  test('no time gate needed → works without a clock', () => {
+    const t = trip(FUTURE, [act('A')], [exp('A')]);
+    expect(pIds(t)).toEqual(['e_A']);   // pendingSplitItems takes no `now`
   });
 });
 

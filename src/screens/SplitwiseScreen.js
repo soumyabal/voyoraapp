@@ -14,7 +14,7 @@ import {
   calcFamilyExpenseTotal, calcMemberExpenseShare,
   calcTripItineraryTotal, calcBalances, calcSettlements,
 } from '../utils/costs';
-import { summariseExpenses, unconfirmedSplitItems, withUnconfirmedExcluded } from '../utils/expenses';
+import { summariseExpenses, unconfirmedSplitItems, pendingSplitItems, withUnconfirmedExcluded } from '../utils/expenses';
 import { exportSettlementAsPDF } from '../utils/exportPlan';
 
 // Expense category emoji (stored in exp.category) → Icon name + tint
@@ -40,7 +40,11 @@ export default function SplitwiseScreen({ trip, onOpenActivity }) {
   const now = Date.now();
   const unconfirmed = unconfirmedSplitItems(trip, now);
   const unconfirmedExpIds = new Set(unconfirmed.map(u => u.expense.id));
-  const unconfirmedByExpId = new Map(unconfirmed.map(u => [u.expense.id, u]));
+  // EVERY unchecked / orphaned itinerary expense is resolvable (no time gate) — so the
+  // tap-to-resolve shows on all of them, not just past ones. `unconfirmedExpIds` (above)
+  // still marks which are ALSO auto-excluded from the math (past) → different copy.
+  const pending = pendingSplitItems(trip);
+  const pendingByExpId = new Map(pending.map(p => [p.expense.id, p]));
 
   // Auto-exclude semantics: past + unchecked items are NOT divided until confirmed.
   // We feed a derived "counted-only" view to ALL the money math (totals, balances,
@@ -51,16 +55,22 @@ export default function SplitwiseScreen({ trip, onOpenActivity }) {
   // Resolve an unconfirmed item via a tap (bulletproof) — the same three actions the
   // swipe offers. Swipe can be flaky inside the scroll list (Expo Go), so tap is the
   // reliable primary path and swipe is a bonus.
-  const askResolve = (exp, u) => Alert.alert(
-    u.activity.name,
-    `${fmtM(exp.amount)} · not checked off, so it's left out of the split until you confirm.`,
-    [
-      { text: '✓ Mark checked (count it)', onPress: () => updateActivity(trip.id, u.activity.id, { status: 'done' }) },
-      { text: '🚫 Exclude from split',     style: 'destructive', onPress: () => toggleExpenseExcluded(trip.id, exp.id) },
-      { text: '➜ Open in itinerary',       onPress: () => onOpenActivity?.(u.dayIndex, u.activity.id) },
-      { text: 'Cancel', style: 'cancel' },
-    ],
-  );
+  const askResolve = (exp, item) => {
+    const act      = item.activity;                       // null when the link is orphaned
+    const isPast   = unconfirmedExpIds.has(exp.id);       // past + unchecked → already excluded from the math
+    const dayName  = item.dayLabel || (item.dayIndex >= 0 ? `Day ${item.dayIndex + 1}` : null);
+    const message  = isPast
+      ? `${fmtM(exp.amount)} · not checked off, so it's left out of the split until you confirm.`
+      : act
+        ? `${fmtM(exp.amount)} · not checked off yet — confirm to keep it in the split, or exclude it.`
+        : `${fmtM(exp.amount)} · this expense's activity is no longer in the itinerary.`;
+    const buttons = [];
+    if (act) buttons.push({ text: '✓ Mark checked (count it)', onPress: () => updateActivity(trip.id, act.id, { status: 'done' }) });
+    buttons.push({ text: '🚫 Exclude from split', style: 'destructive', onPress: () => toggleExpenseExcluded(trip.id, exp.id) });
+    if (act && dayName) buttons.push({ text: `➜ Go to ${dayName}`, onPress: () => onOpenActivity?.(item.dayIndex, act.id) });
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert(act ? act.name : exp.name, message, buttons);
+  };
 
   // Lists render from the real trip (so unconfirmed rows still show); totals/counts come
   // from the counted-only view so the numbers reflect what will actually be split.
@@ -181,16 +191,18 @@ export default function SplitwiseScreen({ trip, onOpenActivity }) {
               </TouchableOpacity>
             </View>
             {itinExpenses.map(exp => {
-              const u = unconfirmedByExpId.get(exp.id);
-              // Tap-to-resolve only (the "Not counted" hint is the tap target). The swipe
-              // (gesture-handler Swipeable) was removed: it didn't survive the always-mounted
-              // display:none tab toggling — it left the row disabled, then frozen after
-              // navigating away and back. Tap is bulletproof and offers the same 3 actions.
+              const p = pendingByExpId.get(exp.id);
+              // Tap-to-resolve only (the hint is the tap target). The swipe (gesture-handler
+              // Swipeable) was removed: it didn't survive the always-mounted display:none tab
+              // toggling — it left the row disabled, then frozen after navigating away and back.
+              // Tap is bulletproof. EVERY unchecked/orphaned item is resolvable now (not just
+              // past ones); `pastUnchecked` picks the copy (excluded vs still-counted).
               return (
                 <ExpenseCard
                   key={exp.id}
-                  exp={exp} trip={trip} warn={!!u}
-                  onResolve={u ? () => askResolve(exp, u) : undefined}
+                  exp={exp} trip={trip} warn={!!p}
+                  pastUnchecked={unconfirmedExpIds.has(exp.id)}
+                  onResolve={p ? () => askResolve(exp, p) : undefined}
                   onDelete={() => deleteExpense(trip.id, exp.id)}
                   onToggleFamily={(famId, v) => toggleFamilySplit(trip.id, exp.id, famId, v)}
                   onToggleMember={(mId, v) => toggleExpenseMember(trip.id, exp.id, mId, v)}
@@ -449,7 +461,7 @@ export default function SplitwiseScreen({ trip, onOpenActivity }) {
 // ExpenseCard
 // ─────────────────────────────────────────────────────────────────
 function ExpenseCard({
-  exp, trip, warn = false, onResolve,
+  exp, trip, warn = false, pastUnchecked = false, onResolve,
   onDelete, onToggleFamily, onToggleMember,
   onChangePayer, onChangeSplitMode,
   onToggleExcluded, onUpdateAmount, onUpdateCustomShares,
@@ -508,15 +520,21 @@ function ExpenseCard({
   const isLodging = exp.category === '🏨';
 
   return (
-    <View style={[styles.expCard, isExcluded && styles.expCardExcluded, warn && !isExcluded && styles.expCardWarn]}>
+    <View style={[styles.expCard, isExcluded && styles.expCardExcluded, warn && !isExcluded && (pastUnchecked ? styles.expCardWarn : styles.expCardPending)]}>
       {warn && !isExcluded && (
         <TouchableOpacity
           onPress={onResolve}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel="Resolve this unconfirmed item — mark checked, exclude, or open in the itinerary"
+          accessibilityLabel={pastUnchecked
+            ? 'Resolve this unconfirmed item — mark checked, exclude, or go to the day in the itinerary'
+            : 'This item is not checked off yet — mark checked, exclude, or go to the day in the itinerary'}
         >
-          <Text style={styles.warnHint}>⚠️ Not counted — wasn’t checked off.  Tap to resolve ▸</Text>
+          <Text style={pastUnchecked ? styles.warnHint : styles.pendingHint}>
+            {pastUnchecked
+              ? '⚠️ Not counted — wasn’t checked off.  Tap to resolve ▸'
+              : '○ Not checked off yet — tap to confirm or skip ▸'}
+          </Text>
         </TouchableOpacity>
       )}
       {/* ── Collapsed header ── */}
@@ -978,6 +996,9 @@ const styles = StyleSheet.create({
   expCardExcluded: { backgroundColor: colors.surface2, borderColor: colors.border, borderStyle: 'dashed' },
   expCardWarn: { borderColor: colors.warn, backgroundColor: colors.warnSoft },
   warnHint: { ...typography.tiny, color: colors.warn, fontWeight: '700', paddingHorizontal: spacing.md, paddingTop: spacing.sm },
+  // Unchecked but NOT yet past (still counted in the split) — a calm neutral nudge, not amber.
+  expCardPending: { borderColor: colors.subtle },
+  pendingHint: { ...typography.tiny, color: colors.subtle, fontWeight: '700', paddingHorizontal: spacing.md, paddingTop: spacing.sm },
   expHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: spacing.md },
   expIcon: { width: 40, height: 40, backgroundColor: colors.surface2, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   expInfo: { flex: 1 },

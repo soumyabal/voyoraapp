@@ -92,6 +92,41 @@ export function unconfirmedSplitItems(trip, now) {
 }
 
 /**
+ * Every itinerary expense that still needs confirming, for the Split tab's tap-to-resolve:
+ * its linked activity is unchecked (not done/skipped), OR the link is ORPHANED (the activity
+ * was edited/deleted so the id no longer matches). Unlike unconfirmedSplitItems this has NO
+ * time gate — so a future-but-unchecked item, an orphan, and a duplicate-linked item are ALL
+ * actionable, not just past ones (fixes "the middle row had no Tap-to-resolve"). The money
+ * auto-exclusion stays time-gated in withUnconfirmedExcluded — this only drives the UI
+ * affordance. Pure. Returns [{ expense, activity|null, dayIndex, dayLabel }] (activity null =
+ * orphaned link). The caller uses unconfirmedSplitItems to tell which of these are ALSO
+ * past-and-excluded (different copy) vs unchecked-but-still-counted.
+ */
+export function pendingSplitItems(trip) {
+  const actIndex = new Map();
+  (trip.days || []).forEach((day, i) => {
+    (day.activities || []).forEach(act => {
+      if (!actIndex.has(act.id)) actIndex.set(act.id, { act, dayIndex: i, dayLabel: day.label });
+    });
+  });
+  const out = [];
+  (trip.expenses || [])
+    .filter(e => e.source === 'itinerary' && e.activityId && !e.excluded)
+    .forEach(e => {
+      const hit = actIndex.get(e.activityId);
+      // Confirmed (done) or already decided (skipped) → nothing to resolve.
+      if (hit && (hit.act.status === 'done' || hit.act.status === 'skipped')) return;
+      out.push({
+        expense: e,
+        activity: hit?.act || null,
+        dayIndex: hit?.dayIndex ?? -1,
+        dayLabel: hit?.dayLabel || '',
+      });
+    });
+  return out;
+}
+
+/**
  * A SPLIT-tab VIEW of the trip in which past, unchecked itinerary items are treated as
  * excluded — so the money math (balances / settlement / totals) doesn't divide spend we
  * can't confirm happened, until the user checks it off. PURE + clock-injected (`now` ms):

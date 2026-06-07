@@ -4,7 +4,7 @@
    press, never during render; the compiler is OFF and can't see that. Keep new logic clean —
    this is not a license to read refs in render here. */
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal, Share, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, Alert, Linking, Modal, Share, Image, KeyboardAvoidingView, Platform, findNodeHandle } from 'react-native';
 import useStore from '../store';
 import AddActivityModal from '../modals/AddActivityModal';
 import DiscoverModal from '../modals/DiscoverModal';
@@ -386,6 +386,29 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const [snack,                 setSnack]                 = useState(null);  // undo toast
   const snackTimer = useRef(null);
   useEffect(() => () => clearTimeout(snackTimer.current), []);
+
+  // Scroll-to-highlight: when a card is highlighted (opened from the Split tab or Trip
+  // Check), scroll the day so the row is actually in view — not just highlighted off-screen.
+  // rowRefs maps actId → its wrapping View; we measure that against the scroll view + scrollTo.
+  const scrollRef = useRef(null);
+  const rowRefs = useRef({});
+  useEffect(() => {
+    const id = highlightedActIds[0];
+    if (!id) return undefined;
+    const t = setTimeout(() => {
+      const node = rowRefs.current[id];
+      const sc = scrollRef.current;
+      if (!node || !sc) return;
+      try {
+        node.measureLayout(
+          findNodeHandle(sc),
+          (x, y) => sc.scrollTo({ y: Math.max(0, y - 80), animated: true }),
+          () => {},
+        );
+      } catch (_) { /* measure can throw if unmounted mid-animation — safe to ignore */ }
+    }, 350);   // let the tab become visible (display:flex) + lay out first
+    return () => clearTimeout(t);
+  }, [highlightedActIds, currentDay]);
   const [collapsedSlots,        setCollapsedSlots]        = useState({});
   const [mustDosDismissed,      setMustDosDismissed]      = useState(false);
   const [mustDosChecked,        setMustDosChecked]        = useState({});
@@ -839,7 +862,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         onPlayTrip={() => setShowPlayTrip(true)}
       />
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
         {/* Day Navigation — pick any day to plan it (no live "today" tracking in the planner) */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayNav} contentContainerStyle={{ paddingHorizontal: spacing.xxl }}>
@@ -1222,6 +1245,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                       renderItem={({ item: act, index }) => (
                         <>
                         {index > 0 && <TravelConnector from={slotActs[index - 1]} to={act} />}
+                        <View collapsable={false} ref={(n) => { rowRefs.current[act.id] = n; }}>
                         <ActivityCard
                           activity={act}
                           trip={trip}
@@ -1254,6 +1278,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                           onToggleLock={() => toggleLock(act)}
                           onExploreNearby={() => exploreNearby(act)}
                         />
+                        </View>
                         </>
                       )}
                     />

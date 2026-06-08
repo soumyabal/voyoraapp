@@ -88,12 +88,17 @@ export function estimateDuration(activity, origin) {
   if (activity.type === 'transport') {
     // If the user gave both Departs (time) and Arrives, THAT span is the real duration —
     // honor it over the per-mode default (a 05:00 → 16:00 drive is 11h, not the 2h default).
-    // Arrives earlier than Departs = crosses midnight → add a day.
     if (activity.time && activity.arriveTime) {
       const tm = (t) => { const [h, m] = String(t).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
-      let span = tm(activity.arriveTime) - tm(activity.time);
-      if (span <= 0) span += 24 * 60;
-      if (span > 0) return span;
+      const span = tm(activity.arriveTime) - tm(activity.time);
+      if (span > 0) return span;                       // same-day arrival → honor it
+      // arriveTime <= departTime. A genuine overnight crossing (+1 day) is only plausible for
+      // long-haul modes (flight/train/ship/bus) — there it's a real red-eye, so add a day. For a
+      // CAR or an untyped leg it's almost always a data slip (an equal/earlier arriveTime, or an
+      // AI-pasted value): assuming a +24h drive balloons a 3-hour "Drive home" into a scary 24-hour
+      // "long journey" warning. So we IGNORE the bad arriveTime and fall through to the distance /
+      // per-mode estimate below. (Fixes the "Families @ Wisconsin Dells → 24h return" report.)
+      if (['flight', 'train', 'ship', 'bus'].includes(activity.subtype)) return span + 24 * 60;
     }
     // No Arrives set, but we know BOTH ends — the origin (previous stop / where you
     // start) and this leg's destination geocode. For a DRIVE the real distance beats

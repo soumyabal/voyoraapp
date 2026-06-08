@@ -13,6 +13,26 @@ test('Arrives earlier than Departs crosses midnight (22:00 → 06:00 = 8h)', () 
   expect(estimateDuration({ type: 'transport', subtype: 'flight', time: '22:00', arriveTime: '06:00' })).toBe(8 * 60);
 });
 
+test('a car/untyped leg with Arrives ≤ Departs does NOT balloon to 24h (the Wisconsin Dells return bug)', () => {
+  // A same-day drive whose Arrives was set equal-or-earlier (a data slip or an AI-pasted value)
+  // must not read as a +24h overnight drive that then triggers a false "long journey" warning.
+  expect(estimateDuration({ type: 'transport', subtype: 'car', time: '14:00', arriveTime: '14:00' })).toBe(120);
+  expect(estimateDuration({ type: 'transport', subtype: 'car', time: '14:00', arriveTime: '13:00' })).toBe(120);
+  expect(estimateDuration({ type: 'transport', time: '11:00', arriveTime: '11:00' })).toBe(120); // untyped
+});
+
+test('overnight modes (flight/train/ship/bus) STILL add a day when Arrives ≤ Departs (real red-eye)', () => {
+  expect(estimateDuration({ type: 'transport', subtype: 'flight', time: '23:00', arriveTime: '07:00' })).toBe(8 * 60);
+  expect(estimateDuration({ type: 'transport', subtype: 'train', time: '22:00', arriveTime: '06:00' })).toBe(8 * 60);
+  expect(estimateDuration({ type: 'transport', subtype: 'bus', time: '23:30', arriveTime: '05:30' })).toBe(6 * 60);
+});
+
+test('a car with origin coords + a bad Arrives uses the distance leg, never 24h', () => {
+  const d = estimateDuration({ type: 'transport', subtype: 'car', time: '14:00', arriveTime: '14:00', lat: 0, lng: 3 }, { lat: 0, lng: 0 });
+  expect(d).toBeGreaterThan(0);
+  expect(d).toBeLessThan(24 * 60);
+});
+
 test('no Arrives → falls back to the per-mode default', () => {
   expect(estimateDuration({ type: 'transport', subtype: 'car', time: '05:00' })).toBe(120);
   expect(estimateDuration({ type: 'transport', subtype: 'flight' })).toBe(180);

@@ -8,7 +8,7 @@
  * up the timezone features) is a deliberate later enhancement; this layer produces a complete
  * day-by-day skeleton (dates, slots, names, types, times) that the user reviews + enriches.
  */
-import { parseItineraryText } from './itineraryParser';
+import { parseItineraryText, classifyType } from './itineraryParser';
 import { extractItinerary } from './itineraryExtract';
 import { extractItineraryViaClaude } from './aiExtract';
 import { minToTime } from './slots';
@@ -72,7 +72,16 @@ export function buildTripFromParsed(store, parsed, opts = {}) {
     const slotCount = {};
     let cursor = 9 * 60;   // fallback sequential time for slot-less lines
     const segGeo = pd.segment ? lookupPlace(pd.segment) : null;   // day's city → coords fallback
-    for (const item of pd.items) {
+    // Terse / wall-of-text formats glue the content onto the day-header line → it lands in the
+    // title with no separate items. Rather than leave the day empty, synthesise one item from the
+    // title (classified). Never fires on well-structured pastes (they already have items).
+    let dayItems = pd.items;
+    if (!dayItems.length && pd.title && pd.title.trim()) {
+      const tt = pd.title.trim();
+      const { type, sub } = classifyType(tt);
+      dayItems = [{ kind: 'line', optionKey: null, type, sub, time: null, arriveTime: null, slot: null, place: tt, text: tt, candidates: [tt], city: null }];
+    }
+    for (const item of dayItems) {
       // Decide a time: explicit > slot-based (staggered) > sequential fallback.
       let mins = parseClock(item.time);
       if (mins == null && item.slot && SLOT_BASE[item.slot] != null) {

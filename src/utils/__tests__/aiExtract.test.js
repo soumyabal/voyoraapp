@@ -82,7 +82,6 @@ describe('extractItineraryViaClaude — no key', () => {
     jest.isolateModules(() => {
       jest.doMock('../../config', () => ({ CLAUDE_API_KEY: null, CLAUDE_MODEL: 'm', CLAUDE_API_URL: 'u' }));
     });
-    // eslint-disable-next-line global-require
     const { extractItineraryViaClaude: noKeyExtract } = require('../aiExtract');
     const fetchMock = jest.fn();
     expect(await noKeyExtract('Day 1: something', { fetch: fetchMock })).toBeNull();

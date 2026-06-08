@@ -9,7 +9,7 @@
 import React from 'react';
 import { Modal, View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import useStore from '../store';
-import { colors, spacing, radius, typography } from '../theme';
+import { colors, spacing, typography } from '../theme';
 import { ModalHeader } from '../components/ui';
 import Icon from '../components/ui/Icon';
 import { buildPackingList } from '../utils/packing';

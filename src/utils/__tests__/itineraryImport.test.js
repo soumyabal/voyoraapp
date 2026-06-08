@@ -6,7 +6,27 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'));
 
 import useStore from '../../store';
-import { importTripFromText, importTripFromTextAsync } from '../itineraryImport';
+import { importTripFromText, importTripFromTextAsync, cleanCity } from '../itineraryImport';
+
+describe('cleanCity — normalise a city tag to a single base city', () => {
+  test('route legs → destination', () => {
+    expect(cleanCity('Dallas to St. Louis')).toBe('St. Louis');
+    expect(cleanCity('Chicago → Mackinac Island')).toBe('Mackinac Island');
+  });
+  test('compound / qualifier stripping', () => {
+    expect(cleanCity('Lahaina/West Maui')).toBe('Lahaina');
+    expect(cleanCity('Downtown Las Vegas')).toBe('Las Vegas');
+    expect(cleanCity('Greater Tokyo')).toBe('Tokyo');
+    expect(cleanCity('Paris area')).toBe('Paris');
+    expect(cleanCity('Old Town Prague')).toBe('Prague');
+  });
+  test('leaves real city names (incl. "… City") intact', () => {
+    expect(cleanCity('Mexico City')).toBe('Mexico City');
+    expect(cleanCity('Kansas City')).toBe('Kansas City');
+    expect(cleanCity('St. Louis')).toBe('St. Louis');
+    expect(cleanCity('')).toBeNull();
+  });
+});
 
 const SAMPLE = `
 Segment 1: Los Angeles (June 30 – July 3)

@@ -26,6 +26,11 @@ export function cleanCity(raw) {
   const leg = c.split(/\s*(?:→|->|—|–|\bto\b)\s*/i);
   if (leg.length > 1 && leg[leg.length - 1].trim()) c = leg[leg.length - 1].trim();
   c = c.split('/')[0].trim();
+  // Drop positional qualifiers so "Downtown Las Vegas" / "Greater Tokyo" / "Paris area" all
+  // collapse to the base city (and de-dupe with a plain "Las Vegas"/"Tokyo"/"Paris" tag).
+  c = c.replace(/^(?:downtown|greater|central|old town|the)\s+/i, '')
+       .replace(/\s+(?:area|region|metro(?:politan)?(?:\s+area)?|district|city centre|city center)$/i, '')
+       .trim();
   return c || null;
 }
 

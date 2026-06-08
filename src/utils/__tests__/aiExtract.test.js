@@ -59,6 +59,15 @@ describe('extractItineraryViaClaude', () => {
     expect(out).toBeNull();
   });
 
+  test('a hanging request is aborted by the timeout → null (build falls back, never hangs)', async () => {
+    // A fetch that never resolves on its own, but rejects when the abort signal fires.
+    const hangingFetch = (_url, init) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+    });
+    const out = await extractItineraryViaClaude('Day 1: Tokyo', { fetch: hangingFetch, timeoutMs: 20 });
+    expect(out).toBeNull();
+  });
+
   test('empty text → null without calling the API', async () => {
     const fetchMock = jest.fn();
     expect(await extractItineraryViaClaude('   ', { fetch: fetchMock })).toBeNull();

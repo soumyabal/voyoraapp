@@ -74,9 +74,17 @@ export async function extractItineraryViaClaude(text, deps = {}) {
   const today = deps.today || new Date().toISOString().slice(0, 10);
   const userContent = `Current date: ${today}\n\nItinerary to extract:\n${String(text).slice(0, 12000)}`;
 
+  // Hard timeout so a slow/stuck network call can NEVER hang the build — on timeout we abort and
+  // fall back to the deterministic rules parser (paste always finishes). AbortController is
+  // available in RN/Hermes; guard in case a test env lacks it.
+  const timeoutMs = deps.timeoutMs || 25000;
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
   try {
     const res = await doFetch(CLAUDE_API_URL, {
       method: 'POST',
+      signal: controller ? controller.signal : undefined,
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': CLAUDE_API_KEY,
@@ -99,5 +107,7 @@ export async function extractItineraryViaClaude(text, deps = {}) {
   } catch (err) {
     console.warn('[aiExtract] extract failed:', err?.message);
     return null;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }

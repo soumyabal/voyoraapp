@@ -60,6 +60,10 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
       showToast(`${how}: drafted ${imported} stops across ${days} day${days !== 1 ? 's' : ''} — review & tweak`, '✨');
       setText('');
       onCreated?.(result.trip);
+    } catch (err) {
+      // Never leave the user staring at a dead button — surface the failure.
+      console.warn('[PasteImport] build failed:', err?.message);
+      showToast('Import hit a snag — please try again', '⚠️');
     } finally {
       setBusy(false);
     }

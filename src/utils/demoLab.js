@@ -55,7 +55,7 @@ export async function generateItineraryText(prompt, deps = {}) {
       headers: { 'Content-Type': 'application/json', 'x-api-key': CLAUDE_API_KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 3000,
+        max_tokens: 4000,   // long itineraries (12+ days) need room so the prose isn't cut off
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: `Current date: ${today}\n\nTrip request: ${String(prompt).trim()}` }],
       }),

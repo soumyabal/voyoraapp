@@ -101,6 +101,18 @@ export const CITIES = {
   'bangkok': { lat: 13.7563, lng: 100.5018, tz: 'Asia/Bangkok' },
   'hong kong': { lat: 22.3193, lng: 114.1694, tz: 'Asia/Hong_Kong' },
   'mexico city': { lat: 19.4326, lng: -99.1332, tz: 'America/Mexico_City' },
+  // Hawaii (beach trips)
+  'honolulu': { lat: 21.3069, lng: -157.8583, tz: 'Pacific/Honolulu' },
+  'maui': { lat: 20.7984, lng: -156.3319, tz: 'Pacific/Honolulu' },
+  'kahului': { lat: 20.8893, lng: -156.4729, tz: 'Pacific/Honolulu' },
+  'lahaina': { lat: 20.8783, lng: -156.6825, tz: 'Pacific/Honolulu' },
+  // National-park gateway towns (Utah / nearby)
+  'moab': { lat: 38.5733, lng: -109.5498, tz: 'America/Denver' },
+  'springdale': { lat: 37.1889, lng: -113.0033, tz: 'America/Denver' },
+  // Michigan road-trip stops
+  'traverse city': { lat: 44.7631, lng: -85.6206, tz: 'America/Detroit' },
+  'mackinaw city': { lat: 45.7775, lng: -84.7271, tz: 'America/Detroit' },
+  'mackinac island': { lat: 45.8492, lng: -84.6189, tz: 'America/Detroit' },
 };
 
 /**

@@ -16,6 +16,19 @@ import { lookupPlace } from './gazetteer';
 
 const SLOT_BASE = { morning: 9 * 60, afternoon: 13 * 60, evening: 18 * 60, night: 21 * 60 };
 
+// Normalise a city tag to a SINGLE city. The AI sometimes labels a travel day with the whole
+// route ("Dallas to St. Louis", "Chicago → Mackinac Island") — keep the DESTINATION (where you
+// end up / sleep), so the city picker + nightCityFor get a real city, not a leg description.
+// Also collapses "Lahaina/West Maui" → "Lahaina". Returns null for empty input.
+export function cleanCity(raw) {
+  if (!raw) return null;
+  let c = String(raw).trim();
+  const leg = c.split(/\s*(?:→|->|—|–|\bto\b)\s*/i);
+  if (leg.length > 1 && leg[leg.length - 1].trim()) c = leg[leg.length - 1].trim();
+  c = c.split('/')[0].trim();
+  return c || null;
+}
+
 // "9:00 PM" / "9 PM" / "21:00" → minutes-of-day, or null.
 function parseClock(s) {
   const m = String(s || '').match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
@@ -47,7 +60,7 @@ export function buildTripFromParsed(store, parsed, opts = {}) {
   const days = parsed?.days || [];
   if (!days.length) return null;
 
-  const cities = (parsed.segments || []).map(s => s.city).filter(Boolean);
+  const cities = [...new Set((parsed.segments || []).map(s => cleanCity(s.city)).filter(Boolean))];
   const trip = store.createTrip({
     name: opts.name || parsed.tripName || `${cities[0] || 'Imported'} trip`,
     destination: parsed.destination || cities.join(' · ') || (cities[0] || 'Imported'),
@@ -104,7 +117,7 @@ export function buildTripFromParsed(store, parsed, opts = {}) {
       // Tag each stop with its CITY (item's own city, else the day's segment). This is what
       // lets Discover offer "St. Louis" when you book Day 1's hotel on a multi-city road trip —
       // without it, the trip only knows its headline destination.
-      const city = item.city || pd.segment || null;
+      const city = cleanCity(item.city || pd.segment);
       if (city) act.city = city;
 
       // Offline coords from the gazetteer (airport codes / major cities) — no API. Gives flights

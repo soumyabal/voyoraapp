@@ -92,7 +92,7 @@ export async function extractItineraryViaClaude(text, deps = {}) {
       },
       body: JSON.stringify({
         model: CLAUDE_MODEL,
-        max_tokens: 4000,
+        max_tokens: 8000,   // long trips (12+ days) overflow 4000 → truncated JSON → silent rules fallback
         system: SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userContent }],
       }),

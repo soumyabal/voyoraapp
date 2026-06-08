@@ -135,6 +135,18 @@ describe('Scenarios — assembler/trip-type correctness (injected Claude contrac
     expect(t.days.map(d => d.date)).toEqual(['2026-08-01', '2026-08-02']);
   });
 
+  test('route-style city tags collapse to the destination city (no "Dallas to St. Louis")', async () => {
+    // Real failure: Claude labels a drive day with the whole route. The city tag must become
+    // the place you END UP (where you sleep), so the city picker isn't polluted with legs.
+    const contract = { destination: 'Road trip', days: [
+      { date: '2026-06-30', city: 'Dallas to St. Louis', items: [{ name: 'Gateway Arch', type: 'activity' }] },
+      { date: '2026-07-01', city: 'Chicago → Mackinac Island', items: [{ name: 'Fort Mackinac', type: 'activity' }] },
+      { date: '2026-07-02', city: 'Lahaina/West Maui', items: [{ name: 'Beach', type: 'activity' }] },
+    ] };
+    const t = await buildAI(contract);
+    expect(citiesOf(t)).toEqual(['St. Louis', 'Mackinac Island', 'Lahaina']);
+  });
+
   test('options in the contract import as skipped (alternative kept visible)', async () => {
     const contract = { destination: 'LA', days: [
       { date: '2026-07-02', city: 'Los Angeles', items: [

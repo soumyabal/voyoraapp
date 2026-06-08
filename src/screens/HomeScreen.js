@@ -686,6 +686,22 @@ export default function HomeScreen({ navigation }) {
             contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + TAB_BAR_HEIGHT + 24 }]}
             showsVerticalScrollIndicator={false}
           >
+            {/* Magic Paste — the AI-planning entry point. Bring a ChatGPT/Gemini
+                itinerary; we turn it into a real, split-aware trip. Pinned at the top
+                of the list so it has its own space (and anchors the empty state). */}
+            {RELEASE_FLAGS.smartPaste && (
+              <PressableScale haptic="light" style={styles.magicBanner} onPress={() => setShowPaste(true)}>
+                <View style={styles.magicIconWrap}>
+                  <Icon name="sparkles" size={20} color={colors.smart} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.magicTitle}>Magic Paste</Text>
+                  <Text style={styles.magicSub}>Got a plan from ChatGPT or Gemini? Paste it.</Text>
+                </View>
+                <Icon name="forward" size={18} color={colors.smart} />
+              </PressableScale>
+            )}
+
             {!hasTrips ? (
               <View style={styles.onboard}>
                 {VALUE_PROPS.map(v => (
@@ -813,17 +829,7 @@ export default function HomeScreen({ navigation }) {
         </PressableScale>
       )}
 
-      {/* Paste-a-plan import — sits just above New Trip. Deterministic (no AI), flag-gated. */}
-      {activeTab === 'trips' && RELEASE_FLAGS.smartPaste && (
-        <TouchableOpacity
-          style={[styles.pasteFab, { bottom: insets.bottom + TAB_BAR_HEIGHT + 64 }]}
-          onPress={() => setShowPaste(true)}
-          activeOpacity={0.85}
-        >
-          <Icon name="sparkles" size={15} color={colors.accent} />
-          <Text style={styles.pasteFabText}>Paste a plan</Text>
-        </TouchableOpacity>
-      )}
+      {/* (Magic Paste moved to a hero banner at the top of the trips list — see above.) */}
 
       {/* DEV-ONLY: a menu of demo trips for on-device verification (never ships — __DEV__). */}
       {__DEV__ && activeTab === 'trips' && (
@@ -1006,12 +1012,19 @@ const styles = StyleSheet.create({
 
   devSeedBtn: { position: 'absolute', left: 16, backgroundColor: '#1e293b', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, opacity: 0.9 },
   devSeedText: { color: '#fff', fontWeight: '700', fontSize: 12 },
-  pasteFab: {
-    position: 'absolute', right: 16, flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: colors.accentSoft, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 11,
-    borderWidth: 1, borderColor: colors.accent,
+  // Magic Paste hero banner — top of the trips list. Uses the 'smart' (AI) accent so it
+  // reads as the AI-planning path, distinct from the terracotta primary New Trip action.
+  magicBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: colors.smartSoft, borderRadius: 16, padding: 14, marginBottom: 16,
+    borderWidth: 1, borderColor: colors.smart + '33',
   },
-  pasteFabText: { color: colors.accent, fontWeight: '800', fontSize: 14 },
+  magicIconWrap: {
+    width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  magicTitle: { color: colors.ink, fontWeight: '800', fontSize: 15 },
+  magicSub: { color: colors.subtle, fontSize: 12.5, marginTop: 1 },
   fab: {
     position: 'absolute', right: 20,
     flexDirection: 'row', alignItems: 'center', gap: 6,

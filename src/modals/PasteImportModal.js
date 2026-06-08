@@ -98,7 +98,7 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ModalHeader
-          title="Paste a plan"
+          title="✨ Magic Paste"
           closeLabel="Cancel"
           actionLabel="Build trip"
           onClose={onClose}

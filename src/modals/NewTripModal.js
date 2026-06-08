@@ -468,7 +468,8 @@ export default function NewTripModal({ visible, onClose, onCreated, onNeedAuth }
       if (!name.trim())        { showToast('Enter a trip name', '⚠️'); return; }
       if (!destination.trim()) { showToast('Enter a destination', '⚠️'); return; }
       if (!startDate || !endDate) { showToast('Set your travel dates', '⚠️'); return; }
-      if (new Date(startDate) >= new Date(endDate)) { showToast('End date must be after start', '⚠️'); return; }
+      // Allow same-day trips (start === end → a 1-day day trip). Only reject end BEFORE start.
+      if (new Date(endDate) < new Date(startDate)) { showToast('End date can’t be before the start', '⚠️'); return; }
     }
     setStep(s => s + 1);
   };

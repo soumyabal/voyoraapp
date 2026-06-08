@@ -41,6 +41,15 @@ const addDinner = (tripId, cpp = 10) =>
   S().addActivity(tripId, 0, { type: 'food', name: 'Dinner', time: '19:00', costPerPerson: cpp });
 
 describe('createTrip', () => {
+  test('a same-day trip (start === end) builds exactly one day (day-trip support)', () => {
+    const t = S().createTrip({
+      name: 'Day Trip', destination: 'X', startDate: '2026-06-12', endDate: '2026-06-12',
+      mode: 'manual', familyForms: [{ name: 'Aye', members: [{ name: 'A1', age: '30' }] }],
+    });
+    expect(t.days).toHaveLength(1);
+    expect(t.days[0].date).toBe('2026-06-12');
+  });
+
   test('builds N days from the date range, By-Group split, not yet pushed', () => {
     const t = makeTrip();
     expect(t.days).toHaveLength(3);          // Jun 12, 13, 14 inclusive

@@ -11,7 +11,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Keyboard,
+  ActivityIndicator, Keyboard,
 } from 'react-native';
 import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography } from '../theme';
@@ -19,6 +19,7 @@ import { ModalHeader } from '../components/ui';
 import { importTripFromTextAsync } from '../utils/itineraryImport';
 import { assessPasteText } from '../utils/itineraryExtract';
 import { enrichTripPhotos } from '../utils/activityPhoto';
+import { useKeyboardOffset } from '../utils/useKeyboardOffset';
 
 const SAMPLE = `Segment 1: Los Angeles (June 30 – July 3)
 June 30: Arrival & Santa Monica
@@ -58,6 +59,7 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(0);
   const [error, setError] = useState(null);   // inline reason shown when the paste can't be used
+  const kbOffset = useKeyboardOffset();        // reserve keyboard space so the sticky CTA stays visible (Android-safe)
 
   // Cycle the progress messages while busy (step is reset to 0 in build() before busy flips on).
   useEffect(() => {
@@ -105,7 +107,7 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={[s.container, { paddingBottom: kbOffset }]}>
         <ModalHeader
           title="✨ Magic Paste"
           closeLabel="Cancel"
@@ -176,7 +178,7 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
             </View>
           </View>
         )}
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }

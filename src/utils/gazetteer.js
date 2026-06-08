@@ -240,6 +240,96 @@ export const CITIES = {
   'victoria': { lat: 48.4284, lng: -123.3656, tz: 'America/Vancouver' },
   'calgary': { lat: 51.0447, lng: -114.0719, tz: 'America/Edmonton' },
   'quebec city': { lat: 46.8139, lng: -71.2080, tz: 'America/Toronto' },
+  'ottawa': { lat: 45.4215, lng: -75.6972, tz: 'America/Toronto' },
+  'halifax': { lat: 44.6488, lng: -63.5752, tz: 'America/Halifax' },
+  'edmonton': { lat: 53.5461, lng: -113.4938, tz: 'America/Edmonton' },
+  'niagara falls': { lat: 43.0896, lng: -79.0849, tz: 'America/Toronto' },
+  // More US cities (common trip + business destinations)
+  'baltimore': { lat: 39.2904, lng: -76.6122, tz: 'America/New_York' },
+  'cleveland': { lat: 41.4993, lng: -81.6944, tz: 'America/New_York' },
+  'cincinnati': { lat: 39.1031, lng: -84.5120, tz: 'America/New_York' },
+  'columbus': { lat: 39.9612, lng: -82.9988, tz: 'America/New_York' },
+  'raleigh': { lat: 35.7796, lng: -78.6382, tz: 'America/New_York' },
+  'jacksonville': { lat: 30.3322, lng: -81.6557, tz: 'America/New_York' },
+  'albuquerque': { lat: 35.0844, lng: -106.6504, tz: 'America/Denver' },
+  'boise': { lat: 43.6150, lng: -116.2023, tz: 'America/Boise' },
+  // US national-park gateway towns
+  'bar harbor': { lat: 44.3876, lng: -68.2039, tz: 'America/New_York' },          // Acadia
+  'estes park': { lat: 40.3772, lng: -105.5217, tz: 'America/Denver' },           // Rocky Mountain
+  'gatlinburg': { lat: 35.7143, lng: -83.5102, tz: 'America/New_York' },          // Great Smoky Mtns
+  'flagstaff': { lat: 35.1983, lng: -111.6513, tz: 'America/Phoenix' },           // Grand Canyon gateway
+  // US beach / coastal
+  'myrtle beach': { lat: 33.6891, lng: -78.8867, tz: 'America/New_York' },
+  'st. augustine': { lat: 29.9012, lng: -81.3124, tz: 'America/New_York' },
+  'sarasota': { lat: 27.3364, lng: -82.5307, tz: 'America/New_York' },
+  'destin': { lat: 30.3935, lng: -86.4958, tz: 'America/Chicago' },               // FL panhandle = Central
+  'carmel': { lat: 36.5552, lng: -121.9233, tz: 'America/Los_Angeles' },
+  // More Europe
+  'lyon': { lat: 45.7640, lng: 4.8357, tz: 'Europe/Paris' },
+  'marseille': { lat: 43.2965, lng: 5.3698, tz: 'Europe/Paris' },
+  'bordeaux': { lat: 44.8378, lng: -0.5792, tz: 'Europe/Paris' },
+  'hamburg': { lat: 53.5511, lng: 9.9937, tz: 'Europe/Berlin' },
+  'cologne': { lat: 50.9375, lng: 6.9603, tz: 'Europe/Berlin' },
+  'valencia': { lat: 39.4699, lng: -0.3763, tz: 'Europe/Madrid' },
+  'malaga': { lat: 36.7213, lng: -4.4214, tz: 'Europe/Madrid' },
+  'salzburg': { lat: 47.8095, lng: 13.0550, tz: 'Europe/Vienna' },
+  'interlaken': { lat: 46.6863, lng: 7.8632, tz: 'Europe/Zurich' },
+  'lucerne': { lat: 47.0502, lng: 8.3093, tz: 'Europe/Zurich' },
+  'bruges': { lat: 51.2093, lng: 3.2247, tz: 'Europe/Brussels' },
+  'helsinki': { lat: 60.1699, lng: 24.9384, tz: 'Europe/Helsinki' },
+  'tallinn': { lat: 59.4370, lng: 24.7536, tz: 'Europe/Tallinn' },
+  'warsaw': { lat: 52.2297, lng: 21.0122, tz: 'Europe/Warsaw' },
+  'santorini': { lat: 36.3932, lng: 25.4615, tz: 'Europe/Athens' },
+  'mykonos': { lat: 37.4467, lng: 25.3289, tz: 'Europe/Athens' },
+  'dubrovnik': { lat: 42.6507, lng: 18.0944, tz: 'Europe/Zagreb' },
+  'split': { lat: 43.5081, lng: 16.4402, tz: 'Europe/Zagreb' },
+  'amalfi': { lat: 40.6340, lng: 14.6027, tz: 'Europe/Rome' },
+  'pisa': { lat: 43.7228, lng: 10.4017, tz: 'Europe/Rome' },
+  'bologna': { lat: 44.4949, lng: 11.3426, tz: 'Europe/Rome' },
+  // More Asia
+  'hanoi': { lat: 21.0278, lng: 105.8342, tz: 'Asia/Bangkok' },   // +7, no DST — tz-lookup polygon groups N. Vietnam under Bangkok (offset identical)
+  'ho chi minh city': { lat: 10.8231, lng: 106.6297, tz: 'Asia/Ho_Chi_Minh' },
+  'da nang': { lat: 16.0544, lng: 108.2022, tz: 'Asia/Ho_Chi_Minh' },
+  'siem reap': { lat: 13.3671, lng: 103.8448, tz: 'Asia/Phnom_Penh' },
+  'nara': { lat: 34.6851, lng: 135.8048, tz: 'Asia/Tokyo' },
+  'hiroshima': { lat: 34.3853, lng: 132.4553, tz: 'Asia/Tokyo' },
+  'sapporo': { lat: 43.0618, lng: 141.3545, tz: 'Asia/Tokyo' },
+  'busan': { lat: 35.1796, lng: 129.0756, tz: 'Asia/Seoul' },
+  'agra': { lat: 27.1767, lng: 78.0081, tz: 'Asia/Kolkata' },
+  'kathmandu': { lat: 27.7172, lng: 85.3240, tz: 'Asia/Kathmandu' },
+  'colombo': { lat: 6.9271, lng: 79.8612, tz: 'Asia/Colombo' },
+  'manila': { lat: 14.5995, lng: 120.9842, tz: 'Asia/Manila' },
+  'jakarta': { lat: -6.2088, lng: 106.8456, tz: 'Asia/Jakarta' },
+  // More Middle East / Africa
+  'amman': { lat: 31.9544, lng: 35.9106, tz: 'Asia/Amman' },
+  // (Petra omitted: the offline tz polygon can't separate Wadi Musa from Asia/Jerusalem,
+  //  and Jordan vs Israel can differ on DST — so a validated zone isn't possible. Amman covers Jordan.)
+  'jerusalem': { lat: 31.7683, lng: 35.2137, tz: 'Asia/Jerusalem' },
+  'muscat': { lat: 23.5880, lng: 58.3829, tz: 'Asia/Muscat' },
+  'nairobi': { lat: -1.2921, lng: 36.8219, tz: 'Africa/Nairobi' },
+  'johannesburg': { lat: -26.2041, lng: 28.0473, tz: 'Africa/Johannesburg' },
+  'fez': { lat: 34.0181, lng: -5.0078, tz: 'Africa/Casablanca' },
+  // More Oceania
+  'brisbane': { lat: -27.4698, lng: 153.0251, tz: 'Australia/Brisbane' },
+  'cairns': { lat: -16.9186, lng: 145.7781, tz: 'Australia/Brisbane' },
+  'gold coast': { lat: -28.0167, lng: 153.4000, tz: 'Australia/Brisbane' },
+  'perth': { lat: -31.9505, lng: 115.8605, tz: 'Australia/Perth' },
+  'queenstown': { lat: -45.0312, lng: 168.6626, tz: 'Pacific/Auckland' },
+  'wellington': { lat: -41.2865, lng: 174.7762, tz: 'Pacific/Auckland' },
+  // More Americas (beach + city)
+  'tulum': { lat: 20.2114, lng: -87.4654, tz: 'America/Cancun' },
+  'playa del carmen': { lat: 20.6296, lng: -87.0739, tz: 'America/Cancun' },
+  'cabo san lucas': { lat: 22.8905, lng: -109.9167, tz: 'America/Mazatlan' },
+  'puerto vallarta': { lat: 20.6534, lng: -105.2253, tz: 'America/Mexico_City' },   // PV city is in Jalisco (Central); Bahía de Banderas/Nayarit is the airport strip
+  'guadalajara': { lat: 20.6597, lng: -103.3496, tz: 'America/Mexico_City' },
+  'cartagena': { lat: 10.3910, lng: -75.4794, tz: 'America/Bogota' },
+  'medellin': { lat: 6.2476, lng: -75.5658, tz: 'America/Bogota' },
+  'quito': { lat: -0.1807, lng: -78.4678, tz: 'America/Guayaquil' },
+  'panama city': { lat: 8.9824, lng: -79.5199, tz: 'America/Panama' },
+  'havana': { lat: 23.1136, lng: -82.3666, tz: 'America/Havana' },
+  'nassau': { lat: 25.0443, lng: -77.3504, tz: 'America/Nassau' },
+  'punta cana': { lat: 18.5601, lng: -68.3725, tz: 'America/Puerto_Rico' },   // -4, no DST — polygon groups the DR with Puerto_Rico (offset identical)
+  'montego bay': { lat: 18.4762, lng: -77.8939, tz: 'America/Jamaica' },
 };
 
 /**

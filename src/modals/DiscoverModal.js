@@ -99,7 +99,7 @@ function getFilterBias(af) {
 // is one place). Returns [dest] when there's only one stop.
 function parseLocations(dest) {
   if (!dest) return [];
-  const parts = dest.split(/\s*(?:&|\/|\+|→|\band\b|\bto\b)\s*/i)
+  const parts = dest.split(/\s*(?:&|\/|\+|→|·|\band\b|\bto\b)\s*/i)
     .map(s => s.trim()).filter(Boolean);
   return parts.length > 1 ? parts : [dest];
 }
@@ -498,7 +498,7 @@ function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearc
   );
 }
 
-export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime, defaultSlot, nearby, onAddManual }) {
+export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime, defaultSlot, nearby, initialCity, onAddManual }) {
   const insets = useSafeAreaInsets();
   const { addActivity, deleteActivity, markPlaceSeen, clearSeenPlaces } = useStore();
   // Read the LIVE trip from the store so "added" (grey + ✓) and "seen" (grey)
@@ -585,13 +585,28 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
 
   useEffect(() => {
     if (!visible) return;
+    // Cities the trip actually visits = the destination string PLUS every city tagged on a
+    // stop (so a pasted multi-city road trip whose destination is just "Mackinac Island" still
+    // lets you pick St. Louis / Chicago / …). De-duped by short city name.
     const parsed = parseLocations(destination);
-    const start  = parsed[0] || destination;
+    const actCities = (trip?.days || []).flatMap(d => (d.activities || []).map(a => a.city).filter(Boolean));
+    const seen = new Set();
+    const merged = [];
+    for (const c of [...parsed, ...actCities]) {
+      const k = cityLabel(c).toLowerCase();
+      if (k && !seen.has(k)) { seen.add(k); merged.push(c); }
+    }
+    let list = merged.length ? merged : (destination ? [destination] : []);
+    // Honor a requested opening city (e.g. booking Day-1's stay → St. Louis); add it if missing.
+    if (initialCity && !list.some(c => cityLabel(c).toLowerCase() === cityLabel(initialCity).toLowerCase())) {
+      list = [initialCity, ...list];
+    }
+    const start = initialCity || list[0] || destination;
     setSearchText('');
     setLayers({ see: true, eat: true, stay: true });
     setLayerData({ see: [], eat: [], stay: [] }); setTextResults([]);
     setSelectedName(null); setFocusTarget(null); setMapMoved(false);
-    setCities(parsed.length ? parsed : (destination ? [destination] : []));
+    setCities(list);
     setActiveCity(start);
     setCityPickerOpen(false); setNewCity('');
     // Start UNFILTERED — Discover shows every place sorted by quality. The dietary

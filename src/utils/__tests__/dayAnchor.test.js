@@ -3,7 +3,7 @@
  * Day 1 starts at the origin; later days start at the previous night's hotel; the
  * route anchor degrades to the day's first located stop when a night is unbooked.
  */
-import { dayStartAnchor, dayEndAnchor, dayRouteAnchor, lodgingSearchAnchor } from '../tripValidator';
+import { dayStartAnchor, dayEndAnchor, dayRouteAnchor, nightCityFor } from '../tripValidator';
 
 const stay = (nights, lat, lng) => ({ id: 'h', type: 'stay', name: 'Hotel', time: '15:00', nights, lat, lng });
 const act = (lat, lng) => ({ id: 'a', type: 'activity', name: 'Stop', time: '10:00', lat, lng });
@@ -39,33 +39,33 @@ describe('per-day routing anchors', () => {
   });
 });
 
-describe('lodgingSearchAnchor — book the night where you END UP, not the trip destination', () => {
-  const named = (name, type, lat, lng, city) => ({ id: name, name, type, time: '12:00', lat, lng, city });
+describe('nightCityFor — the city you sleep in that night, not the trip destination', () => {
+  const named = (name, type, city) => ({ id: name, name, type, time: '12:00', city });
 
-  test('Day 1 of a road trip anchors to that day’s located stop (St. Louis), not the final city', () => {
+  test('Day 1 of a road trip resolves to that day’s city (St. Louis), not the final city', () => {
     const t = tripWith([
-      [named('Drive to St. Louis', 'transport', 38.6, -90.2), named('Gateway Arch', 'activity', 38.62, -90.18, 'St. Louis')],
-      [named('Fort Mackinac', 'activity', 45.85, -84.61, 'Mackinac Island')],
+      [named('Drive to St. Louis', 'transport', 'St. Louis'), named('Gateway Arch', 'activity', 'St. Louis')],
+      [named('Fort Mackinac', 'activity', 'Mackinac Island')],
     ]);
-    // Even though the trip "ends" at Mackinac, Day 0's hotel search opens at St. Louis.
-    expect(lodgingSearchAnchor(t, 0)).toMatchObject({ lat: 38.62, lng: -90.18, label: 'St. Louis' });
+    expect(nightCityFor(t, 0)).toBe('St. Louis');
+    expect(nightCityFor(t, 1)).toBe('Mackinac Island');
   });
 
-  test('prefers the last NON-transport stop (where you settle) over a drive pin', () => {
+  test('prefers the last NON-transport stop (where you settle) over a later drive leg', () => {
     const t = tripWith([[
-      named('Gateway Arch', 'activity', 38.62, -90.18, 'St. Louis'),
-      named('Drive to Chicago', 'transport', 41.88, -87.63),   // a later transport leg
+      named('Gateway Arch', 'activity', 'St. Louis'),
+      named('Drive toward Chicago', 'transport', 'Chicago'),   // a leg that starts the NEXT day's city
     ]]);
-    expect(lodgingSearchAnchor(t, 0)).toMatchObject({ lat: 38.62, lng: -90.18 });
+    expect(nightCityFor(t, 0)).toBe('St. Louis');
   });
 
-  test('a pure drive day falls back to its destination pin', () => {
-    const t = tripWith([[named('Drive to Memphis', 'transport', 35.15, -90.05)]]);
-    expect(lodgingSearchAnchor(t, 0)).toMatchObject({ lat: 35.15, lng: -90.05 });
+  test('a pure drive day falls back to its destination city tag', () => {
+    const t = tripWith([[named('Drive to Memphis', 'transport', 'Memphis')]]);
+    expect(nightCityFor(t, 0)).toBe('Memphis');
   });
 
-  test('no located stops → null (caller falls back to the destination city)', () => {
+  test('no city tags → null (caller falls back to the destination)', () => {
     const t = tripWith([[{ id: 'x', name: 'Rest', type: 'activity', time: '12:00' }]]);
-    expect(lodgingSearchAnchor(t, 0)).toBeNull();
+    expect(nightCityFor(t, 0)).toBeNull();
   });
 });

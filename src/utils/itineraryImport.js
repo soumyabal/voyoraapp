@@ -101,6 +101,11 @@ export function buildTripFromParsed(store, parsed, opts = {}) {
       };
       if (item.sub) act.subtype = item.sub;
       if (item.type === 'stay') act.nights = 1;
+      // Tag each stop with its CITY (item's own city, else the day's segment). This is what
+      // lets Discover offer "St. Louis" when you book Day 1's hotel on a multi-city road trip —
+      // without it, the trip only knows its headline destination.
+      const city = item.city || pd.segment || null;
+      if (city) act.city = city;
 
       // Offline coords from the gazetteer (airport codes / major cities) — no API. Gives flights
       // + city stops real lat/lng so the timezone features light up; specific POIs still need

@@ -144,4 +144,11 @@ describe('AI path — a Claude contract assembles into a clean trip', () => {
     expect(ferry.type).toBe('transport');
     expect(t.days[0].activities.find(a => /Dinner/.test(a.name)).type).toBe('food');
   });
+
+  test('tags each stop with its day city (so Discover can offer per-night cities)', async () => {
+    const res = await importTripFromTextAsync(useStore.getState(), 'raw', { extract: async () => CONTRACT });
+    const t = useStore.getState().trips.find(x => x.id === res.trip.id);
+    expect(t.days[0].activities.every(a => a.city === 'St. Louis')).toBe(true);
+    expect(t.days[2].activities.find(a => /Ferry/.test(a.name)).city).toBe('Mackinaw City');
+  });
 });

@@ -16,7 +16,7 @@ import Snackbar from '../components/ui/Snackbar';
 import ConfettiBurst from '../components/ui/ConfettiBurst';
 import { fmt, fmtM, uid, checkOutOf, resolveDayZones, pastActivityIds, isDayInPast, planFloorMin, crossZoneLeg } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost } from '../utils/costs';
-import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor, lodgingSearchAnchor } from '../utils/tripValidator';
+import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor, nightCityFor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
 import { planDay, returnJourneyDraft, suggestDayForVenue } from '../utils/autoArrange';
 import { travelLeg, formatMi } from '../utils/geo';
@@ -380,6 +380,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const [showDiscover,          setShowDiscover]          = useState(false);
   const [nightPlanDay,          setNightPlanDay]          = useState(null);  // dayIndex whose "how's tonight handled?" sheet is open
   const [discoverNear,          setDiscoverNear]          = useState(null);  // {lat,lng,label} when opened from an activity
+  const [discoverCity,          setDiscoverCity]          = useState(null);  // city to open Discover in (e.g. booking a night's stay)
   const [discoverSlot,          setDiscoverSlot]          = useState(null);  // slot key when Discover opened from a per-slot "+ Add"
   const [showOrigin,            setShowOrigin]            = useState(false); // SetOriginModal (Day-1 starting point)
   const [movingAct,             setMovingAct]             = useState(null);
@@ -554,11 +555,12 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     setNightPlan(trip.id, idx, { type: cur.type, label, ...(coords ? { lat: coords.lat, lng: coords.lng } : {}) });
   };
   const addHotelFromNightPlan = () => {
-    // Bias Discover to where you END UP that night (St. Louis on Day 1), not the trip's
-    // headline city (Mackinac) — so booking a multi-state road trip's nights opens the right place.
+    // Open Discover in the CITY you sleep in that night (St. Louis on Day 1), not the trip's
+    // headline city (Mackinac) — so booking a multi-state road trip's nights starts in the right place.
     const idx = nightPlanDay;
     setNightPlanDay(null);
-    setDiscoverNear(idx != null ? lodgingSearchAnchor(trip, idx) : null);
+    setDiscoverNear(null);
+    setDiscoverCity(idx != null ? nightCityFor(trip, idx) : null);
     setDiscoverSlot(null);
     setShowDiscover(true);
   };
@@ -1568,16 +1570,17 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
 
       <DiscoverModal
         visible={showDiscover}
-        onClose={() => { setShowDiscover(false); setDiscoverNear(null); setDiscoverSlot(null); }}
+        onClose={() => { setShowDiscover(false); setDiscoverNear(null); setDiscoverCity(null); setDiscoverSlot(null); }}
         trip={trip}
         dayIndex={currentDay}
         defaultTime={defaultSlotTime}
         defaultSlot={discoverSlot}
         nearby={discoverNear}
+        initialCity={discoverCity}
         onAddManual={(arg) => {
           // arg is a search string (the "add manually" bridge) OR a {lat,lng}
           // object (a pin dropped on the map → seed Stay with that location).
-          setShowDiscover(false); setDiscoverNear(null); setDiscoverSlot(null);
+          setShowDiscover(false); setDiscoverNear(null); setDiscoverCity(null); setDiscoverSlot(null);
           const seed = (arg && typeof arg === 'object')
             ? { lat: arg.lat, lng: arg.lng, address: arg.address || '', tile: 'stay' }
             : { name: arg || '' };

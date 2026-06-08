@@ -1,9 +1,23 @@
 # Smart Paste — "paste an itinerary, get a trip" (design + honest assessment)
 
-> Status: **ACTIVE — AI-wired, KEY-READY (2026-06-07).** Owner's call: building from an AI paste is
-> the wedge to sell the inner network, so AI does the text-understanding. `RELEASE_FLAGS.smartPaste`
-> is **on** again. Pipeline now: **AI extract (Claude) → deterministic normalize → assemble**, with
-> the rules parser as the no-key fallback so paste ALWAYS works.
+> Status: **✅ LIVE & DEVICE-VERIFIED end-to-end (2026-06-08).** Owner set `CLAUDE_API_KEY` and
+> confirmed the full loop on device: paste a Gemini/ChatGPT itinerary → correct multi-day trip
+> ("✨ AI" toast, right dates/stops/types) → photos fill in → book each night's hotel in the right
+> city. The wedge feature is shipped and demo-ready for the inner network. What's verified:
+> - **AI build** — `extractItineraryViaClaude` (Haiku) extracts the real trip; rules parser is the
+>   no-key fallback so paste ALWAYS works. Claude is given today's date (resolves bare "June 30").
+> - **Robustness** — calendar dates in combined "June 30: Day 1" headers; fully-collapsed Gemini
+>   blobs (no newlines/spaces) re-segment; the build can't hang (25s timeout) or fail silently.
+> - **Loading UX** — `PasteImportModal` shows a rotating progress overlay; keyboard dismisses on build.
+> - **Photos** — `activityPhoto.js` enriches once, FREE-FIRST (Wikipedia → Google fallback, capped),
+>   behind a PERSISTENT cache (`photoCache.js`, AsyncStorage) so re-pastes never re-bill.
+> - **Per-night lodging** — each stop carries `act.city`; Discover learns every visited city and
+>   `nightCityFor` opens "Add a hotel" in that night's city, filtered to hotels (`focusStay`).
+>
+> Earlier status (history): **ACTIVE — AI-wired, KEY-READY (2026-06-07).** Building from an AI paste
+> is the wedge to sell the inner network, so AI does the text-understanding. `RELEASE_FLAGS.smartPaste`
+> is **on**. Pipeline: **AI extract (Claude) → deterministic normalize → assemble**, with the rules
+> parser as the no-key fallback so paste ALWAYS works.
 > - `aiExtract.extractItineraryViaClaude` — the LLM call (Haiku, strict JSON-only prompt, robust
 >   parse); reads `config.CLAUDE_API_KEY` (owner-provided) → null without one.
 > - `itineraryImport.importTripFromTextAsync` — runs the seam (AI when keyed, else rules) → assembler.

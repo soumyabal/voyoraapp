@@ -17,6 +17,7 @@ import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography } from '../theme';
 import { ModalHeader } from '../components/ui';
 import { importTripFromTextAsync } from '../utils/itineraryImport';
+import { enrichTripPhotos } from '../utils/activityPhoto';
 
 const SAMPLE = `Segment 1: Los Angeles (June 30 – July 3)
 June 30: Arrival & Santa Monica
@@ -80,6 +81,9 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
       const how = result.source === 'ai' ? '✨ AI' : 'auto';
       showToast(`${how}: drafted ${imported} stops across ${days} day${days !== 1 ? 's' : ''} — review & tweak`, '✨');
       setText('');
+      // Fill in photos in the background (free Wikipedia first, Google fallback) — non-blocking,
+      // so the trip opens instantly and images pop in as they resolve. Errors are swallowed.
+      enrichTripPhotos(useStore.getState(), result.trip.id).catch(() => {});
       onCreated?.(result.trip);
     } catch (err) {
       // Never leave the user staring at a dead button — surface the failure.

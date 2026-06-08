@@ -1,0 +1,97 @@
+/**
+ * activityPhoto.test.js — free-first photo enrichment. Network sources are injected (no real
+ * Wikipedia/Google calls), so we verify the free-first preference, the generic-name skip,
+ * the Google cost cap, and that URLs are written via the store action.
+ */
+import { isPhotoWorthy, resolveActivityPhoto, enrichTripPhotos } from '../activityPhoto';
+
+const wikiHit = (name) => ({ imageUrl: `https://wiki/${encodeURIComponent(name)}.jpg`, title: name });
+const wikiMiss = async () => null;
+
+describe('isPhotoWorthy', () => {
+  test('real attractions/meals qualify', () => {
+    expect(isPhotoWorthy({ type: 'activity', name: 'Gateway Arch' })).toBe(true);
+    expect(isPhotoWorthy({ type: 'food', name: "Lou Malnati's" })).toBe(true);
+  });
+  test('generic / logistics / already-has-photo are skipped', () => {
+    expect(isPhotoWorthy({ type: 'transport', name: 'Drive to St. Louis' })).toBe(false);
+    expect(isPhotoWorthy({ type: 'stay', name: 'Hotel check-in' })).toBe(false);
+    expect(isPhotoWorthy({ type: 'activity', name: 'Free time' })).toBe(false);
+    expect(isPhotoWorthy({ type: 'food', name: 'Dinner' })).toBe(false);
+    expect(isPhotoWorthy({ type: 'note', name: 'Pack light' })).toBe(false);
+    expect(isPhotoWorthy({ type: 'activity', name: 'Fort Mackinac', photo: 'x' })).toBe(false);
+    expect(isPhotoWorthy({ type: 'activity', name: '', status: 'skipped' })).toBe(false);
+  });
+});
+
+describe('resolveActivityPhoto — free first', () => {
+  test('uses Wikipedia when it hits (no Google call)', async () => {
+    const fetchGoogle = jest.fn();
+    const out = await resolveActivityPhoto(
+      { name: 'Gateway Arch', lat: 38.6, lng: -90.2 },
+      { fetchWiki: async (n) => wikiHit(n), fetchGoogle },
+    );
+    expect(out).toEqual({ url: 'https://wiki/Gateway%20Arch.jpg', source: 'wikipedia' });
+    expect(fetchGoogle).not.toHaveBeenCalled();
+  });
+
+  test('falls back to Google when Wikipedia misses', async () => {
+    const out = await resolveActivityPhoto(
+      { name: "Lou Malnati's", lat: 41.9, lng: -87.6 },
+      { fetchWiki: wikiMiss, fetchGoogle: async () => 'https://g/photo.jpg' },
+    );
+    expect(out).toEqual({ url: 'https://g/photo.jpg', source: 'google' });
+  });
+
+  test('no Google fallback without coords or when disallowed', async () => {
+    const fetchGoogle = jest.fn(async () => 'g');
+    expect(await resolveActivityPhoto({ name: 'Somewhere' }, { fetchWiki: wikiMiss, fetchGoogle })).toBeNull();
+    expect(await resolveActivityPhoto({ name: 'X', lat: 1, lng: 2 }, { fetchWiki: wikiMiss, fetchGoogle, allowGoogle: false })).toBeNull();
+    expect(fetchGoogle).not.toHaveBeenCalled();
+  });
+
+  test('never throws if a source errors', async () => {
+    const out = await resolveActivityPhoto(
+      { name: 'Boom', lat: 1, lng: 2 },
+      { fetchWiki: async () => { throw new Error('net'); }, fetchGoogle: async () => { throw new Error('net'); } },
+    );
+    expect(out).toBeNull();
+  });
+});
+
+describe('enrichTripPhotos — writes via the store, caps Google', () => {
+  const makeStore = (trip) => {
+    const store = { trips: [trip] };
+    store.updateActivity = (tid, aid, updates) => {
+      for (const d of store.trips.find(t => t.id === tid).days) {
+        d.activities = d.activities.map(a => (a.id === aid ? { ...a, ...updates } : a));
+      }
+    };
+    return store;
+  };
+  const A = (id, name, type, lat, lng) => ({ id, name, type, lat, lng });
+
+  test('Wikipedia fills every worthy stop, skips generic, leaves photos on activities', async () => {
+    const trip = { id: 't1', days: [
+      { activities: [A('a1', 'Gateway Arch', 'activity', 38.6, -90.2), A('t1', 'Drive to Chicago', 'transport', 41.9, -87.6)] },
+      { activities: [A('a2', 'Fort Mackinac', 'activity', 45.8, -84.6)] },
+    ] };
+    const store = makeStore(trip);
+    const res = await enrichTripPhotos(store, 't1', { fetchWiki: async (n) => wikiHit(n), fetchGoogle: jest.fn() });
+    expect(res.enriched).toBe(2);          // both activities, not the transport
+    expect(res.googleUsed).toBe(0);
+    const photos = store.trips[0].days.flatMap(d => d.activities).map(a => a.photo);
+    expect(photos.filter(Boolean)).toHaveLength(2);
+  });
+
+  test('Google fallback is capped per trip', async () => {
+    const acts = Array.from({ length: 5 }, (_, i) => A(`a${i}`, `Place ${i}`, 'activity', 1, 2));
+    const trip = { id: 't2', days: [{ activities: acts }] };
+    const store = makeStore(trip);
+    const fetchGoogle = jest.fn(async () => 'https://g/x.jpg');
+    const res = await enrichTripPhotos(store, 't2', { fetchWiki: wikiMiss, fetchGoogle, googleCap: 2 });
+    expect(res.googleUsed).toBe(2);
+    expect(fetchGoogle).toHaveBeenCalledTimes(2);   // capped — not all 5
+    expect(res.enriched).toBe(2);
+  });
+});

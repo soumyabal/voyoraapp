@@ -23,6 +23,18 @@ describe('normalizeExtraction — repair/validate LLM JSON → assembler shape',
     expect(n.days[1].items[0].time).toBe('09:30');   // padded
   });
 
+  test('preserves stated 12-hour times (9 AM / 9:30 PM) and 24h, drops non-times', () => {
+    const n = normalizeExtraction({ days: [{ dayNumber: 1, items: [
+      { name: 'Breakfast', type: 'food', time: '9 AM' },
+      { name: 'Sunset cruise', type: 'activity', time: '6:45 pm' },
+      { name: 'Late show', type: 'activity', time: '21:00' },
+      { name: 'Midnight snack', type: 'food', time: '12 AM' },
+      { name: 'Vague stop', type: 'activity', time: 'sometime' },
+    ] }] });
+    const times = n.days[0].items.map(i => i.time);
+    expect(times).toEqual(['09:00', '18:45', '21:00', '00:00', null]);
+  });
+
   test('keeps a real calendar date when present', () => {
     const n = normalizeExtraction({ days: [{ date: '2026-07-04', items: [{ name: 'Fireworks', type: 'activity' }] }] });
     expect(n.days[0].date).toBe('2026-07-04');

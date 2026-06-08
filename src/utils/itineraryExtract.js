@@ -94,11 +94,19 @@ function addDaysISO(iso, n) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 const isISODate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+// Accept 24h ("21:00", "9:30") AND 12h ("9 AM", "9:30 PM") — the model is asked for HH:MM but
+// often returns am/pm despite that; without this those stated times were dropped and the stop fell
+// back to a slot guess. Returns "HH:MM" 24h, or null when it isn't a time.
 const padTime = (t) => {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || ''));
+  const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i.exec(String(t || '').trim());
   if (!m) return null;
-  const h = Math.min(23, parseInt(m[1], 10));
-  return `${String(h).padStart(2, '0')}:${m[2]}`;
+  let h = parseInt(m[1], 10);
+  const min = m[2] ? parseInt(m[2], 10) : 0;
+  const ap = m[3] ? m[3].toLowerCase() : null;
+  if (ap === 'pm' && h < 12) h += 12;
+  if (ap === 'am' && h === 12) h = 0;
+  if (h > 23 || min > 59) return null;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
 };
 const str = (v, max = 200) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 

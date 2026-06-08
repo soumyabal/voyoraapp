@@ -314,6 +314,24 @@ exports[`validateTrip — golden snapshots (characterization) longJourney: full 
 ]
 `;
 
+exports[`validateTrip — golden snapshots (characterization) mealGap: full warnings array is stable 1`] = `
+[
+  {
+    "actIds": [
+      "bf",
+      "din",
+    ],
+    "dayIndex": 0,
+    "hint": "Add a lunch or snack stop so nobody runs low mid-day.",
+    "icon": "🍽️",
+    "message": "About 10h between "Breakfast" and "Dinner" with no food stop.",
+    "severity": "info",
+    "title": "Long stretch without a meal",
+    "type": "meal_gap",
+  },
+]
+`;
+
 exports[`validateTrip — golden snapshots (characterization) multiCity: full warnings array is stable 1`] = `
 [
   {
@@ -673,6 +691,11 @@ exports[`validateTrip — invariants that must survive any refactor summary coun
     "errors": 1,
     "infos": 1,
     "warnings": 1,
+  },
+  "mealGap": {
+    "errors": 0,
+    "infos": 1,
+    "warnings": 0,
   },
   "multiCity": {
     "errors": 0,

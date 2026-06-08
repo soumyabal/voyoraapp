@@ -64,6 +64,7 @@ a one-tap fix). Rules run per-day, then trip-wide.
 | 2 | `full_day_conflict` | error | A ≥6 h "full-day" venue (theme park, etc.) sharing the day with ≥2 other substantial activities |
 | 3 | `packed` | warning | ≥8 substantial activities in one day |
 | 4 | `no_meal` | info | A ≥4 h day with ≥3 activities and no food stop |
+| 4b | `meal_gap` | info | Day HAS meals but two of them bracket a ≥6 h gap with touring in between and no food (the "missing lunch") — complements `no_meal` |
 | 5 | `past_midnight` | info | Last activity's estimated end crosses midnight |
 | 6 | `early_start` | info | Non-transport activity before 6 AM |
 | 8 | `multi_day_journey` | info | Transport whose `arriveTime` is earlier than departure → crosses midnight |

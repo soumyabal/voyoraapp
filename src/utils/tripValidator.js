@@ -646,6 +646,43 @@ function ruleTimelineEdges(ctx) {
   return warnings;
 }
 
+// ── Rule 6b: Long stretch with no meal (the "missing lunch") ──
+// `no_meal` (above) catches a day with ZERO food stops. This catches the subtler,
+// more common case: the day HAS meals (so no_meal stays silent) but they bracket a
+// long touring gap with no food — e.g. breakfast then dinner with a packed afternoon
+// in between and no lunch. Soft 'info' tip. Requires real touring sitting in the hole,
+// so an intentional long break / siesta isn't nagged. scheduleDay already inserts
+// lunch at 12:30, so an ARRANGED day never trips this — it's for hand-built days.
+function ruleMealGap(ctx) {
+  const { timeline, dayIndex } = ctx;
+  const warnings = [];
+  const meals = timeline.filter(t => t.act.type === 'food'); // timeline is already time-sorted
+  if (meals.length < 2) return warnings;
+  for (let i = 0; i < meals.length - 1; i++) {
+    const gapStart = meals[i].endMin;
+    const gapEnd   = meals[i + 1].startMin;
+    const gapMin   = gapEnd - gapStart;
+    if (gapMin < 6 * 60) continue;
+    // Only flag if real touring fills the hole — otherwise it's a deliberate rest gap.
+    const touringInGap = timeline.some(t =>
+      t.act.type === 'activity' && t.act.status !== 'skipped' &&
+      t.startMin < gapEnd && t.endMin > gapStart);
+    if (!touringInGap) continue;
+    warnings.push({
+      type:     'meal_gap',
+      severity: 'info',
+      icon:     '🍽️',
+      title:    'Long stretch without a meal',
+      message:  `About ${formatDuration(gapMin)} between "${meals[i].act.name}" and "${meals[i + 1].act.name}" with no food stop.`,
+      hint:     'Add a lunch or snack stop so nobody runs low mid-day.',
+      dayIndex,
+      actIds:   [meals[i].act.id, meals[i + 1].act.id],
+    });
+    break; // one calm tip per day — a second 6h+ gap would be an ~18h day
+  }
+  return warnings;
+}
+
 // ── Rule 8: Multi-day journey (arriveTime crosses midnight) ──────
 // When a transport activity has arriveTime set and it is earlier in
 // the clock than departTime, the journey crosses midnight and the
@@ -926,6 +963,7 @@ const DAY_RULES = [
   rulePacked,
   ruleTiringDay,
   ruleTimelineEdges,
+  ruleMealGap,
   ruleMultiDayJourney,
   ruleWakeTime,
   ruleDietary,

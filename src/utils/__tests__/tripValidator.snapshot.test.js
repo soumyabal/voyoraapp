@@ -118,6 +118,15 @@ const FIXTURES = {
       A('m3', 'activity', '15:00', { durationMins: 90 }),
     ]),
   ]),
+  // Breakfast + dinner bracketing a long touring afternoon, no lunch → meal_gap=info.
+  // (no_meal stays silent because the day HAS food.)
+  mealGap: tripOf([
+    day('Day 1', FRI, [
+      A('bf',  'food',     '08:00', { name: 'Breakfast', durationMins: 60 }),   // ends 09:00
+      A('tour','activity', '10:00', { name: 'All-day fort tour', durationMins: 300 }),
+      A('din', 'food',     '19:00', { name: 'Dinner', durationMins: 90 }),
+    ]),
+  ]),
   // Before-6am start + after-midnight end → early_start + past_midnight.
   edgeHours: tripOf([
     day('Day 1', FRI, [
@@ -256,6 +265,11 @@ describe('validateTrip — invariants that must survive any refactor', () => {
     expect(one('packedDay', 'packed').severity).toBe('info');
     expect(one('tiringLong', 'tiring_day').severity).toBe('info');
     expect(one('noMeal', 'no_meal').severity).toBe('info');
+    expect(one('mealGap', 'meal_gap').severity).toBe('info');
+    // meal_gap is the COMPLEMENT of no_meal: a day with meals never fires no_meal,
+    // and a day with a <6h meal gap (the dietary fixture: 5.5h) never fires meal_gap.
+    expect(has('mealGap', 'no_meal')).toHaveLength(0);
+    expect(has('dietary', 'meal_gap')).toHaveLength(0);
     expect(one('edgeHours', 'early_start').severity).toBe('info');
     expect(one('edgeHours', 'past_midnight').severity).toBe('info');
     expect(one('duplicate', 'duplicate_activity').severity).toBe('warning');

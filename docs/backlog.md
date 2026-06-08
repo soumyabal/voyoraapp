@@ -36,8 +36,8 @@
       (Phase 2 backend proxy — see docs/phase-2-backend.md); a capped bundle key is not acceptable
       for a public listing. Privacy docs already disclose the Anthropic call (privacy-policy.md §3/§4).
 - [ ] **Apple Developer enrollment** ($99/yr) — gates both the EAS device build and TestFlight.
-- [ ] **Version sync (optional)** — app.json/package.json are `1.0.0` while git tags are at
-      `v1.2.0`; sync if you want the build number to track tags.
+- [x] **Version sync** — app.json + package.json bumped `1.0.0` → `1.3.0` to match the git tag
+      cadence (tagged `v1.3.0`). EAS still owns the build number (`appVersionSource: remote`).
 
 ## Lint baseline / React Compiler readiness (from the June 2026 lint-to-zero pass)
 

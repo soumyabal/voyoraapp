@@ -16,7 +16,7 @@ import Snackbar from '../components/ui/Snackbar';
 import ConfettiBurst from '../components/ui/ConfettiBurst';
 import { fmt, fmtM, uid, checkOutOf, resolveDayZones, pastActivityIds, isDayInPast, planFloorMin, crossZoneLeg } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost } from '../utils/costs';
-import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor } from '../utils/tripValidator';
+import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor, lodgingSearchAnchor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
 import { planDay, returnJourneyDraft, suggestDayForVenue } from '../utils/autoArrange';
 import { travelLeg, formatMi } from '../utils/geo';
@@ -553,7 +553,15 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     if (!cur?.type) return;
     setNightPlan(trip.id, idx, { type: cur.type, label, ...(coords ? { lat: coords.lat, lng: coords.lng } : {}) });
   };
-  const addHotelFromNightPlan = () => { setNightPlanDay(null); setDiscoverNear(null); setDiscoverSlot(null); setShowDiscover(true); };
+  const addHotelFromNightPlan = () => {
+    // Bias Discover to where you END UP that night (St. Louis on Day 1), not the trip's
+    // headline city (Mackinac) — so booking a multi-state road trip's nights opens the right place.
+    const idx = nightPlanDay;
+    setNightPlanDay(null);
+    setDiscoverNear(idx != null ? lodgingSearchAnchor(trip, idx) : null);
+    setDiscoverSlot(null);
+    setShowDiscover(true);
+  };
   const closeModal     = ()     => { setShowAddActivity(false); setEditActivity(null); };
   // Open Discover's map centred on an activity → "what's around this place?".
   // Pass the place's own details so Discover can show IT (the search often won't

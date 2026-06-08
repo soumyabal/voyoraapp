@@ -345,6 +345,26 @@ export function dayRouteAnchor(trip, i, dayActs = []) {
   );
 }
 
+/**
+ * Where to SEARCH for a hotel for the night of day i — i.e. where you END UP that day,
+ * NOT the trip's headline destination. On a 10-day, 4-state road trip, booking Day 1's
+ * room must open near St. Louis (where Day 1 lands), not Mackinac (the final city). For an
+ * unbooked night dayEndAnchor is null (that's why it's flagged), so we derive the place from
+ * the day's own stops: the last located NON-transport stop (where you settle for the night),
+ * else any located stop (a pure drive day ends at its destination), else the day's anchors.
+ * Returns { lat, lng, label } | null. PURE.
+ */
+export function lodgingSearchAnchor(trip, i) {
+  const acts = (trip?.days?.[i]?.activities || [])
+    .filter((a) => a.status !== 'skipped' && a.lat != null && a.lng != null);
+  const settled = acts.filter((a) => a.type !== 'transport');
+  const pick = settled.length ? settled[settled.length - 1]
+             : acts.length   ? acts[acts.length - 1]
+             : null;
+  if (pick) return { lat: pick.lat, lng: pick.lng, label: pick.city || pick.name };
+  return dayEndAnchor(trip, i) || dayRouteAnchor(trip, i, trip?.days?.[i]?.activities || []);
+}
+
 // ─── Per-day validation ───────────────────────────────────────────
 
 // ─── Per-day rules ─────────────────────────────────────────────────

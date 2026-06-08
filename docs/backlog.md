@@ -24,6 +24,17 @@
       doesn't send the header — so an iOS *application* restriction would 403 photos until those Image
       sources also pass `headers: withBundleId()`. Device-verify step. **Plan:** ship API-restriction-only
       (a) for v1, then add the Image headers + enable (b) in a paired device session.
+- [ ] **Claude/Anthropic key — Smart Paste ships ON (decision: option B, mitigated).** Anthropic
+      keys CANNOT be app/bundle/IP/referrer-restricted (unlike the Google key) — a key in the bundle
+      is extractable and usable by anyone. Decision: ship Smart Paste ON for the closed TestFlight,
+      bounding the exposure rather than eliminating it. **Owner steps in the Anthropic Console before
+      building:** (1) create a **dedicated Workspace** for the app; (2) set a **hard monthly spend
+      limit** on it (~$20–50); (3) mint a **new key in that workspace** and swap it into
+      `src/config.js` `CLAUDE_API_KEY` (replacing the current main-account key — never ship the
+      primary key); (4) watch workspace usage, revoke + re-issue on any spike. ⚠️ **This is closed-
+      TestFlight-only.** Before any PUBLIC App Store release the Claude key MUST move server-side
+      (Phase 2 backend proxy — see docs/phase-2-backend.md); a capped bundle key is not acceptable
+      for a public listing. Privacy docs already disclose the Anthropic call (privacy-policy.md §3/§4).
 - [ ] **Apple Developer enrollment** ($99/yr) — gates both the EAS device build and TestFlight.
 - [ ] **Version sync (optional)** — app.json/package.json are `1.0.0` while git tags are at
       `v1.2.0`; sync if you want the build number to track tags.

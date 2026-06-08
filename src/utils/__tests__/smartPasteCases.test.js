@@ -84,6 +84,19 @@ day 3 - fly home`);
     expect(allActs(t).length).toBeGreaterThanOrEqual(3);
   });
 
+  test('fully collapsed blob (Gemini strips ALL newlines + spaces between markers)', () => {
+    // Real-world: pasting from Gemini can glue markers with no separator at all
+    // ("…Sugarfire).Day 2:", "…evening.Evening:"). Must still segment into the right dated days.
+    const t = build(`The 10-Day ItineraryDay 1: June 30 – Dallas to St. Louis (The Long Haul)` +
+      `Morning: Leave Dallas early.Evening: Arrive in St. Louis and grab dinner.` +
+      `Day 2: July 1 – Drive to ChicagoMorning: Explore the Gateway Arch.` +
+      `Evening: Deep-dish pizza in Chicago.Day 3: July 2 – Exploring Chicago` +
+      `Morning: Millennium Park and The Bean.Afternoon: Architecture River Cruise.`,
+      { year: 2026 });
+    expect(t.days.map(d => d.date)).toEqual(['2026-06-30', '2026-07-01', '2026-07-02']);
+    expect(allActs(t).length).toBeGreaterThanOrEqual(5);   // slots split out, not one mega-item
+  });
+
   test('every imported activity has a valid time and a name', () => {
     const t = build(`Day 1: Paris
 Morning: Louvre

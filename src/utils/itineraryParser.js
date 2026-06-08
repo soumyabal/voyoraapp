@@ -78,16 +78,19 @@ function todayISO() {
 // split mid-sentence). Idempotent on already-newlined text (extra blank lines are filtered).
 function presegment(text) {
   const monthAlt = Object.keys(MONTHS).join('|');
+  // Each marker carries a strong RIGHT anchor (a trailing ':', '–', or '('), so we can split
+  // before it even with NO leading whitespace — Gemini collapses pastes to "…Sugarfire).Day 2:"
+  // and "…evening.Evening:". We capture one preceding non-newline char ($1, re-emitted) so the
+  // split is whitespace-agnostic and idempotent on already-newlined text.
   return String(text || '')
-    .replace(/\s+(Segment\s+\d+\s*:)/g, '\n$1')
-    // Split a run-together "Day N" onto its own line — but NOT when it directly follows a colon
-    // (e.g. "June 30: Day 1 – …"), which is a single combined header, not two markers. Keep the
-    // preceding char so wall-of-text ("…downtown. Day 2: …") still splits.
-    .replace(/([^\s:])\s+(Day\s+\d+\s*[:\-–(])/g, '$1\n$2')
-    .replace(/\s+(Stop\s+\d+\s*\()/g, '\n$1')
-    .replace(/\s+(Option\s+[A-Z]\s*:)/g, '\n$1')
-    .replace(/\s+(Morning|Afternoon|Evening|Night)(\s*:)/g, '\n$1$2')
-    .replace(new RegExp(`\\s+((?:${monthAlt})\\s+\\d{1,2}\\s*:)`, 'gi'), '\n$1');
+    .replace(/(\S)\s*(Segment\s+\d+\s*:)/g, '$1\n$2')
+    // "Day N" must NOT split when it follows a colon ("June 30: Day 1 – …" is one combined header),
+    // hence [^\s:] for the preceding char. Handles both "…neighborhood.Day 2:" and "…town. Day 2:".
+    .replace(/([^\s:])\s*(Day\s+\d+\s*[:\-–(])/g, '$1\n$2')
+    .replace(/(\S)\s*(Stop\s+\d+\s*\()/g, '$1\n$2')
+    .replace(/(\S)\s*(Option\s+[A-Z]\s*:)/g, '$1\n$2')
+    .replace(/(\S)\s*(Morning|Afternoon|Evening|Night)(\s*:)/g, '$1\n$2$3')
+    .replace(new RegExp(`(\\S)\\s*((?:${monthAlt})\\s+\\d{1,2}\\s*:)`, 'gi'), '$1\n$2');
 }
 
 // Strip common markdown/bullets so pasted ChatGPT/Gemini output parses: leading "-", "*", "•",

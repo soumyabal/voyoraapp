@@ -11,12 +11,12 @@
 import React, { useState } from 'react';
 import {
   Modal, View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography } from '../theme';
 import { ModalHeader } from '../components/ui';
-import { importTripFromText } from '../utils/itineraryImport';
+import { importTripFromTextAsync } from '../utils/itineraryImport';
 
 const SAMPLE = `Segment 1: Los Angeles (June 30 – July 3)
 June 30: Arrival & Santa Monica
@@ -42,19 +42,27 @@ Drive back to LAX and catch your flight home.`;
 
 export default function PasteImportModal({ visible, onClose, onCreated }) {
   const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const build = () => {
+  const build = async () => {
     const trimmed = text.trim();
-    if (!trimmed) { showToast('Paste an itinerary first', '📋'); return; }
-    const result = importTripFromText(useStore.getState(), trimmed);
-    if (!result || !result.trip) {
-      showToast('No dates found — paste a day-by-day plan', '🗓️');
-      return;
+    if (!trimmed || busy) { if (!trimmed) showToast('Paste an itinerary first', '📋'); return; }
+    setBusy(true);
+    try {
+      // AI reads the text when a key is set (richer understanding); else the deterministic parser.
+      const result = await importTripFromTextAsync(useStore.getState(), trimmed);
+      if (!result || !result.trip) {
+        showToast('Couldn’t read a day-by-day plan — try adding dates/days', '🗓️');
+        return;
+      }
+      const { imported, days } = result.summary;
+      const how = result.source === 'ai' ? '✨ AI' : 'auto';
+      showToast(`${how}: drafted ${imported} stops across ${days} day${days !== 1 ? 's' : ''} — review & tweak`, '✨');
+      setText('');
+      onCreated?.(result.trip);
+    } finally {
+      setBusy(false);
     }
-    const { imported, days } = result.summary;
-    showToast(`Drafted ${imported} stops across ${days} day${days !== 1 ? 's' : ''} — review & tweak`, '✨');
-    setText('');
-    onCreated?.(result.trip);
   };
 
   return (
@@ -101,8 +109,15 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
             starting draft — add photos, costs, and fine-tune on the next screen.
           </Text>
 
-          <TouchableOpacity style={s.buildBtn} onPress={build} activeOpacity={0.85}>
-            <Text style={s.buildBtnText}>✨ Build my trip</Text>
+          <TouchableOpacity style={[s.buildBtn, busy && { opacity: 0.7 }]} onPress={build} activeOpacity={0.85} disabled={busy}>
+            {busy ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ActivityIndicator color="#fff" />
+                <Text style={s.buildBtnText}>Building your trip…</Text>
+              </View>
+            ) : (
+              <Text style={s.buildBtnText}>✨ Build my trip</Text>
+            )}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -9,6 +9,8 @@
  * day-by-day skeleton (dates, slots, names, types, times) that the user reviews + enriches.
  */
 import { parseItineraryText } from './itineraryParser';
+import { extractItinerary } from './itineraryExtract';
+import { extractItineraryViaClaude } from './aiExtract';
 import { minToTime } from './slots';
 import { lookupPlace } from './gazetteer';
 
@@ -116,8 +118,21 @@ export function buildTripFromParsed(store, parsed, opts = {}) {
   return { trip, summary: { days: days.length, imported, unplaced } };
 }
 
-/** Convenience: parse raw text then build the trip in one call. */
+/** Convenience: parse raw text (DETERMINISTIC rules only) then build the trip in one call. */
 export function importTripFromText(store, text, opts = {}) {
   const parsed = parseItineraryText(text, opts);
   return buildTripFromParsed(store, parsed, opts);
+}
+
+/**
+ * The full Smart-Paste path: AI extraction when a key is present (richer understanding of messy
+ * text), else the deterministic rules parser — then the same assembler. Returns { trip, summary,
+ * source } where source is 'ai' | 'rules'. `opts.extract` overrides the extractor (tests inject a
+ * fake); by default it uses the Claude extractor (which itself no-ops without a key).
+ */
+export async function importTripFromTextAsync(store, text, opts = {}) {
+  const extract = opts.extract || extractItineraryViaClaude;
+  const parsed = await extractItinerary(text, { ...opts, extract });
+  const built = buildTripFromParsed(store, parsed, opts);
+  return built ? { ...built, source: parsed.source || 'rules' } : null;
 }

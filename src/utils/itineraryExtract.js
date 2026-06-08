@@ -39,6 +39,50 @@ import { parseItineraryText } from './itineraryParser';
 
 const VALID_TYPES = new Set(['activity', 'food', 'stay', 'transport', 'note']);
 
+// Positive "this is a trip plan" signals. Real itineraries (from ChatGPT/Gemini/blogs) carry
+// several of these; chat, code, gibberish, and prompt-injection text carry ~none.
+const ITINERARY_SIGNALS = [
+  /\bday\s*\d/i,                                                                   // "Day 1"
+  /\b\d{4}-\d{2}-\d{2}\b/,                                                         // 2026-07-01
+  /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b/i,   // "June 30"
+  /\b\d{1,2}\s*(?:am|pm)\b/i,                                                      // "9 am"
+  /\b\d{1,2}:\d{2}\b/,                                                             // "09:00"
+  /\b(?:morning|afternoon|evening|night|breakfast|lunch|dinner|brunch)\b/i,
+  /\b(?:flight|fly|airport|hotel|check[\s-]?in|check[\s-]?out|drive|train|ferry|cruise|museum|beach|tour|visit|arrive|depart|itinerary|sightseeing|board|hike|explore)\b/i,
+];
+
+/**
+ * Cheap, deterministic pre-check: does this pasted text plausibly contain a TRIP PLAN?
+ *
+ * Magic Paste is strictly a trip importer — NOT a general AI endpoint. This gate runs BEFORE any
+ * model call so rubbish, chat, code, or prompt-injection text exits gracefully (and for free) with
+ * a helpful message: a bad actor can't burn the API key on non-trip prompts, and the feature can't
+ * be coerced into doing anything but build a trip. Lenient by design — borderline-but-plausible
+ * text passes and is validated again downstream (the model is told to return {days:[]} for
+ * non-itineraries, and the assembler exits when nothing usable comes back). Pure; never throws.
+ *
+ * @returns {{ ok: boolean, reason: string|null }}
+ */
+export function assessPasteText(text) {
+  const t = String(text || '').trim();
+  if (t.length < 25) {
+    return { ok: false, reason: 'Paste a bit more — a day-by-day plan from ChatGPT, Gemini, or a travel blog.' };
+  }
+  if (t.length > 100000) {
+    return { ok: false, reason: 'That’s a lot of text — paste just the itinerary (the day-by-day plan).' };
+  }
+  const hits = ITINERARY_SIGNALS.reduce((n, re) => n + (re.test(t) ? 1 : 0), 0);
+  const dayMarkers = (t.match(/\bday\s*\d/gi) || []).length;
+  const lines = t.split('\n').filter((l) => l.trim()).length;
+  // Plausible if it carries multiple itinerary signals, several "Day N" markers, or at least one
+  // signal across a multi-line block (a structured plan). A lone keyword in one sentence won't pass.
+  const plausible = hits >= 2 || dayMarkers >= 2 || (hits >= 1 && lines >= 4);
+  if (!plausible) {
+    return { ok: false, reason: 'That doesn’t look like a trip plan. Paste a day-by-day itinerary — with days, dates, or places — and I’ll build the trip.' };
+  }
+  return { ok: true, reason: null };
+}
+
 function todayISO() {
   const n = new Date();
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;

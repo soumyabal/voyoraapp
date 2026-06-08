@@ -17,6 +17,7 @@ import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography } from '../theme';
 import { ModalHeader } from '../components/ui';
 import { importTripFromTextAsync } from '../utils/itineraryImport';
+import { assessPasteText } from '../utils/itineraryExtract';
 import { enrichTripPhotos } from '../utils/activityPhoto';
 
 const SAMPLE = `Segment 1: Los Angeles (June 30 – July 3)
@@ -67,6 +68,10 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
   const build = async () => {
     const trimmed = text.trim();
     if (!trimmed || busy) { if (!trimmed) showToast('Paste an itinerary first', '📋'); return; }
+    // Guardrail: only spend an API call on text that plausibly IS a trip plan. Rubbish, chat, or
+    // prompt-injection attempts exit gracefully here — Magic Paste is a trip importer, not a chatbot.
+    const gate = assessPasteText(trimmed);
+    if (!gate.ok) { showToast(gate.reason, '🤔'); return; }
     Keyboard.dismiss();   // get the keyboard out of the way so the building… overlay is fully visible
     setStep(0);
     setBusy(true);

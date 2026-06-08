@@ -172,3 +172,43 @@ describe('AI path — a Claude contract assembles into a clean trip', () => {
     expect(t.days[2].activities.find(a => /Ferry/.test(a.name)).city).toBe('Mackinaw City');
   });
 });
+
+describe('single-city fallback — light up coords + city when the AI omits the per-day city', () => {
+  // A single-city plan with NO per-day "city" (the common ChatGPT shape) — every stop should still
+  // get the destination's city tag + coords so timezone/Discover work, with zero per-stop city data.
+  const NYC = {
+    destination: 'New York City',
+    days: [
+      { dayNumber: 1, items: [{ name: 'Central Park' }, { name: 'Times Square' }] },
+      { dayNumber: 2, items: [{ name: 'Brooklyn Bridge' }] },
+    ],
+  };
+
+  test('every stop gets the destination city + coords from the single-city fallback', async () => {
+    const res = await importTripFromTextAsync(useStore.getState(), 'raw', { extract: async () => NYC });
+    const t = useStore.getState().trips.find(x => x.id === res.trip.id);
+    const stops = t.days.flatMap(d => d.activities);
+    expect(stops.length).toBe(3);
+    expect(stops.every(a => !!a.city)).toBe(true);            // tagged (was untagged before)
+    expect(stops.every(a => a.lat != null && a.lng != null)).toBe(true); // coords (timezone lights up)
+  });
+
+  test('multi-city trips are NEVER cross-tagged — a city-less day stays untagged/uncoorded', async () => {
+    // Paris day is tagged; the Rome day omits its city. The fallback must NOT fire (it would put
+    // Paris coords/zone on a Rome stop), so that stop stays clean for the user to resolve.
+    const MULTI = {
+      destination: 'Paris · Rome',
+      days: [
+        { date: '2026-07-01', city: 'Paris', items: [{ name: 'Louvre Museum' }] },
+        { date: '2026-07-02', items: [{ name: 'A mystery stop with no place' }] },
+      ],
+    };
+    const res = await importTripFromTextAsync(useStore.getState(), 'raw', { extract: async () => MULTI });
+    const t = useStore.getState().trips.find(x => x.id === res.trip.id);
+    const parisStop = t.days[0].activities.find(a => /Louvre/.test(a.name));
+    const romeDayStop = t.days[1].activities.find(a => /mystery/i.test(a.name));
+    expect(parisStop.city).toBe('Paris');                 // its own day's city kept
+    expect(romeDayStop.city).toBeUndefined();             // NOT cross-tagged with Paris
+    expect(romeDayStop.lat).toBeUndefined();              // and no wrong coords/zone
+  });
+});

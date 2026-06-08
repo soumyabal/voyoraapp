@@ -66,6 +66,20 @@ export function buildTripFromParsed(store, parsed, opts = {}) {
   if (!days.length) return null;
 
   const cities = [...new Set((parsed.segments || []).map(s => cleanCity(s.city)).filter(Boolean))];
+
+  // Single-city pastes often OMIT the per-day city (it's obvious), so days carry no segment and
+  // their stops would get no city tag and no coords → timezone + Discover stay dark. When the trip
+  // is UNAMBIGUOUSLY one city, derive a trip-level city + coords and use them as the per-day
+  // fallback. Guard hard against multi-city: only when ≤1 segment city AND the destination resolves
+  // to at most one known city (so "Paris · Rome" / "Tokyo, Bangkok, Singapore" never cross-tag a
+  // stop with the wrong place's coords/zone).
+  const destParts = String(parsed.destination || '')
+    .split(/[,·;&]|→|->|\s(?:and|to)\s/i).map(p => p.trim()).filter(Boolean);
+  const resolvedParts = destParts.filter(p => lookupPlace(p));
+  const singleCity = cities.length <= 1 && resolvedParts.length <= 1;
+  const fallbackGeo = singleCity ? (lookupPlace(cities[0] || '') || lookupPlace(parsed.destination || '') || null) : null;
+  const fallbackCity = singleCity ? (cities[0] || (resolvedParts[0] ? cleanCity(resolvedParts[0]) : null)) : null;
+
   const trip = store.createTrip({
     name: opts.name || parsed.tripName || `${cities[0] || 'Imported'} trip`,
     destination: parsed.destination || cities.join(' · ') || (cities[0] || 'Imported'),
@@ -89,7 +103,7 @@ export function buildTripFromParsed(store, parsed, opts = {}) {
     if (di == null) continue;
     const slotCount = {};
     let cursor = 9 * 60;   // fallback sequential time for slot-less lines
-    const segGeo = pd.segment ? lookupPlace(pd.segment) : null;   // day's city → coords fallback
+    const segGeo = (pd.segment && lookupPlace(pd.segment)) || fallbackGeo;   // day's city → coords; else single-city fallback
     // Terse / wall-of-text formats glue the content onto the day-header line → it lands in the
     // title with no separate items. Rather than leave the day empty, synthesise one item from the
     // title (classified). Never fires on well-structured pastes (they already have items).
@@ -122,7 +136,7 @@ export function buildTripFromParsed(store, parsed, opts = {}) {
       // Tag each stop with its CITY (item's own city, else the day's segment). This is what
       // lets Discover offer "St. Louis" when you book Day 1's hotel on a multi-city road trip —
       // without it, the trip only knows its headline destination.
-      const city = cleanCity(item.city || pd.segment);
+      const city = cleanCity(item.city || pd.segment) || fallbackCity;
       if (city) act.city = city;
 
       // Offline coords from the gazetteer (airport codes / major cities) — no API. Gives flights

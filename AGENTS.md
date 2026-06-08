@@ -473,7 +473,7 @@ export async function run(groupProfile, destination, nights) { ... return result
 | Refinement bypasses pipeline | Intentional — refinements go through `legacyFallback` with `currentPlan`. Pipeline is for fresh plans only. |
 | Google Places returns no results | API falls back to `MOCK_HOTELS` / `GENERIC_HOTELS` automatically — check console for `[StayAgent]` logs |
 | ItineraryAgent parse fails | Claude returned malformed JSON — check console for `[ItineraryAgent] Could not parse` then check `legacyFallback` path |
-| Dangling `paidBy` after member delete | Known bug — on `deleteMember`, reassign `paidBy` on affected expenses to first remaining member |
+| Dangling `paidBy` after member delete | FIXED — `deleteTraveler`/`deleteFamily` (peopleSlice) re-home `paidBy` + `payments` to an heir (family head → else first remaining member trip-wide) and scrub stale `participatingMembers`/`customShares`. Gated by `splitDelete.regression` + `peopleCascade` tests. (There is no `deleteMember` action.) |
 
 ---
 

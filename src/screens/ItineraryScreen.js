@@ -381,6 +381,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const [nightPlanDay,          setNightPlanDay]          = useState(null);  // dayIndex whose "how's tonight handled?" sheet is open
   const [discoverNear,          setDiscoverNear]          = useState(null);  // {lat,lng,label} when opened from an activity
   const [discoverCity,          setDiscoverCity]          = useState(null);  // city to open Discover in (e.g. booking a night's stay)
+  const [discoverStayOnly,      setDiscoverStayOnly]      = useState(false); // open Discover filtered to hotels (booking a night)
   const [discoverSlot,          setDiscoverSlot]          = useState(null);  // slot key when Discover opened from a per-slot "+ Add"
   const [showOrigin,            setShowOrigin]            = useState(false); // SetOriginModal (Day-1 starting point)
   const [movingAct,             setMovingAct]             = useState(null);
@@ -497,7 +498,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const openAdd        = ()     => openManual(null, '09:00');
   // Per-slot "+ Add" is now SEARCH-FIRST: it opens Discover scoped to that slot
   // (manual is one tap away via the header button / the Discover "add manually" bridge).
-  const openAddInSlot  = (time) => { setDiscoverNear(null); setDiscoverSlot(getSlotKey(time)); setDefaultSlotTime(time); setShowDiscover(true); };
+  const openAddInSlot  = (time) => { setDiscoverNear(null); setDiscoverStayOnly(false); setDiscoverSlot(getSlotKey(time)); setDefaultSlotTime(time); setShowDiscover(true); };
 
   // Move an UNSCHEDULED (didn't-fit-its-hours) stop to another day, landing it at an
   // in-hours time there so it arrives scheduled — not dropped into that day's tray too.
@@ -561,6 +562,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     setNightPlanDay(null);
     setDiscoverNear(null);
     setDiscoverCity(idx != null ? nightCityFor(trip, idx) : null);
+    setDiscoverStayOnly(true);   // booking a night → open straight to hotels
     setDiscoverSlot(null);
     setShowDiscover(true);
   };
@@ -575,6 +577,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
       rating: act.rating ?? null, address: act.address || '', url: act.url || '',
       openHours: act.openHours ?? null, type: act.type, photo: act.photo ?? null,
     });
+    setDiscoverStayOnly(false);
     setShowDiscover(true);
   };
 
@@ -1452,7 +1455,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
       {/* ── Discover FAB — single primary action, bottom-right ── */}
       <TouchableOpacity
         style={styles.discoverFab}
-        onPress={() => { setDiscoverNear(null); setDiscoverSlot(null); setShowDiscover(true); }}
+        onPress={() => { setDiscoverNear(null); setDiscoverStayOnly(false); setDiscoverSlot(null); setShowDiscover(true); }}
         activeOpacity={0.85}
       >
         <Icon name="search" size={16} color="#fff" />
@@ -1570,17 +1573,18 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
 
       <DiscoverModal
         visible={showDiscover}
-        onClose={() => { setShowDiscover(false); setDiscoverNear(null); setDiscoverCity(null); setDiscoverSlot(null); }}
+        onClose={() => { setShowDiscover(false); setDiscoverNear(null); setDiscoverCity(null); setDiscoverStayOnly(false); setDiscoverSlot(null); }}
         trip={trip}
         dayIndex={currentDay}
         defaultTime={defaultSlotTime}
         defaultSlot={discoverSlot}
         nearby={discoverNear}
         initialCity={discoverCity}
+        focusStay={discoverStayOnly}
         onAddManual={(arg) => {
           // arg is a search string (the "add manually" bridge) OR a {lat,lng}
           // object (a pin dropped on the map → seed Stay with that location).
-          setShowDiscover(false); setDiscoverNear(null); setDiscoverCity(null); setDiscoverSlot(null);
+          setShowDiscover(false); setDiscoverNear(null); setDiscoverCity(null); setDiscoverStayOnly(false); setDiscoverSlot(null);
           const seed = (arg && typeof arg === 'object')
             ? { lat: arg.lat, lng: arg.lng, address: arg.address || '', tile: 'stay' }
             : { name: arg || '' };

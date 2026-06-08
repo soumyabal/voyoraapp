@@ -498,7 +498,7 @@ function DiscoverMap({ places, addedNames, seenNames, onMoved, onSelect, onSearc
   );
 }
 
-export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime, defaultSlot, nearby, initialCity, onAddManual }) {
+export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaultTime, defaultSlot, nearby, initialCity, focusStay, onAddManual }) {
   const insets = useSafeAreaInsets();
   const { addActivity, deleteActivity, markPlaceSeen, clearSeenPlaces } = useStore();
   // Read the LIVE trip from the store so "added" (grey + ✓) and "seen" (grey)
@@ -603,7 +603,8 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
     }
     const start = initialCity || list[0] || destination;
     setSearchText('');
-    setLayers({ see: true, eat: true, stay: true });
+    // Booking a night → open filtered to hotels only; otherwise browse everything.
+    setLayers(focusStay ? { see: false, eat: false, stay: true } : { see: true, eat: true, stay: true });
     setLayerData({ see: [], eat: [], stay: [] }); setTextResults([]);
     setSelectedName(null); setFocusTarget(null); setMapMoved(false);
     setCities(list);

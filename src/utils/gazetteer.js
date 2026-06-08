@@ -179,6 +179,53 @@ export const CITIES = {
   'fort lauderdale': { lat: 26.1224, lng: -80.1373, tz: 'America/New_York' },
   'galveston': { lat: 29.3013, lng: -94.7977, tz: 'America/Chicago' },
   'anchorage': { lat: 61.2181, lng: -149.9003, tz: 'America/Anchorage' },
+  // US leisure / weekend cities
+  'savannah': { lat: 32.0809, lng: -81.0912, tz: 'America/New_York' },
+  'charleston': { lat: 32.7765, lng: -79.9311, tz: 'America/New_York' },
+  'asheville': { lat: 35.5951, lng: -82.5515, tz: 'America/New_York' },
+  'tampa': { lat: 27.9506, lng: -82.4572, tz: 'America/New_York' },
+  'santa fe': { lat: 35.6870, lng: -105.9378, tz: 'America/Denver' },
+  'jackson hole': { lat: 43.4799, lng: -110.7624, tz: 'America/Boise' },   // Mountain (tz-lookup polygon → Boise)
+  'sedona': { lat: 34.8697, lng: -111.7610, tz: 'America/Phoenix' },
+  'tucson': { lat: 32.2226, lng: -110.9747, tz: 'America/Phoenix' },
+  'key west': { lat: 24.5551, lng: -81.7800, tz: 'America/New_York' },
+  'san jose': { lat: 37.3382, lng: -121.8863, tz: 'America/Los_Angeles' },
+  'napa': { lat: 38.2975, lng: -122.2869, tz: 'America/Los_Angeles' },
+  'monterey': { lat: 36.6002, lng: -121.8947, tz: 'America/Los_Angeles' },
+  'santa barbara': { lat: 34.4208, lng: -119.6982, tz: 'America/Los_Angeles' },
+  'palm springs': { lat: 33.8303, lng: -116.5453, tz: 'America/Los_Angeles' },
+  // More Europe
+  'zurich': { lat: 47.3769, lng: 8.5417, tz: 'Europe/Zurich' },
+  'geneva': { lat: 46.2044, lng: 6.1432, tz: 'Europe/Zurich' },
+  'brussels': { lat: 50.8503, lng: 4.3517, tz: 'Europe/Brussels' },
+  'copenhagen': { lat: 55.6761, lng: 12.5683, tz: 'Europe/Copenhagen' },
+  'stockholm': { lat: 59.3293, lng: 18.0686, tz: 'Europe/Stockholm' },
+  'oslo': { lat: 59.9139, lng: 10.7522, tz: 'Europe/Oslo' },
+  'budapest': { lat: 47.4979, lng: 19.0402, tz: 'Europe/Budapest' },
+  'krakow': { lat: 50.0647, lng: 19.9450, tz: 'Europe/Warsaw' },
+  'porto': { lat: 41.1579, lng: -8.6291, tz: 'Europe/Lisbon' },
+  'seville': { lat: 37.3891, lng: -5.9845, tz: 'Europe/Madrid' },
+  'frankfurt': { lat: 50.1109, lng: 8.6821, tz: 'Europe/Berlin' },
+  // Middle East / Africa
+  'abu dhabi': { lat: 24.4539, lng: 54.3773, tz: 'Asia/Dubai' },
+  'doha': { lat: 25.2854, lng: 51.5310, tz: 'Asia/Qatar' },
+  'tel aviv': { lat: 32.0853, lng: 34.7818, tz: 'Asia/Jerusalem' },
+  'marrakech': { lat: 31.6295, lng: -7.9811, tz: 'Africa/Casablanca' },
+  'cairo': { lat: 30.0444, lng: 31.2357, tz: 'Africa/Cairo' },
+  'cape town': { lat: -33.9249, lng: 18.4241, tz: 'Africa/Johannesburg' },
+  // More Asia
+  'taipei': { lat: 25.0330, lng: 121.5654, tz: 'Asia/Taipei' },
+  'phuket': { lat: 7.8804, lng: 98.3923, tz: 'Asia/Bangkok' },
+  'chiang mai': { lat: 18.7883, lng: 98.9853, tz: 'Asia/Bangkok' },
+  'mumbai': { lat: 19.0760, lng: 72.8777, tz: 'Asia/Kolkata' },
+  'delhi': { lat: 28.6139, lng: 77.2090, tz: 'Asia/Kolkata' },
+  'jaipur': { lat: 26.9124, lng: 75.7873, tz: 'Asia/Kolkata' },
+  // More Americas
+  'buenos aires': { lat: -34.6037, lng: -58.3816, tz: 'America/Argentina/Buenos_Aires' },
+  'santiago': { lat: -33.4489, lng: -70.6693, tz: 'America/Santiago' },
+  'bogota': { lat: 4.7110, lng: -74.0721, tz: 'America/Bogota' },
+  'cusco': { lat: -13.5319, lng: -71.9675, tz: 'America/Lima' },
+  'san juan': { lat: 18.4655, lng: -66.1057, tz: 'America/Puerto_Rico' },
 };
 
 /**

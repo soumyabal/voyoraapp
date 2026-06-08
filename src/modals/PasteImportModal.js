@@ -8,7 +8,7 @@
  * Places enrichment (coords/hours/cost — which also lights up the timezone features) is a later
  * add; today this produces the full reviewable skeleton (dates, days, slots, names, types, times).
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator,
@@ -40,13 +40,33 @@ July 5: Departure
 Check out of your San Diego hotel.
 Drive back to LAX and catch your flight home.`;
 
+// Friendly progress steps shown while the trip is building. We don't have real per-stage events
+// (the AI call is one round-trip), so we advance through these on a timer to keep the user engaged
+// during the few seconds it takes — holding on the last step until the build actually finishes.
+const BUILD_STEPS = [
+  { emoji: '📖', text: 'Reading your plan…' },
+  { emoji: '🗺️', text: 'Spotting your destinations…' },
+  { emoji: '🧭', text: 'Laying out your days…' },
+  { emoji: '📍', text: 'Pinning your stops…' },
+  { emoji: '✨', text: 'Putting it all together…' },
+];
+
 export default function PasteImportModal({ visible, onClose, onCreated }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState(0);
+
+  // Cycle the progress messages while busy (step is reset to 0 in build() before busy flips on).
+  useEffect(() => {
+    if (!busy) return undefined;
+    const id = setInterval(() => setStep(s => Math.min(s + 1, BUILD_STEPS.length - 1)), 1500);
+    return () => clearInterval(id);
+  }, [busy]);
 
   const build = async () => {
     const trimmed = text.trim();
     if (!trimmed || busy) { if (!trimmed) showToast('Paste an itinerary first', '📋'); return; }
+    setStep(0);
     setBusy(true);
     try {
       // AI reads the text when a key is set (richer understanding); else the deterministic parser.
@@ -124,6 +144,17 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
             )}
           </TouchableOpacity>
         </ScrollView>
+
+        {busy && (
+          <View style={s.overlay}>
+            <View style={s.loadingCard}>
+              <Text style={s.loadingEmoji}>{BUILD_STEPS[step].emoji}</Text>
+              <ActivityIndicator size="large" color={colors.accent} style={{ marginVertical: spacing.lg }} />
+              <Text style={s.loadingText}>{BUILD_STEPS[step].text}</Text>
+              <Text style={s.loadingSub}>Hang tight — building your trip from the plan.</Text>
+            </View>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -145,4 +176,14 @@ const s = StyleSheet.create({
     paddingVertical: spacing.md, alignItems: 'center',
   },
   buildBtnText: { ...typography.bodyBold, color: '#fff' },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.bg,
+    alignItems: 'center', justifyContent: 'center',
+    padding: spacing.xxl,
+  },
+  loadingCard: { alignItems: 'center', maxWidth: 320 },
+  loadingEmoji: { fontSize: 44 },
+  loadingText: { ...typography.h3, color: colors.ink, textAlign: 'center' },
+  loadingSub: { ...typography.small, color: colors.muted, textAlign: 'center', marginTop: spacing.sm },
 });

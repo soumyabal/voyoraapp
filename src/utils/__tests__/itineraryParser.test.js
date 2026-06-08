@@ -97,6 +97,19 @@ describe('parseItineraryText — type classification', () => {
     expect(classifyType('Visit the art museum').type).toBe('activity');
   });
 
+  test('expanded transport modes: ship / train / bus with subtypes', () => {
+    expect(classifyType('Board the ferry to Mackinac Island')).toEqual({ type: 'transport', sub: 'ship' });
+    expect(classifyType('7-day Caribbean cruise')).toEqual({ type: 'transport', sub: 'ship' });
+    expect(classifyType('Take the bullet train to Kyoto')).toEqual({ type: 'transport', sub: 'train' });
+    expect(classifyType('Eurostar to Paris')).toEqual({ type: 'transport', sub: 'train' });
+    expect(classifyType('Catch the airport shuttle')).toEqual({ type: 'transport', sub: 'bus' });
+    // a scenic "cruise along the coast" stays a DRIVE, not a ship
+    expect(classifyType('Cruise along the Pacific Coast Highway')).toEqual({ type: 'transport', sub: 'car' });
+    // more stay / food cues
+    expect(classifyType('Check in to the ryokan').type).toBe('stay');
+    expect(classifyType('Tapas crawl in the old town').type).toBe('food');
+  });
+
   test('KNOWN LIMITATION: a compound line is typed by its FIRST action (documented)', () => {
     // "Drive down the Sunset Strip or find a dinner spot..." → transport wins (drive first).
     // Sentence-splitting to catch the second intent is listed as future work in the doc.

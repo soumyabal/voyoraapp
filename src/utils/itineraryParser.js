@@ -16,11 +16,16 @@ const MONTHS = {
 };
 
 // Action lexicon → activity type (first match wins). The seed of the "knowledge graph".
+// First match wins, so ORDER matters: ship/train/bus before flight (so "board the ferry/train"
+// isn't mis-read as a flight via "board"), and the scenic-drive "cruise along" stays a car.
 const TYPE_RULES = [
-  { type: 'transport', sub: 'flight', re: /\b(fly|flight|flights|land|landing|airport|catch your flight|board|depart|\bLAX\b|\bORD\b|\bSFO\b|\bJFK\b)\b/i },
+  { type: 'transport', sub: 'ship',   re: /(cruise ship|\bcruise\b(?!\s+(?:along|down|up|past))|set sail|\bferry\b|embark|disembark|\bship\b)/i },
+  { type: 'transport', sub: 'train',  re: /\b(train|railway|by rail|amtrak|eurostar|shinkansen|bullet train|high[- ]speed rail)\b/i },
+  { type: 'transport', sub: 'bus',    re: /\b(bus|shuttle)\b/i },   // before flight: an "airport shuttle" is ground transport
+  { type: 'transport', sub: 'flight', re: /\b(fly|flight|flights|land|landing|airport|catch your flight|board your flight|nonstop|layover|depart|\bLAX\b|\bORD\b|\bSFO\b|\bJFK\b)\b/i },
   { type: 'transport', sub: 'car',    re: /\b(drive|driving|drove|rental car|road trip|head south|head north|coastal drive|pacific coast highway|\bPCH\b|\bI-5\b|cruise along|rent(?:ing)? a bike|cross the bridge)\b/i },
-  { type: 'stay',      sub: null,     re: /\b(check ?in|check ?out|hotel|resort|lodge|\binn\b|accommodation|where you'?re staying)\b/i },
-  { type: 'food',      sub: null,     re: /\b(breakfast|brunch|lunch|dinner|dining|restaurant|cuisine|\beat\b|\bcafe\b|coffee|grab a bite|food)\b/i },
+  { type: 'stay',      sub: null,     re: /\b(check ?in|check ?out|hotel|resort|lodge|\binn\b|accommodation|airbnb|ryokan|hostel|guesthouse|\bb&b\b|villa|campground|where you'?re staying)\b/i },
+  { type: 'food',      sub: null,     re: /\b(breakfast|brunch|lunch|dinner|dining|restaurant|cuisine|\beat\b|\bcafe\b|coffee|grab a bite|food|tapas|izakaya|street food)\b/i },
 ];
 export function classifyType(text) {
   for (const r of TYPE_RULES) if (r.re.test(text)) return { type: r.type, sub: r.sub };

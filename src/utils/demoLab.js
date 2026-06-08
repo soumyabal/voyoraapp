@@ -27,6 +27,12 @@ export const DEMO_PROMPTS = [
   { id: 'natl-parks',    title: '🏜️ Utah parks road trip (7d)',      text: '7-day Utah national parks road trip — Zion, Bryce Canyon, and Arches. Day-by-day driving itinerary.' },
   { id: 'asia-multi',    title: '🌏 Tokyo·Bangkok·Singapore (12d)',  text: '12-day trip across Tokyo, Bangkok, and Singapore. Day-by-day itinerary with the flights between them.' },
   { id: 'group-trip',    title: '👨‍👩‍👧 London + Paris w/ kids (8d)',   text: '8-day family trip to London and Paris with two kids, taking the Eurostar between them. Day-by-day itinerary.' },
+  { id: 'ski',           title: '⛷️ Aspen + Vail ski (6d)',          text: '6-day ski trip to Aspen and Vail, Colorado, flying into Denver. Day-by-day itinerary.' },
+  { id: 'japan-multi',   title: '🎌 Tokyo·Kyoto·Osaka (10d)',         text: '10-day Japan trip across Tokyo, Kyoto, and Osaka, using the bullet train. Day-by-day itinerary.' },
+  { id: 'rtw',           title: '🌐 Round-the-world (21d)',           text: '21-day around-the-world trip: London, Dubai, Singapore, Tokyo, and San Francisco. Day-by-day itinerary with the flights.' },
+  { id: 'mexico',        title: '🇲🇽 Mexico City + Cancun (8d)',      text: '8-day Mexico trip: Mexico City and Cancun. Day-by-day itinerary with the flight between them.' },
+  { id: 'cruise',        title: '🚢 Alaska cruise (7d)',              text: '7-day Alaska cruise from Seattle to Vancouver with port stops. Day-by-day itinerary.' },
+  { id: 'iceland',       title: '🇮🇸 Iceland ring road (7d)',         text: '7-day Iceland ring road trip starting and ending in Reykjavik. Day-by-day driving itinerary.' },
 ];
 
 const SYSTEM_PROMPT = `You are a helpful travel planner. Given a trip request, produce a CONSOLIDATED, day-by-day itinerary the user can share — exactly the kind ChatGPT or Gemini would output.

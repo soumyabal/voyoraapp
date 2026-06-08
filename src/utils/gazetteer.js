@@ -67,6 +67,40 @@ export const CITIES = {
   'singapore': { lat: 1.3521, lng: 103.8198, tz: 'Asia/Singapore' },
   'dubai': { lat: 25.2048, lng: 55.2708, tz: 'Asia/Dubai' },
   'sydney': { lat: -33.8688, lng: 151.2093, tz: 'Australia/Sydney' },
+  // US road-trip cities (Central) — the common cross-country stops paste plans hit.
+  'st. louis': { lat: 38.6270, lng: -90.1994, tz: 'America/Chicago' },
+  'memphis': { lat: 35.1495, lng: -90.0490, tz: 'America/Chicago' },
+  'nashville': { lat: 36.1627, lng: -86.7816, tz: 'America/Chicago' },
+  'new orleans': { lat: 29.9511, lng: -90.0715, tz: 'America/Chicago' },
+  'houston': { lat: 29.7604, lng: -95.3698, tz: 'America/Chicago' },
+  'dallas': { lat: 32.7767, lng: -96.7970, tz: 'America/Chicago' },
+  'austin': { lat: 30.2672, lng: -97.7431, tz: 'America/Chicago' },
+  'san antonio': { lat: 29.4241, lng: -98.4936, tz: 'America/Chicago' },
+  'kansas city': { lat: 39.0997, lng: -94.5786, tz: 'America/Chicago' },
+  'minneapolis': { lat: 44.9778, lng: -93.2650, tz: 'America/Chicago' },
+  'milwaukee': { lat: 43.0389, lng: -87.9065, tz: 'America/Chicago' },
+  'little rock': { lat: 34.7465, lng: -92.2896, tz: 'America/Chicago' },
+  'oklahoma city': { lat: 35.4676, lng: -97.5164, tz: 'America/Chicago' },
+  // US (Eastern)
+  'atlanta': { lat: 33.7490, lng: -84.3880, tz: 'America/New_York' },
+  'philadelphia': { lat: 39.9526, lng: -75.1652, tz: 'America/New_York' },
+  'orlando': { lat: 28.5383, lng: -81.3792, tz: 'America/New_York' },
+  'charlotte': { lat: 35.2271, lng: -80.8431, tz: 'America/New_York' },
+  'pittsburgh': { lat: 40.4406, lng: -79.9959, tz: 'America/New_York' },
+  'detroit': { lat: 42.3314, lng: -83.0458, tz: 'America/Detroit' },
+  'indianapolis': { lat: 39.7684, lng: -86.1581, tz: 'America/Indiana/Indianapolis' },
+  // US (Mountain / Pacific)
+  'salt lake city': { lat: 40.7608, lng: -111.8910, tz: 'America/Denver' },
+  'phoenix': { lat: 33.4484, lng: -112.0740, tz: 'America/Phoenix' },
+  'sacramento': { lat: 38.5816, lng: -121.4944, tz: 'America/Los_Angeles' },
+  // International (common multi-city stops)
+  'berlin': { lat: 52.5200, lng: 13.4050, tz: 'Europe/Berlin' },
+  'madrid': { lat: 40.4168, lng: -3.7038, tz: 'Europe/Madrid' },
+  'venice': { lat: 45.4408, lng: 12.3155, tz: 'Europe/Rome' },
+  'florence': { lat: 43.7696, lng: 11.2558, tz: 'Europe/Rome' },
+  'bangkok': { lat: 13.7563, lng: 100.5018, tz: 'Asia/Bangkok' },
+  'hong kong': { lat: 22.3193, lng: 114.1694, tz: 'Asia/Hong_Kong' },
+  'mexico city': { lat: 19.4326, lng: -99.1332, tz: 'America/Mexico_City' },
 };
 
 /**

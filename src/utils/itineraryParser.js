@@ -148,6 +148,20 @@ export function parseItineraryText(text, opts = {}) {
   const base = opts.startDate || todayISO();   // base date for "Day N" (no-calendar) itineraries
   const lines = presegment(text).split(/\r?\n/).map(l => normalizeLine(l)).filter(Boolean);
 
+  // Year-rollover: a calendar-dated itinerary that crosses New Year ("December 30 … January 2")
+  // must roll the later months into the NEXT year — otherwise Jan lands in the start year and the
+  // trip dates go backwards. Track the running year + last month; bump the year when a month
+  // decreases. (The AI path gets today's date so Claude resolves this; this fixes the fallback.)
+  let runYear = year;
+  let lastMo = null;
+  const resolveDate = (monthName, day) => {
+    const mo = MONTHS[String(monthName).toLowerCase()];
+    if (mo == null) return null;
+    if (lastMo != null && mo < lastMo) runYear += 1;
+    lastMo = mo;
+    return toISO(monthName, day, runYear);
+  };
+
   const segments = [];
   const days = [];
   const warnings = [];
@@ -182,7 +196,7 @@ export function parseItineraryText(text, opts = {}) {
       const n = parseInt(m[1], 10);
       let rest = (m[2] || '').replace(/^\)?\s*[:\-–]?\s*/, '').replace(/\)\s*$/, '').trim();
       const dm = rest.match(/([A-Za-z]+)\s+(\d{1,2})/);
-      const date = (dm && MONTHS[dm[1].toLowerCase()] != null) ? toISO(dm[1], parseInt(dm[2], 10), year) : addDaysISO(base, n - 1);
+      const date = (dm && MONTHS[dm[1].toLowerCase()] != null) ? resolveDate(dm[1], parseInt(dm[2], 10)) : addDaysISO(base, n - 1);
       const title = rest || `Day ${n}`;
       curDay = { date, dateText: `Day ${n}`, title, segment: curSegment?.city || null, items: [] };
       days.push(curDay);
@@ -191,7 +205,7 @@ export function parseItineraryText(text, opts = {}) {
       continue;
     }
     if ((m = line.match(reDay)) && MONTHS[m[1].toLowerCase()] != null) {
-      const date = toISO(m[1], parseInt(m[2], 10), year);
+      const date = resolveDate(m[1], parseInt(m[2], 10));
       // Combined headers carry a redundant "Day N –" after the date ("June 30: Day 1 – Dallas…");
       // drop it so the title is the real label ("Dallas to St. Louis").
       const title = m[3].replace(/^Day\s+\d+\s*[:\-–]\s*/i, '').trim() || m[3];

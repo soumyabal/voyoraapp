@@ -44,11 +44,11 @@
   <div class="wrap">
     <header>
       <h1>Kithova — Privacy Policy</h1>
-      <p class="eff">Effective date: June 6, 2026</p>
+      <p class="eff">Effective date: June 8, 2026</p>
     </header>
 
     <div class="lead">
-      <p style="margin:0">Kithova is a trip planner for families and groups. <strong>We don't run servers, we don't have accounts, and we don't track you.</strong> Your trips, travelers, and expenses are saved <strong>only on your device</strong>. The only information that ever leaves your phone is the place names and addresses you type while planning — which we pass to a few well-known mapping services so the app can find hotels, attractions, and directions for you. We don't sell your data, show ads, or use analytics.</p>
+      <p style="margin:0">Kithova is a trip planner for families and groups. <strong>We don't run servers, we don't have accounts, and we don't track you.</strong> Your trips, travelers, and expenses are saved <strong>only on your device</strong>. The information that leaves your phone is (1) the place names and addresses you type while planning — which we pass to a few well-known mapping services so the app can find hotels, attractions, and directions for you — and (2) <strong>if you use the optional Smart Paste feature</strong>, the itinerary text you paste, which we send to an AI service to turn into a trip. We don't sell your data, show ads, or use analytics.</p>
     </div>
 
     <h2>1. Who we are</h2>
@@ -95,10 +95,16 @@
             <td>To draw the map</td>
             <td><a href="https://wiki.osmfoundation.org/wiki/Privacy_Policy">osmfoundation.org</a></td>
           </tr>
+          <tr>
+            <td><strong>Anthropic (Claude AI)</strong> — <em>only if you use Smart Paste</em></td>
+            <td>The itinerary text you choose to paste into Smart Paste</td>
+            <td>To read that text and turn it into a structured trip (days, places, times). Sent only when you tap to import — never automatically</td>
+            <td><a href="https://www.anthropic.com/legal/privacy">anthropic.com/legal/privacy</a></td>
+          </tr>
         </tbody>
       </table>
     </div>
-    <p>These services may log requests (for example, an IP address) under their own privacy policies. We don't control their handling of that data.</p>
+    <p>These services may log requests (for example, an IP address) under their own privacy policies. We don't control their handling of that data. Anthropic processes the text you paste under its own privacy policy and, under its API terms, does not use it to train its models.</p>
 
     <h2>4. What we do NOT do</h2>
     <ul>
@@ -106,7 +112,7 @@
       <li><strong>No device location / GPS.</strong> The app does not request or use your precise device location. The only "location" involved is the text you type.</li>
       <li><strong>No analytics, tracking, advertising, or third-party trackers.</strong> We don't include any analytics or ad SDKs.</li>
       <li><strong>No selling or sharing of personal data</strong> beyond the functional mapping services listed above.</li>
-      <li><strong>No AI processing of your trip in this version.</strong> (AI planning/chat features are turned off. If we enable them in a future version, they would send trip details to an AI provider to generate suggestions, and we will update this policy and tell you before that happens.)</li>
+      <li><strong>AI is used only for Smart Paste, and only on text you paste.</strong> Kithova's AI trip planner and in-trip AI chat are turned off in this version. The one AI feature is <strong>Smart Paste</strong>: when you paste an itinerary and ask Kithova to build a trip from it, the text you pasted is sent to Anthropic (Claude) to convert it into a structured plan. We send <strong>only that pasted text</strong> — never your saved trips, traveler names, family details, or expenses. If you never use Smart Paste, no trip data is ever sent to an AI provider. (Smart Paste also has an on-device fallback that uses no AI.)</li>
     </ul>
 
     <h2>5. Children's privacy</h2>

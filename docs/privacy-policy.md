@@ -1,6 +1,6 @@
 # Kithova — Privacy Policy
 
-**Effective date: June 6, 2026**
+**Effective date: June 8, 2026**
 
 > **Note for the Kithova team (delete before publishing):** This is an honest, code-accurate
 > *draft starting point*, not legal advice. Before you publish it at `https://kithova.com/privacy`
@@ -15,9 +15,11 @@
 
 Kithova is a trip planner for families and groups. **We don't run servers, we don't have
 accounts, and we don't track you.** Your trips, travelers, and expenses are saved **only on your
-device**. The only information that ever leaves your phone is the place names and addresses you
-type while planning — which we pass to a few well-known mapping services so the app can find
-hotels, attractions, and directions for you. We don't sell your data, show ads, or use analytics.
+device**. The information that leaves your phone is (1) the place names and addresses you type
+while planning — which we pass to a few well-known mapping services so the app can find hotels,
+attractions, and directions for you — and (2) **if you use the optional Smart Paste feature**, the
+itinerary text you paste, which we send to an AI service to turn into a trip. We don't sell your
+data, show ads, or use analytics.
 
 ---
 
@@ -51,9 +53,11 @@ needed to answer your request — never your traveler names, family details, or 
 | **Wikipedia / Wikimedia Foundation** | The destination name | To show a short summary and photo of your destination | https://foundation.wikimedia.org/wiki/Policy:Privacy_policy |
 | **Photon by Komoot** (uses OpenStreetMap data) | The location text you type into a search box | To suggest matching addresses/places as you type | https://www.komoot.com/privacy |
 | **OpenStreetMap tile servers** | The coordinates of the map area shown | To draw the map | https://wiki.osmfoundation.org/wiki/Privacy_Policy |
+| **Anthropic (Claude AI)** — *only if you use Smart Paste* | The itinerary text you choose to paste into Smart Paste | To read that text and turn it into a structured trip (days, places, times). Sent only when you tap to import — never automatically | https://www.anthropic.com/legal/privacy |
 
 These services may log requests (for example, an IP address) under their own privacy policies. We
-don't control their handling of that data.
+don't control their handling of that data. Anthropic processes the text you paste under its own
+privacy policy and, under its API terms, does not use it to train its models.
 
 ## 4. What we do NOT do
 
@@ -63,9 +67,13 @@ don't control their handling of that data.
 - **No analytics, tracking, advertising, or third-party trackers.** We don't include any analytics
   or ad SDKs.
 - **No selling or sharing of personal data** beyond the functional mapping services listed above.
-- **No AI processing of your trip in this version.** (AI planning/chat features are turned off. If
-  we enable them in a future version, they would send trip details to an AI provider to generate
-  suggestions, and we will update this policy and tell you before that happens.)
+- **AI is used only for Smart Paste, and only on text you paste.** Kithova's AI trip planner and
+  in-trip AI chat are turned off in this version. The one AI feature is **Smart Paste**: when you
+  paste an itinerary and ask Kithova to build a trip from it, the text you pasted is sent to
+  Anthropic (Claude) to convert it into a structured plan. We send **only that pasted text** —
+  never your saved trips, traveler names, family details, or expenses. If you never use Smart
+  Paste, no trip data is ever sent to an AI provider. (Smart Paste also has an on-device fallback
+  that uses no AI.)
 
 ## 5. Children's privacy
 

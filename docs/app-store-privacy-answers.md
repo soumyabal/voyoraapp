@@ -1,14 +1,15 @@
 # App Store Connect — "App Privacy" answers (internal cheat-sheet)
 
 > Internal note, **not** for publishing. This maps Kithova's actual data behavior (verified
-> against the code on June 6, 2026) to the questions Apple asks in **App Store Connect → your app
+> against the code on June 8, 2026) to the questions Apple asks in **App Store Connect → your app
 > → App Privacy**. Re-verify before each submission; answers change the moment you add accounts,
-> the AI planner, analytics, or any new network call.
+> the full AI planner/chat, analytics, or any new network call.
 
 ## The headline answer
 
 When Apple asks **"Do you or your third-party partners collect data from this app?"** the honest
-answer for the current (local-only, no-accounts, no-analytics, AI-off) build is nuanced:
+answer for the current (local-only, no-accounts, no-analytics, **Smart-Paste-AI-on**) build is
+nuanced:
 
 - **We (Kithova) collect nothing** — no servers, no account, no analytics.
 - **But** the app sends user-typed place searches/addresses to mapping services (Google,
@@ -17,6 +18,11 @@ answer for the current (local-only, no-accounts, no-analytics, AI-off) build is 
   declare the items below as **"App Functionality," "Not linked to the user," "Not used for
   tracking."** (Apple has a narrow exception for data sent only to provide the feature and not
   stored — but selecting Yes and the conservative options below is the safe, defensible choice.)
+- **Smart Paste (on in this build):** when the user pastes an itinerary and imports it, that
+  **pasted text is sent to Anthropic (Claude)** to build the trip. This is the one AI network call.
+  It's **User Content sent to a third party for App Functionality** — declared in the table below.
+  Sent only on the user's explicit import tap; we send only the pasted text (no saved trips,
+  traveler names, or expenses).
 
 ## What to declare
 
@@ -24,7 +30,7 @@ answer for the current (local-only, no-accounts, no-analytics, AI-off) build is 
 |---|---|---|---|---|---|
 | **Coarse/Precise Location** | **No** | — | — | — | App uses NO device GPS. "Location" = typed text only → declare under *Search History*, not Location. |
 | **Search History** | **Yes** | No | No | App Functionality | The place/hotel/attraction text users type, sent to Google/Komoot/Wikipedia to return results. |
-| **Other User Content** (the addresses typed) | **Yes** | No | No | App Functionality | Addresses/place names typed for geocoding. Could also fold into Search History. |
+| **Other User Content** (typed addresses + Smart Paste text) | **Yes** | No | No | App Functionality | Addresses/place names typed for geocoding (could fold into Search History), **and the itinerary text the user pastes into Smart Paste, sent to Anthropic/Claude** to build the trip. Sent only on the explicit import tap; not stored by us. |
 | Contact Info (name, email) | **No** | — | — | — | No accounts in this build. |
 | Identifiers (user/device ID) | **No** | — | — | — | No analytics/ad SDKs; no login. |
 | Usage Data / Analytics | **No** | — | — | — | No analytics SDK present. |
@@ -48,6 +54,7 @@ Kithova does **not** track users across apps/sites and has no ad/attribution SDK
 
 ## When these answers change
 
-Flip to re-review the moment you ship any of: accounts/login (Contact Info, Identifiers), the AI
-planner/chat (User Content sent to an AI provider), cloud sync (Other User Content collected +
-linked), analytics/crash reporting (Usage/Diagnostics), or real bookings (Purchases, Financial).
+Flip to re-review the moment you ship any of: accounts/login (Contact Info, Identifiers), the
+**full** AI planner/chat (more trip data sent to an AI provider — Smart Paste's pasted-text case is
+already covered above), cloud sync (Other User Content collected + linked), analytics/crash
+reporting (Usage/Diagnostics), or real bookings (Purchases, Financial).

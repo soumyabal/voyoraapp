@@ -5,9 +5,10 @@ import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography } from '../theme';
 import { BYPASS_SUBSCRIPTION, PRO_MONTHLY_PRICE, RELEASE_FLAGS, APP_NAME } from '../config';
 
+// 'Plan with AI' removed as a user-facing mode (see NewTripModal) — Magic Paste is the
+// AI path now. The dormant AI-planner branches below stay, gated off, for a future phase.
 const MODES = [
   { key: 'manual', flag: 'manualPlanner', icon: '✍️', label: 'Plan Manually',    desc: 'Build and edit your itinerary yourself',            color: colors.primary },
-  { key: 'ai',     flag: 'aiPlanner',     icon: '🤖', label: 'Plan with AI',     desc: 'Generate a smart AI itinerary for this trip',       color: colors.ai,     soon: 'v2.0' },
   { key: 'expert', flag: 'expertMode',    icon: '🧳', label: 'Plan with Expert', desc: 'A travel consultant will design your trip for you',  color: colors.expert, soon: 'v3.0' },
 ];
 

@@ -34,9 +34,12 @@ import { DateRangePicker, LocationSearchField } from '../components/ui';
 import { avatarColor } from '../utils/helpers';
 import { BYPASS_SUBSCRIPTION, PRO_MONTHLY_PRICE, RELEASE_FLAGS } from '../config';
 
+// 'Plan with AI' was removed as a user-facing mode — the AI-planning path is now
+// Magic Paste (bring a ChatGPT/Gemini plan), which doesn't need our own generator.
+// The dormant AI-planner code (AIPlannerModal + the `mode === 'ai'` branches below)
+// is kept, gated off, for a possible Phase-2 backend; it's just no longer selectable.
 const MODES = [
   { key: 'manual', flag: 'manualPlanner', icon: '✍️', label: 'Plan Manually',    desc: 'Build your itinerary from scratch — full control',     color: colors.primary },
-  { key: 'ai',     flag: 'aiPlanner',     icon: '🤖', label: 'Plan with AI',     desc: 'AI-generated itinerary tailored to your group',         color: colors.ai,      soon: 'v2.0' },
   { key: 'expert', flag: 'expertMode',    icon: '🧳', label: 'Plan with Expert', desc: 'A travel consultant designs your trip for you',         color: colors.expert,  soon: 'v3.0' },
 ];
 

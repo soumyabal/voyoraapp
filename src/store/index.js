@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sampleTrips, sampleTravelers, sampleGroups } from '../data/sampleData';
-import { deviceTz } from '../utils/tz';
+import { migratePersistedState } from './migrate';
 import { createTripsSlice } from './slices/tripsSlice';
 import { createPeopleSlice } from './slices/peopleSlice';
 import { createActivitiesSlice } from './slices/activitiesSlice';
@@ -67,30 +67,9 @@ const useStore = create(
       // read-time-resolved (tzForDay), so no behaviour change for single-zone trips.
       // v6 → v7: Smart Packing List — trips gain `packing` ({} check-state map). Additive; the
       // suggestions are derived (buildPackingList), only ticks persist.
-      migrate: (state) => {
-        if (!state) return state;
-        const dz = deviceTz();
-        const fix247 = (oh) =>
-          (Array.isArray(oh) && oh.length === 1 && oh[0] && oh[0].d === 0 && oh[0].o === 0 && oh[0].c >= 1440)
-            ? [0, 1, 2, 3, 4, 5, 6].map((d) => ({ d, o: 0, c: 1440 }))
-            : oh;
-        state.trips = (state.trips || []).map((t) => ({
-          seenPlaces: [],
-          ignoredWarnings: [],
-          origin: null,
-          expenses: [],
-          homeTz: dz,
-          defaultTz: dz,
-          packing: {},
-          ...t, // existing values always win over the backfilled defaults
-          days: (t.days || []).map((d) => ({
-            ...d,
-            nightPlan: typeof d.nightPlan === 'string' ? { type: d.nightPlan } : (d.nightPlan || undefined),
-            activities: (d.activities || []).map((a) => (a.openHours ? { ...a, openHours: fix247(a.openHours) } : a)),
-          })),
-        }));
-        return state;
-      },
+      // The migration body lives in ./migrate.js (extracted ONLY so it's unit-testable;
+      // behaviour is byte-identical) and is gated by store/__tests__/migrate.test.js.
+      migrate: migratePersistedState,
     }
   )
 );

@@ -6,7 +6,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'));
 
 import useStore from '../../store';
-import { importTripFromText } from '../itineraryImport';
+import { importTripFromText, importTripFromTextAsync } from '../itineraryImport';
 
 const SAMPLE = `
 Segment 1: Los Angeles (June 30 – July 3)
@@ -88,5 +88,60 @@ describe('importTripFromText — paste an AI plan → a real trip', () => {
   test('reports an honest summary', () => {
     expect(result.summary.days).toBe(5);   // Jun30, Jul1, Jul2, Jul3, Jul4
     expect(result.summary.imported).toBeGreaterThan(6);
+  });
+});
+
+describe('combined "<Month Day>: Day N – Title" header (real Gemini road-trip format)', () => {
+  // Regression: presegment used to split "June 30: Day 1 – …" into two lines, dropping the
+  // calendar date and falling back to today-sequential dates. The header must stay one day.
+  const TEXT = `📅 Day-by-Day Itinerary
+June 30: Day 1 – Dallas to St. Louis
+Drive: Take US-69 N to I-44 E through Oklahoma.
+Time: Roughly 10.5 hours of pure driving.
+July 1: Day 2 – Explore St. Louis
+Morning: Visit the Gateway Arch National Park.
+July 2: Day 3 – St. Louis to Chicago
+Drive: Head north on I-55 N.`;
+
+  test('honors the embedded calendar dates (not today-sequential)', () => {
+    const res = importTripFromText(useStore.getState(), TEXT, { year: 2026 });
+    const t = useStore.getState().trips.find(x => x.id === res.trip.id);
+    expect(t.days.map(d => d.date)).toEqual(['2026-06-30', '2026-07-01', '2026-07-02']);
+  });
+
+  test('drops pure metadata lines (Time:/Duration:) — no phantom "Time" activity', () => {
+    const res = importTripFromText(useStore.getState(), TEXT, { year: 2026 });
+    const t = useStore.getState().trips.find(x => x.id === res.trip.id);
+    const names = t.days.flatMap(d => d.activities.map(a => a.name));
+    expect(names).not.toContain('Time');
+  });
+});
+
+describe('AI path — a Claude contract assembles into a clean trip', () => {
+  const CONTRACT = {
+    tripName: 'Dallas to Mackinac Island road trip',
+    destination: 'St. Louis · Chicago · Mackinac Island',
+    days: [
+      { date: '2026-06-30', city: 'St. Louis', items: [
+        { name: 'Drive to St. Louis', type: 'transport', sub: 'car' },
+        { name: 'Check in to hotel', type: 'stay' },
+        { name: 'Dinner in Soulard', type: 'food' } ] },
+      { date: '2026-07-01', city: 'St. Louis', items: [
+        { name: 'Gateway Arch National Park', type: 'activity', time: '09:00' } ] },
+      { date: '2026-07-02', city: 'Mackinaw City', items: [
+        { name: 'Mackinac Island Ferry', type: 'transport', sub: 'train', time: '11:00' } ] },
+    ],
+  };
+
+  test('uses Claude tripName/destination, dates, and types', async () => {
+    const res = await importTripFromTextAsync(useStore.getState(), 'raw', { extract: async () => CONTRACT });
+    expect(res.source).toBe('ai');
+    const t = useStore.getState().trips.find(x => x.id === res.trip.id);
+    expect(t.name).toBe('Dallas to Mackinac Island road trip');
+    expect(t.destination).toBe('St. Louis · Chicago · Mackinac Island');
+    expect(t.days.map(d => d.date)).toEqual(['2026-06-30', '2026-07-01', '2026-07-02']);
+    const ferry = t.days[2].activities.find(a => /Ferry/.test(a.name));
+    expect(ferry.type).toBe('transport');
+    expect(t.days[0].activities.find(a => /Dinner/.test(a.name)).type).toBe('food');
   });
 });

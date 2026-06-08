@@ -40,9 +40,10 @@ Schema:
 
 Rules:
 - Extract EVERY day and EVERY stop you can find; keep them in order.
-- Classify type from the wording: flights/airports/"land"→transport(flight); drive/road trip/PCH→transport(car); breakfast/lunch/dinner/dining→food; hotel/check-in/check-out→stay; everything else→activity.
-- Use dayNumber when there's no explicit date. Do NOT invent dates or places.
-- Keep names short and real (the place itself), not whole sentences.
+- Classify type from the wording: flights/airports/"land"/ferry/board→transport(flight or train); drive/road trip/PCH/highway→transport(car); breakfast/lunch/dinner/dining/pizza/barbecue→food; hotel/check-in/check-out→stay; everything else→activity.
+- Use dayNumber when there's no explicit date. Resolve bare dates like "June 30" using the current date given below — pick the year so the trip is in the future (if the month already passed this year, use next year). Do NOT invent dates or places.
+- IGNORE label/meta lines that are not stops: "Time:", "Duration:", "Distance:", "Drive: <directions>", and any pure driving-directions/route text (road numbers like I-44, US-69). A drive day still gets ONE transport(car) item named for the route, e.g. "Drive to St. Louis".
+- Names must be the place or action itself ("Gateway Arch", "Millennium Park", "Fort Mackinac", "Mackinac Island Ferry"), NOT a label word ("Drive", "Time", "Activity", "Morning", "Rule") and NOT a whole sentence. A single line can yield several items (e.g. "check in to your hotel and have dinner" → a stay AND a food item).
 - If unsure of a field, omit it. Output valid JSON only.`;
 
 // Pull the first balanced JSON object out of a model reply (handles ``` fences / stray prose).
@@ -69,6 +70,10 @@ export async function extractItineraryViaClaude(text, deps = {}) {
   const doFetch = deps.fetch || (typeof fetch !== 'undefined' ? fetch : null);
   if (!doFetch) return null;
 
+  // Give the model today's date so it resolves bare "June 30"-style dates to the right year.
+  const today = deps.today || new Date().toISOString().slice(0, 10);
+  const userContent = `Current date: ${today}\n\nItinerary to extract:\n${String(text).slice(0, 12000)}`;
+
   try {
     const res = await doFetch(CLAUDE_API_URL, {
       method: 'POST',
@@ -81,7 +86,7 @@ export async function extractItineraryViaClaude(text, deps = {}) {
         model: CLAUDE_MODEL,
         max_tokens: 4000,
         system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: String(text).slice(0, 12000) }],
+        messages: [{ role: 'user', content: userContent }],
       }),
     });
     if (!res.ok) {
@@ -92,7 +97,6 @@ export async function extractItineraryViaClaude(text, deps = {}) {
     const reply = data?.content?.[0]?.text;
     return extractJsonObject(reply);
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn('[aiExtract] extract failed:', err?.message);
     return null;
   }

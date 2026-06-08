@@ -80,7 +80,10 @@ function presegment(text) {
   const monthAlt = Object.keys(MONTHS).join('|');
   return String(text || '')
     .replace(/\s+(Segment\s+\d+\s*:)/g, '\n$1')
-    .replace(/\s+(Day\s+\d+\s*[:\-–(])/g, '\n$1')
+    // Split a run-together "Day N" onto its own line — but NOT when it directly follows a colon
+    // (e.g. "June 30: Day 1 – …"), which is a single combined header, not two markers. Keep the
+    // preceding char so wall-of-text ("…downtown. Day 2: …") still splits.
+    .replace(/([^\s:])\s+(Day\s+\d+\s*[:\-–(])/g, '$1\n$2')
     .replace(/\s+(Stop\s+\d+\s*\()/g, '\n$1')
     .replace(/\s+(Option\s+[A-Z]\s*:)/g, '\n$1')
     .replace(/\s+(Morning|Afternoon|Evening|Night)(\s*:)/g, '\n$1$2')
@@ -186,10 +189,13 @@ export function parseItineraryText(text, opts = {}) {
     }
     if ((m = line.match(reDay)) && MONTHS[m[1].toLowerCase()] != null) {
       const date = toISO(m[1], parseInt(m[2], 10), year);
-      curDay = { date, dateText: `${m[1]} ${m[2]}`, title: m[3], segment: curSegment?.city || null, items: [] };
+      // Combined headers carry a redundant "Day N –" after the date ("June 30: Day 1 – Dallas…");
+      // drop it so the title is the real label ("Dallas to St. Louis").
+      const title = m[3].replace(/^Day\s+\d+\s*[:\-–]\s*/i, '').trim() || m[3];
+      curDay = { date, dateText: `${m[1]} ${m[2]}`, title, segment: curSegment?.city || null, items: [] };
       days.push(curDay);
       // the title itself often names places ("…& Griffith Observatory")
-      const cands = extractCandidates(m[3]);
+      const cands = extractCandidates(title);
       if (cands.length) curDay.titleCandidates = cands;
       continue;
     }
@@ -211,6 +217,10 @@ export function parseItineraryText(text, opts = {}) {
       pushItem({ kind: 'slot', slot: m[1].toLowerCase(), text: body, type, sub, time: tm ? tm[0] : null, candidates: extractCandidates(body) });
       continue;
     }
+    // Pure trip-metadata lines (driving duration / distance) are never stops — drop them so they
+    // don't become phantom activities named "Time"/"Distance".
+    if (/^(Time|Duration|Distance|Travel\s*time|Drive\s*time|Mileage)\s*:/i.test(line)) continue;
+
     // Plain narrative line under a day → an item (split lightly on sentence boundaries).
     const { type, sub } = classifyType(line);
     const tm = line.match(reTime);

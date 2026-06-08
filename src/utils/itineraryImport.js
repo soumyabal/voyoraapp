@@ -49,8 +49,8 @@ export function buildTripFromParsed(store, parsed, opts = {}) {
 
   const cities = (parsed.segments || []).map(s => s.city).filter(Boolean);
   const trip = store.createTrip({
-    name: opts.name || `${cities[0] || 'Imported'} trip`,
-    destination: cities.join(' · ') || (cities[0] || 'Imported'),
+    name: opts.name || parsed.tripName || `${cities[0] || 'Imported'} trip`,
+    destination: parsed.destination || cities.join(' · ') || (cities[0] || 'Imported'),
     startDate: days[0].date,
     endDate: days[days.length - 1].date,
     mode: 'manual',

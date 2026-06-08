@@ -85,7 +85,7 @@ function normItem(it) {
  */
 export function normalizeExtraction(raw, opts = {}) {
   const base = opts.startDate || todayISO();
-  const out = { segments: [], days: [], warnings: [] };
+  const out = { segments: [], days: [], warnings: [], tripName: str(raw?.tripName, 80) || null, destination: str(raw?.destination, 120) || null };
   const rawDays = Array.isArray(raw?.days) ? raw.days : [];
   const segSeen = new Set();
 

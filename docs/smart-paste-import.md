@@ -1,11 +1,17 @@
 # Smart Paste — "paste an itinerary, get a trip" (design + honest assessment)
 
-> Status: **ON HOLD (2026-06-07).** Owner tried it on device: "not working — put on hold, revisit
-> later." `RELEASE_FLAGS.smartPaste` is now **false** (the Home "Paste a plan" button is hidden);
-> all the code stays in place (tested, dormant). When we revisit: flip the flag, then debug the
-> on-device flow (the parse→assemble→gazetteer pipeline is unit-green, so the issue is most likely
-> in the modal UI / how the built trip presents — needs an on-device repro to pin down). The MVP
-> as built (still in the tree):
+> Status: **ACTIVE — AI-wired, KEY-READY (2026-06-07).** Owner's call: building from an AI paste is
+> the wedge to sell the inner network, so AI does the text-understanding. `RELEASE_FLAGS.smartPaste`
+> is **on** again. Pipeline now: **AI extract (Claude) → deterministic normalize → assemble**, with
+> the rules parser as the no-key fallback so paste ALWAYS works.
+> - `aiExtract.extractItineraryViaClaude` — the LLM call (Haiku, strict JSON-only prompt, robust
+>   parse); reads `config.CLAUDE_API_KEY` (owner-provided) → null without one.
+> - `itineraryImport.importTripFromTextAsync` — runs the seam (AI when keyed, else rules) → assembler.
+> - `PasteImportModal` — async build with a loading state; shows "AI" vs "auto".
+> - Robustness corpus (`smartPasteCases.test.js`) + no-empty-day fallback.
+> **⚠️ The LIVE AI path needs the owner to set `CLAUDE_API_KEY` in config.js** (I can't add keys).
+> Without it, paste still builds a trip via the deterministic parser. Earlier MVP pieces (still in
+> the tree):
 > - `src/utils/itineraryParser.js` — parse (stages A–C): markdown bullets/bold, `Day N` + calendar
 >   headers, **wall-of-text re-segmentation**, segments, slots, stops, Option A/B, type lexicon,
 >   candidate-place extraction + alias/stop-list. (14 tests)

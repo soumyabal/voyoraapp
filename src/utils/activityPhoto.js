@@ -12,6 +12,7 @@
  */
 import { fetchDestinationImage } from './destinationImage';
 import { fetchPlacePhoto } from './places';
+import { photoCacheKey, getCachedPhoto, setCachedPhoto } from './photoCache';
 
 // Generic logistics names that aren't a place to photograph ("Drive to St. Louis",
 // "Hotel check-in", "Free time", "Breakfast"). A real attraction/restaurant name passes.
@@ -60,29 +61,50 @@ export async function resolveActivityPhoto(act, opts = {}) {
  * store.updateActivity. Fire-and-forget after import — the trip opens immediately and photos
  * pop in as they resolve. Sequential (gentle on the network); the GOOGLE fallback is capped
  * (opts.googleCap, default 12) to bound cost — Wikipedia tries are free so they run for every
- * worthy stop. Returns a small summary for tests/logging. `store` is a zustand getState()
- * snapshot (has .trips + .updateActivity).
+ * worthy stop.
+ *
+ * A PERSISTENT cache (photoCache, AsyncStorage-backed) sits in front: a place resolved on a
+ * prior run — hit OR known-miss — is reused with NO network call, so re-pasting the same
+ * itinerary across restarts is free. Pass opts.persist === false (or opts.storage = null) to
+ * skip persistence; opts.storage injects a backend for tests.
+ *
+ * Returns { enriched, googleUsed, fromCache }. `store` is a zustand getState() snapshot.
  */
 export async function enrichTripPhotos(store, tripId, opts = {}) {
   const trip = (store?.trips || []).find(t => t.id === tripId);
-  if (!trip) return { enriched: 0, googleUsed: 0 };
+  if (!trip) return { enriched: 0, googleUsed: 0, fromCache: 0 };
+  const persist = opts.persist !== false && opts.storage !== null;
+  const cacheDeps = { storage: opts.storage };
   const googleCap = opts.googleCap ?? 12;
   let googleUsed = 0;
   let enriched = 0;
+  let fromCache = 0;
 
   for (const day of trip.days || []) {
     for (const act of day.activities || []) {
       if (!isPhotoWorthy(act)) continue;
-      const res = await resolveActivityPhoto(act, {
+      const key = photoCacheKey(act.name, act.lat, act.lng);
+
+      // 1) Persistent cache — reuse a prior resolution (hit OR known-miss) with no network.
+      let res;
+      if (persist) {
+        const cached = await getCachedPhoto(key, cacheDeps);
+        if (cached !== undefined) {
+          if (cached && cached.url) { store.updateActivity(tripId, act.id, { photo: cached.url }); enriched += 1; fromCache += 1; }
+          continue;   // resolved before (even if photo-less) → don't re-fetch
+        }
+      }
+
+      // 2) True miss → resolve free-first, then persist the result (hit or miss).
+      res = await resolveActivityPhoto(act, {
         allowGoogle: googleUsed < googleCap,
         fetchWiki: opts.fetchWiki,
         fetchGoogle: opts.fetchGoogle,
       });
-      if (!res) continue;
-      if (res.source === 'google') googleUsed += 1;
-      store.updateActivity(tripId, act.id, { photo: res.url });
-      enriched += 1;
+      if (res && res.source === 'google') googleUsed += 1;
+      if (persist) await setCachedPhoto(key, res || null, cacheDeps);
+      if (res && res.url) { store.updateActivity(tripId, act.id, { photo: res.url }); enriched += 1; }
     }
   }
-  return { enriched, googleUsed };
+  return { enriched, googleUsed, fromCache };
 }

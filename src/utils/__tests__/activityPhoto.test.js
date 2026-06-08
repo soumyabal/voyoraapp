@@ -3,7 +3,17 @@
  * Wikipedia/Google calls), so we verify the free-first preference, the generic-name skip,
  * the Google cost cap, and that URLs are written via the store action.
  */
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'));
+
 import { isPhotoWorthy, resolveActivityPhoto, enrichTripPhotos } from '../activityPhoto';
+import { _resetPhotoCache } from '../photoCache';
+
+// In-memory AsyncStorage stand-in for the persistent photo cache.
+const fakeStorage = () => {
+  const m = {};
+  return { getItem: async (k) => (k in m ? m[k] : null), setItem: async (k, v) => { m[k] = v; }, _m: m };
+};
 
 const wikiHit = (name) => ({ imageUrl: `https://wiki/${encodeURIComponent(name)}.jpg`, title: name });
 const wikiMiss = async () => null;
@@ -77,7 +87,7 @@ describe('enrichTripPhotos — writes via the store, caps Google', () => {
       { activities: [A('a2', 'Fort Mackinac', 'activity', 45.8, -84.6)] },
     ] };
     const store = makeStore(trip);
-    const res = await enrichTripPhotos(store, 't1', { fetchWiki: async (n) => wikiHit(n), fetchGoogle: jest.fn() });
+    const res = await enrichTripPhotos(store, 't1', { storage: null, fetchWiki: async (n) => wikiHit(n), fetchGoogle: jest.fn() });
     expect(res.enriched).toBe(2);          // both activities, not the transport
     expect(res.googleUsed).toBe(0);
     const photos = store.trips[0].days.flatMap(d => d.activities).map(a => a.photo);
@@ -89,9 +99,54 @@ describe('enrichTripPhotos — writes via the store, caps Google', () => {
     const trip = { id: 't2', days: [{ activities: acts }] };
     const store = makeStore(trip);
     const fetchGoogle = jest.fn(async () => 'https://g/x.jpg');
-    const res = await enrichTripPhotos(store, 't2', { fetchWiki: wikiMiss, fetchGoogle, googleCap: 2 });
+    const res = await enrichTripPhotos(store, 't2', { storage: null, fetchWiki: wikiMiss, fetchGoogle, googleCap: 2 });
     expect(res.googleUsed).toBe(2);
     expect(fetchGoogle).toHaveBeenCalledTimes(2);   // capped — not all 5
     expect(res.enriched).toBe(2);
+  });
+});
+
+describe('enrichTripPhotos — persistent cache reuse (cross-restart, no re-bill)', () => {
+  beforeEach(_resetPhotoCache);   // forget the in-memory mirror between tests
+  const makeStore = (trip) => {
+    const store = { trips: [trip] };
+    store.updateActivity = (tid, aid, updates) => {
+      for (const d of store.trips.find(t => t.id === tid).days) {
+        d.activities = d.activities.map(a => (a.id === aid ? { ...a, ...updates } : a));
+      }
+    };
+    return store;
+  };
+  const tripOf = (id) => ({ id, days: [{ activities: [{ id: 'a1', name: 'Graceland', type: 'activity', lat: 35.04, lng: -90.02 }] }] });
+
+  test('a second run resolves from cache with NO network call', async () => {
+    const storage = fakeStorage();
+    const fetchGoogle = jest.fn(async () => 'https://g/graceland.jpg');
+
+    // Run 1: Wikipedia misses → Google hit, result persisted.
+    const r1 = await enrichTripPhotos(makeStore(tripOf('t1')), 't1', { storage, fetchWiki: wikiMiss, fetchGoogle });
+    expect(r1).toMatchObject({ enriched: 1, googleUsed: 1, fromCache: 0 });
+    expect(fetchGoogle).toHaveBeenCalledTimes(1);
+
+    // Run 2 (simulated restart): same place → served from the PERSISTED cache, no fetch, no bill.
+    _resetPhotoCache();                       // drop the in-memory mirror; storage still holds it
+    const store2 = makeStore(tripOf('t2'));
+    const r2 = await enrichTripPhotos(store2, 't2', { storage, fetchWiki: wikiMiss, fetchGoogle });
+    expect(r2).toMatchObject({ enriched: 1, googleUsed: 0, fromCache: 1 });
+    expect(fetchGoogle).toHaveBeenCalledTimes(1);   // STILL 1 — no second Google call
+    expect(store2.trips[0].days[0].activities[0].photo).toBe('https://g/graceland.jpg');
+  });
+
+  test('a known photo-LESS place is remembered too (no retry storm)', async () => {
+    const storage = fakeStorage();
+    const fetchGoogle = jest.fn(async () => null);   // Google also misses
+
+    await enrichTripPhotos(makeStore(tripOf('t1')), 't1', { storage, fetchWiki: wikiMiss, fetchGoogle });
+    expect(fetchGoogle).toHaveBeenCalledTimes(1);
+
+    _resetPhotoCache();
+    const r2 = await enrichTripPhotos(makeStore(tripOf('t2')), 't2', { storage, fetchWiki: wikiMiss, fetchGoogle });
+    expect(r2).toMatchObject({ enriched: 0, fromCache: 0 });
+    expect(fetchGoogle).toHaveBeenCalledTimes(1);   // the known-miss is cached → not retried
   });
 });

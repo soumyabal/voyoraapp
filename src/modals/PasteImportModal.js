@@ -11,7 +11,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Keyboard,
 } from 'react-native';
 import useStore, { showToast } from '../store';
 import { colors, spacing, radius, typography } from '../theme';
@@ -66,6 +66,7 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
   const build = async () => {
     const trimmed = text.trim();
     if (!trimmed || busy) { if (!trimmed) showToast('Paste an itinerary first', '📋'); return; }
+    Keyboard.dismiss();   // get the keyboard out of the way so the building… overlay is fully visible
     setStep(0);
     setBusy(true);
     try {

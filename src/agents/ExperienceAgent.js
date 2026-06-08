@@ -9,6 +9,7 @@
  */
 
 import { GOOGLE_PLACES_API_KEY } from '../config';
+import { withBundleId } from '../utils/googleApi';
 
 const PLACES_API_URL = 'https://places.googleapis.com/v1/places:searchText';
 
@@ -157,11 +158,11 @@ function mapPlaceToExperience(place) {
 async function fetchPlacesQuery(textQuery) {
   const res = await fetch(PLACES_API_URL, {
     method:  'POST',
-    headers: {
+    headers: withBundleId({
       'Content-Type':     'application/json',
       'X-Goog-Api-Key':   GOOGLE_PLACES_API_KEY,
       'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.rating,places.priceLevel,places.types,places.accessibilityOptions,places.websiteUri',
-    },
+    }),
     body: JSON.stringify({
       textQuery,
       maxResultCount: 15,

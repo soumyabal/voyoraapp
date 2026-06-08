@@ -7,6 +7,7 @@
  * thumbnail. Best-effort: returns null on any miss, never throws.
  */
 import { GOOGLE_PLACES_API_KEY } from '../config';
+import { withBundleId } from './googleApi';
 
 const PLACES_URL = 'https://places.googleapis.com/v1/places:searchText';
 const FIELD_MASK = 'places.displayName,places.location,places.photos';
@@ -38,11 +39,11 @@ export async function geocodeAddress(address) {
   try {
     const res = await fetch(PLACES_URL, {
       method: 'POST',
-      headers: {
+      headers: withBundleId({
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
         'X-Goog-FieldMask': 'places.location,places.formattedAddress,places.displayName',
-      },
+      }),
       body: JSON.stringify({ textQuery: q, pageSize: 1 }),
     });
     if (!res.ok) { cache.set(key, null); return null; }
@@ -66,7 +67,7 @@ export async function reverseGeocode(lat, lng) {
     // lacks the Geocoding API or the network stalls.
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 6000);
-    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_PLACES_API_KEY}`, { signal: ctrl.signal });
+    const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_PLACES_API_KEY}`, { headers: withBundleId(), signal: ctrl.signal });
     clearTimeout(timer);
     if (!res.ok) { cache.set(key, null); return null; }
     const data = await res.json();
@@ -84,11 +85,11 @@ export async function fetchPlacePhoto(name, lat, lng) {
   try {
     const res = await fetch(PLACES_URL, {
       method: 'POST',
-      headers: {
+      headers: withBundleId({
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
         'X-Goog-FieldMask': FIELD_MASK,
-      },
+      }),
       body: JSON.stringify({
         textQuery: name, pageSize: 1,
         ...(lat != null && lng != null

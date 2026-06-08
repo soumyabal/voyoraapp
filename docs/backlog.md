@@ -15,9 +15,15 @@
       `https://kithova.com/privacy`), and paste the URL into App Store Connect. App Privacy
       questionnaire answers are pre-filled in `docs/app-store-privacy-answers.md`.
 - [ ] **Restrict the Google Places key** in Google Cloud Console: (a) API restriction → Places API
-      (New) + Geocoding (unconditional, no code change); (b) iOS app restriction → bundle
-      `com.kithova.app`, which also needs an `X-Ios-Bundle-Identifier` header added to the Places
-      fetches (small code change — do it together so we can verify Places still returns results).
+      (New) + Geocoding + Distance Matrix (unconditional, no code change — **do this first, zero risk**);
+      (b) iOS app restriction → bundle `com.kithova.app`. The `X-Ios-Bundle-Identifier` header is now
+      sent on **all fetch-based Google calls** (search/geocode/distance) via `src/utils/googleApi.js`
+      `withBundleId()` — a safe no-op until the restriction is on, drift-guarded against app.json by
+      `googleApi.test.js`. ⚠️ **Still needed before enabling (b):** place-photo thumbnails bake the key
+      into the URL and render via RN `<Image source={{uri}}>` (DiscoverModal + itinerary cards), which
+      doesn't send the header — so an iOS *application* restriction would 403 photos until those Image
+      sources also pass `headers: withBundleId()`. Device-verify step. **Plan:** ship API-restriction-only
+      (a) for v1, then add the Image headers + enable (b) in a paired device session.
 - [ ] **Apple Developer enrollment** ($99/yr) — gates both the EAS device build and TestFlight.
 - [ ] **Version sync (optional)** — app.json/package.json are `1.0.0` while git tags are at
       `v1.2.0`; sync if you want the build number to track tags.

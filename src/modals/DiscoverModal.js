@@ -18,6 +18,7 @@ import { weekdayOf, hoursLabel, weeklyHoursLabel } from '../utils/hours';
 import { mapPlace, metersBetween } from '../utils/discoverPlaces';
 import { qualityScore } from '../utils/placeScore';
 import { reverseGeocode, refreshPhotoKey } from '../utils/places';
+import { withBundleId } from '../utils/googleApi';
 import { bookingUrl } from '../utils/booking';
 import { fetchDestinationImage, WIKI_UA } from '../utils/destinationImage';
 import { WebView } from 'react-native-webview';
@@ -150,7 +151,7 @@ async function fetchPlaces(textQuery, bias = null, pages = 1) {
     try {
       const res = await fetch(PLACES_URL, {
         method:'POST',
-        headers:{'Content-Type':'application/json','X-Goog-Api-Key':GOOGLE_PLACES_API_KEY,'X-Goog-FieldMask':FIELD_MASK},
+        headers:withBundleId({'Content-Type':'application/json','X-Goog-Api-Key':GOOGLE_PLACES_API_KEY,'X-Goog-FieldMask':FIELD_MASK}),
         body:JSON.stringify({
           textQuery, pageSize:20,
           ...(bias ? { locationBias: { circle: { center: { latitude: bias.lat, longitude: bias.lng }, radius: bias.radius || 15000 } } } : {}),

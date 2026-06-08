@@ -14,6 +14,7 @@
  */
 
 import { GOOGLE_PLACES_API_KEY, RELEASE_FLAGS } from '../config';
+import { withBundleId } from './googleApi';
 
 const DISTANCE_MATRIX_URL = 'https://maps.googleapis.com/maps/api/distancematrix/json';
 
@@ -67,7 +68,7 @@ async function fetchDistanceMatrix(pairs) {
     `&mode=driving` +
     `&key=${GOOGLE_PLACES_API_KEY}`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: withBundleId() });
   if (!res.ok) throw new Error(`Distance Matrix HTTP ${res.status}`);
 
   const data = await res.json();

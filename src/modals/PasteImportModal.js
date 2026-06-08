@@ -57,6 +57,7 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(0);
+  const [error, setError] = useState(null);   // inline reason shown when the paste can't be used
 
   // Cycle the progress messages while busy (step is reset to 0 in build() before busy flips on).
   useEffect(() => {
@@ -66,26 +67,29 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
   }, [busy]);
 
   const build = async () => {
+    if (busy) return;
     const trimmed = text.trim();
-    if (!trimmed || busy) { if (!trimmed) showToast('Paste an itinerary first', '📋'); return; }
+    Keyboard.dismiss();   // dismiss FIRST so the reason/overlay isn't hidden behind the keyboard
+    if (!trimmed) { setError(null); showToast('Paste an itinerary first', '📋'); return; }
     // Guardrail: only spend an API call on text that plausibly IS a trip plan. Rubbish, chat, or
     // prompt-injection attempts exit gracefully here — Magic Paste is a trip importer, not a chatbot.
     const gate = assessPasteText(trimmed);
-    if (!gate.ok) { showToast(gate.reason, '🤔'); return; }
-    Keyboard.dismiss();   // get the keyboard out of the way so the building… overlay is fully visible
+    if (!gate.ok) { setError(gate.reason); showToast(gate.reason, '🤔'); return; }
+    setError(null);
     setStep(0);
     setBusy(true);
     try {
       // AI reads the text when a key is set (richer understanding); else the deterministic parser.
       const result = await importTripFromTextAsync(useStore.getState(), trimmed);
       if (!result || !result.trip) {
-        showToast('Couldn’t read a day-by-day plan — try adding dates/days', '🗓️');
+        const msg = 'Couldn’t find a day-by-day plan in that — add days, dates, or place names and try again.';
+        setError(msg); showToast(msg, '🗓️');
         return;
       }
       const { imported, days } = result.summary;
       const how = result.source === 'ai' ? '✨ AI' : 'auto';
       showToast(`${how}: drafted ${imported} stops across ${days} day${days !== 1 ? 's' : ''} — review & tweak`, '✨');
-      setText('');
+      setText(''); setError(null);
       // Fill in photos in the background (free Wikipedia first, Google fallback) — non-blocking,
       // so the trip opens instantly and images pop in as they resolve. Errors are swallowed.
       enrichTripPhotos(useStore.getState(), result.trip.id).catch(() => {});
@@ -105,12 +109,9 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
         <ModalHeader
           title="✨ Magic Paste"
           closeLabel="Cancel"
-          actionLabel="Build trip"
           onClose={onClose}
-          onAction={build}
-          actionColor={colors.accent}
         />
-        <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
           <Text style={s.intro}>
             Have an itinerary from ChatGPT, Gemini, or a travel blog? Paste it below and we&apos;ll
             draft the whole trip — days, stops, and times — so you don&apos;t type a thing. You can
@@ -120,7 +121,7 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
           <TextInput
             style={s.input}
             value={text}
-            onChangeText={setText}
+            onChangeText={(t) => { setText(t); if (error) setError(null); }}
             multiline
             textAlignVertical="top"
             placeholder={'Paste your day-by-day plan here…\n\nJuly 1: …\nMorning: …\nAfternoon: …'}
@@ -128,21 +129,31 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
           />
 
           <View style={s.row}>
-            <TouchableOpacity onPress={() => setText(SAMPLE)} activeOpacity={0.7}>
+            <TouchableOpacity onPress={() => { setText(SAMPLE); setError(null); }} activeOpacity={0.7}>
               <Text style={s.link}>Try a sample ›</Text>
             </TouchableOpacity>
             {!!text && (
-              <TouchableOpacity onPress={() => setText('')} activeOpacity={0.7}>
+              <TouchableOpacity onPress={() => { setText(''); setError(null); }} activeOpacity={0.7}>
                 <Text style={[s.link, { color: colors.subtle }]}>Clear</Text>
               </TouchableOpacity>
             )}
           </View>
 
+          {error ? (
+            <View style={s.notice}>
+              <Text style={s.noticeText}>{error}</Text>
+            </View>
+          ) : null}
+
           <Text style={s.note}>
             Works best with a dated, day-by-day plan (the more structure, the better). It&apos;s a
             starting draft — add photos, costs, and fine-tune on the next screen.
           </Text>
+        </ScrollView>
 
+        {/* Sticky CTA — lives outside the scroll so the KeyboardAvoidingView keeps it ABOVE the
+            keyboard (the bottom button used to hide behind it). */}
+        <View style={s.footer}>
           <TouchableOpacity style={[s.buildBtn, busy && { opacity: 0.7 }]} onPress={build} activeOpacity={0.85} disabled={busy}>
             {busy ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -153,7 +164,7 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
               <Text style={s.buildBtnText}>✨ Build my trip</Text>
             )}
           </TouchableOpacity>
-        </ScrollView>
+        </View>
 
         {busy && (
           <View style={s.overlay}>
@@ -181,8 +192,20 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
   link: { ...typography.smallBold, color: colors.accent },
   note: { ...typography.caption, color: colors.subtle, lineHeight: 16, marginTop: spacing.lg },
+  // Inline "that's not a trip plan" notice — calm amber, visible without relying on a toast
+  // (which the keyboard would cover).
+  notice: {
+    marginTop: spacing.lg, backgroundColor: colors.warnSoft, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.warn, padding: spacing.md,
+  },
+  noticeText: { ...typography.smallBold, color: '#9a6a16' },
+  // Sticky footer holding the primary CTA above the keyboard.
+  footer: {
+    padding: spacing.xxl, paddingTop: spacing.md,
+    borderTopWidth: 1, borderTopColor: colors.hairline, backgroundColor: colors.bg,
+  },
   buildBtn: {
-    marginTop: spacing.xl, backgroundColor: colors.accent, borderRadius: radius.xl,
+    backgroundColor: colors.accent, borderRadius: radius.xl,
     paddingVertical: spacing.md, alignItems: 'center',
   },
   buildBtnText: { ...typography.bodyBold, color: '#fff' },

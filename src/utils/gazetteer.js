@@ -226,6 +226,20 @@ export const CITIES = {
   'bogota': { lat: 4.7110, lng: -74.0721, tz: 'America/Bogota' },
   'cusco': { lat: -13.5319, lng: -71.9675, tz: 'America/Lima' },
   'san juan': { lat: 18.4655, lng: -66.1057, tz: 'America/Puerto_Rico' },
+  // Alaska cruise ports
+  'juneau': { lat: 58.3019, lng: -134.4197, tz: 'America/Juneau' },
+  'ketchikan': { lat: 55.3422, lng: -131.6461, tz: 'America/Sitka' },
+  'skagway': { lat: 59.4583, lng: -135.3139, tz: 'America/Juneau' },
+  'sitka': { lat: 57.0531, lng: -135.3300, tz: 'America/Sitka' },
+  // Iceland ring-road towns
+  'akureyri': { lat: 65.6885, lng: -18.1262, tz: 'Atlantic/Reykjavik' },
+  'vik': { lat: 63.4194, lng: -19.0060, tz: 'Atlantic/Reykjavik' },
+  'hofn': { lat: 64.2539, lng: -15.2082, tz: 'Atlantic/Reykjavik' },
+  'selfoss': { lat: 63.9333, lng: -21.0000, tz: 'Atlantic/Reykjavik' },
+  // More Canada (cruise / ski / weekend)
+  'victoria': { lat: 48.4284, lng: -123.3656, tz: 'America/Vancouver' },
+  'calgary': { lat: 51.0447, lng: -114.0719, tz: 'America/Edmonton' },
+  'quebec city': { lat: 46.8139, lng: -71.2080, tz: 'America/Toronto' },
 };
 
 /**

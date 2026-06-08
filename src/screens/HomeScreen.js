@@ -17,7 +17,7 @@ const TRIP_ACTION_W = 144;  // 2 × 72px action buttons
 const TRIP_CARD_W   = SCREEN_W - 48; // SCREEN_W - 2×spacing.xxl
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import useStore from '../store';
+import useStore, { showToast } from '../store';
 import TripCard from '../components/TripCard';
 import NewTripModal from '../modals/NewTripModal';
 import AuthModal from '../modals/AuthModal';
@@ -26,6 +26,8 @@ import { colors, spacing, radius, typography, shadow, gradients } from '../theme
 import { RELEASE_FLAGS } from '../config';
 import { avatarColor, getAllMembers, fmt } from '../utils/helpers';
 import { DEMO_SEEDS } from '../utils/devSeed';
+import { DEMO_PROMPTS, buildDemoTrip } from '../utils/demoLab';
+import { enrichTripPhotos } from '../utils/activityPhoto';
 import PasteImportModal from '../modals/PasteImportModal';
 import Icon from '../components/ui/Icon';
 import PressableScale from '../components/ui/PressableScale';
@@ -570,6 +572,28 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate('Trip');
   };
 
+  // DEV-ONLY: generate a realistic itinerary via Claude, then build it through the real Smart
+  // Paste pipeline — so a demo trip on device exercises exactly what pasting an AI plan hits.
+  const [demoBusy, setDemoBusy] = useState(false);
+  const runDemoLab = async (prompt) => {
+    if (demoBusy) return;
+    setDemoBusy(true);
+    showToast(`🧪 Generating: ${prompt.title}…`, '🧪');
+    try {
+      const res = await buildDemoTrip(useStore.getState(), prompt.text);
+      if (!res || !res.trip) { showToast('Demo build failed — check Metro logs', '⚠️'); return; }
+      enrichTripPhotos(useStore.getState(), res.trip.id).catch(() => {});
+      const how = res.source === 'ai' ? '✨ AI' : 'auto';
+      showToast(`${how}: ${res.summary.days}-day demo built`, '✨');
+      openTrip(res.trip.id);
+    } catch (e) {
+      console.warn('[demoLab] build error:', e?.message);
+      showToast('Demo build error — check Metro logs', '⚠️');
+    } finally {
+      setDemoBusy(false);
+    }
+  };
+
   const TAB_BAR_HEIGHT = 56;
 
   // Classify trips into active-now / upcoming / past. Active trips get their own Home group
@@ -815,6 +839,22 @@ export default function HomeScreen({ navigation }) {
           activeOpacity={0.85}
         >
           <Text style={styles.devSeedText}>＋ Demo trips</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* DEV-ONLY: AI Demo Lab — generate a trip from a prompt via Claude, build it through the real
+          Smart Paste pipeline, for end-to-end device checks (never ships — __DEV__). */}
+      {__DEV__ && activeTab === 'trips' && (
+        <TouchableOpacity
+          style={[styles.devSeedBtn, { backgroundColor: '#4c1d95', bottom: insets.bottom + TAB_BAR_HEIGHT + 48 }]}
+          onPress={() => Alert.alert('🧪 AI Demo Lab', 'Generate a trip via Claude (uses your API key)', [
+            ...DEMO_PROMPTS.map(p => ({ text: p.title, onPress: () => runDemoLab(p) })),
+            { text: 'Cancel', style: 'cancel' },
+          ])}
+          activeOpacity={0.85}
+          disabled={demoBusy}
+        >
+          <Text style={styles.devSeedText}>{demoBusy ? '🧪 Generating…' : '🧪 AI Demo Lab'}</Text>
         </TouchableOpacity>
       )}
 

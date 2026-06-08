@@ -67,3 +67,49 @@ export async function fetchDestinationImage(place) {
   cache.set(key, out);
   return out;
 }
+
+// ── Wikimedia Commons image search (free, CC-licensed) ───────────────────────
+// A SECOND free image source for places without a clean Wikipedia article (a specific
+// POI, a small town): search the Commons File namespace and take the first real PHOTO.
+// We skip maps / flags / logos / SVGs so a landmark gets a photo, not a locator map.
+const commonsCache = new Map();
+const NON_PHOTO_RE = /\b(map|flag|logo|icon|coat[\s_-]?of[\s_-]?arms|locator|seal|diagram|chart|emblem|banner|svg)\b/i;
+
+export async function fetchCommonsImage(name, deps = {}) {
+  const q = String(name || '').trim();
+  if (!q) return null;
+  if (commonsCache.has(q)) return commonsCache.get(q);
+  const doFetch = deps.fetch || (typeof fetch !== 'undefined' ? fetch : null);
+  if (!doFetch) return null;
+
+  let out = null;
+  try {
+    const url = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*'
+      + '&generator=search&gsrnamespace=6&gsrlimit=8'
+      + `&gsrsearch=${encodeURIComponent(q)}`
+      + '&prop=imageinfo&iiprop=url&iiurlwidth=640';
+    const res = await doFetch(url, { headers: { Accept: 'application/json', 'User-Agent': WIKI_UA, 'Api-User-Agent': WIKI_UA } });
+    if (res.ok) {
+      const d = await res.json();
+      const pages = d?.query?.pages ? Object.values(d.query.pages) : [];
+      pages.sort((a, b) => (a.index ?? 99) - (b.index ?? 99));   // keep search relevance order
+      for (const p of pages) {
+        const title = p.title || '';
+        const info = p.imageinfo && p.imageinfo[0];
+        const thumb = info && info.thumburl;
+        if (!thumb || /\.svg(\?|$)/i.test(thumb)) continue;       // need a raster thumbnail
+        if (NON_PHOTO_RE.test(title)) continue;                   // skip maps/flags/logos
+        out = {
+          imageUrl: thumb,
+          title: title.replace(/^File:/, ''),
+          pageUrl: info.descriptionurl || `https://commons.wikimedia.org/wiki/${encodeURIComponent(title)}`,
+        };
+        break;
+      }
+    }
+  } catch {
+    out = null;
+  }
+  commonsCache.set(q, out);
+  return out;
+}

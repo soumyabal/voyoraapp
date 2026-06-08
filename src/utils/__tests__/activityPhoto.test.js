@@ -17,6 +17,7 @@ const fakeStorage = () => {
 
 const wikiHit = (name) => ({ imageUrl: `https://wiki/${encodeURIComponent(name)}.jpg`, title: name });
 const wikiMiss = async () => null;
+const commonsMiss = async () => null;   // inject so no test touches the real Commons network
 
 describe('isPhotoWorthy', () => {
   test('real attractions/meals qualify', () => {
@@ -35,35 +36,47 @@ describe('isPhotoWorthy', () => {
 });
 
 describe('resolveActivityPhoto — free first', () => {
-  test('uses Wikipedia when it hits (no Google call)', async () => {
+  test('uses Wikipedia when it hits (no Commons / Google call)', async () => {
+    const fetchCommons = jest.fn();
     const fetchGoogle = jest.fn();
     const out = await resolveActivityPhoto(
       { name: 'Gateway Arch', lat: 38.6, lng: -90.2 },
-      { fetchWiki: async (n) => wikiHit(n), fetchGoogle },
+      { fetchWiki: async (n) => wikiHit(n), fetchCommons, fetchGoogle },
     );
     expect(out).toEqual({ url: 'https://wiki/Gateway%20Arch.jpg', source: 'wikipedia' });
+    expect(fetchCommons).not.toHaveBeenCalled();
     expect(fetchGoogle).not.toHaveBeenCalled();
   });
 
-  test('falls back to Google when Wikipedia misses', async () => {
+  test('falls back to Commons when Wikipedia misses (before any Google call)', async () => {
+    const fetchGoogle = jest.fn(async () => 'https://g/x.jpg');
+    const out = await resolveActivityPhoto(
+      { name: 'Fort Mackinac', lat: 45.8, lng: -84.6 },
+      { fetchWiki: wikiMiss, fetchCommons: async () => ({ imageUrl: 'https://commons/fort.jpg' }), fetchGoogle },
+    );
+    expect(out).toEqual({ url: 'https://commons/fort.jpg', source: 'commons' });
+    expect(fetchGoogle).not.toHaveBeenCalled();   // Commons hit → never paid for Google
+  });
+
+  test('falls back to Google when both free sources miss', async () => {
     const out = await resolveActivityPhoto(
       { name: "Lou Malnati's", lat: 41.9, lng: -87.6 },
-      { fetchWiki: wikiMiss, fetchGoogle: async () => 'https://g/photo.jpg' },
+      { fetchWiki: wikiMiss, fetchCommons: commonsMiss, fetchGoogle: async () => 'https://g/photo.jpg' },
     );
     expect(out).toEqual({ url: 'https://g/photo.jpg', source: 'google' });
   });
 
   test('no Google fallback without coords or when disallowed', async () => {
     const fetchGoogle = jest.fn(async () => 'g');
-    expect(await resolveActivityPhoto({ name: 'Somewhere' }, { fetchWiki: wikiMiss, fetchGoogle })).toBeNull();
-    expect(await resolveActivityPhoto({ name: 'X', lat: 1, lng: 2 }, { fetchWiki: wikiMiss, fetchGoogle, allowGoogle: false })).toBeNull();
+    expect(await resolveActivityPhoto({ name: 'Somewhere' }, { fetchWiki: wikiMiss, fetchCommons: commonsMiss, fetchGoogle })).toBeNull();
+    expect(await resolveActivityPhoto({ name: 'X', lat: 1, lng: 2 }, { fetchWiki: wikiMiss, fetchCommons: commonsMiss, fetchGoogle, allowGoogle: false })).toBeNull();
     expect(fetchGoogle).not.toHaveBeenCalled();
   });
 
   test('never throws if a source errors', async () => {
     const out = await resolveActivityPhoto(
       { name: 'Boom', lat: 1, lng: 2 },
-      { fetchWiki: async () => { throw new Error('net'); }, fetchGoogle: async () => { throw new Error('net'); } },
+      { fetchWiki: async () => { throw new Error('net'); }, fetchCommons: async () => { throw new Error('net'); }, fetchGoogle: async () => { throw new Error('net'); } },
     );
     expect(out).toBeNull();
   });
@@ -87,7 +100,7 @@ describe('enrichTripPhotos — writes via the store, caps Google', () => {
       { activities: [A('a2', 'Fort Mackinac', 'activity', 45.8, -84.6)] },
     ] };
     const store = makeStore(trip);
-    const res = await enrichTripPhotos(store, 't1', { storage: null, fetchWiki: async (n) => wikiHit(n), fetchGoogle: jest.fn() });
+    const res = await enrichTripPhotos(store, 't1', { storage: null, fetchWiki: async (n) => wikiHit(n), fetchCommons: commonsMiss, fetchGoogle: jest.fn() });
     expect(res.enriched).toBe(2);          // both activities, not the transport
     expect(res.googleUsed).toBe(0);
     const photos = store.trips[0].days.flatMap(d => d.activities).map(a => a.photo);
@@ -99,7 +112,7 @@ describe('enrichTripPhotos — writes via the store, caps Google', () => {
     const trip = { id: 't2', days: [{ activities: acts }] };
     const store = makeStore(trip);
     const fetchGoogle = jest.fn(async () => 'https://g/x.jpg');
-    const res = await enrichTripPhotos(store, 't2', { storage: null, fetchWiki: wikiMiss, fetchGoogle, googleCap: 2 });
+    const res = await enrichTripPhotos(store, 't2', { storage: null, fetchWiki: wikiMiss, fetchCommons: commonsMiss, fetchGoogle, googleCap: 2 });
     expect(res.googleUsed).toBe(2);
     expect(fetchGoogle).toHaveBeenCalledTimes(2);   // capped — not all 5
     expect(res.enriched).toBe(2);
@@ -124,14 +137,14 @@ describe('enrichTripPhotos — persistent cache reuse (cross-restart, no re-bill
     const fetchGoogle = jest.fn(async () => 'https://g/graceland.jpg');
 
     // Run 1: Wikipedia misses → Google hit, result persisted.
-    const r1 = await enrichTripPhotos(makeStore(tripOf('t1')), 't1', { storage, fetchWiki: wikiMiss, fetchGoogle });
+    const r1 = await enrichTripPhotos(makeStore(tripOf('t1')), 't1', { storage, fetchWiki: wikiMiss, fetchCommons: commonsMiss, fetchGoogle });
     expect(r1).toMatchObject({ enriched: 1, googleUsed: 1, fromCache: 0 });
     expect(fetchGoogle).toHaveBeenCalledTimes(1);
 
     // Run 2 (simulated restart): same place → served from the PERSISTED cache, no fetch, no bill.
     _resetPhotoCache();                       // drop the in-memory mirror; storage still holds it
     const store2 = makeStore(tripOf('t2'));
-    const r2 = await enrichTripPhotos(store2, 't2', { storage, fetchWiki: wikiMiss, fetchGoogle });
+    const r2 = await enrichTripPhotos(store2, 't2', { storage, fetchWiki: wikiMiss, fetchCommons: commonsMiss, fetchGoogle });
     expect(r2).toMatchObject({ enriched: 1, googleUsed: 0, fromCache: 1 });
     expect(fetchGoogle).toHaveBeenCalledTimes(1);   // STILL 1 — no second Google call
     expect(store2.trips[0].days[0].activities[0].photo).toBe('https://g/graceland.jpg');
@@ -141,11 +154,11 @@ describe('enrichTripPhotos — persistent cache reuse (cross-restart, no re-bill
     const storage = fakeStorage();
     const fetchGoogle = jest.fn(async () => null);   // Google also misses
 
-    await enrichTripPhotos(makeStore(tripOf('t1')), 't1', { storage, fetchWiki: wikiMiss, fetchGoogle });
+    await enrichTripPhotos(makeStore(tripOf('t1')), 't1', { storage, fetchWiki: wikiMiss, fetchCommons: commonsMiss, fetchGoogle });
     expect(fetchGoogle).toHaveBeenCalledTimes(1);
 
     _resetPhotoCache();
-    const r2 = await enrichTripPhotos(makeStore(tripOf('t2')), 't2', { storage, fetchWiki: wikiMiss, fetchGoogle });
+    const r2 = await enrichTripPhotos(makeStore(tripOf('t2')), 't2', { storage, fetchWiki: wikiMiss, fetchCommons: commonsMiss, fetchGoogle });
     expect(r2).toMatchObject({ enriched: 0, fromCache: 0 });
     expect(fetchGoogle).toHaveBeenCalledTimes(1);   // the known-miss is cached → not retried
   });

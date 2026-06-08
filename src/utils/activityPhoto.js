@@ -10,7 +10,7 @@
  *
  * The network sources are INJECTABLE (deps) so the logic is fully unit-testable offline.
  */
-import { fetchDestinationImage } from './destinationImage';
+import { fetchDestinationImage, fetchCommonsImage } from './destinationImage';
 import { fetchPlacePhoto } from './places';
 import { photoCacheKey, getCachedPhoto, setCachedPhoto } from './photoCache';
 
@@ -31,20 +31,26 @@ export function isPhotoWorthy(act) {
 }
 
 /**
- * Best photo URL for one stop, FREE FIRST: Wikipedia thumbnail → Google Places photo.
- * Returns { url, source: 'wikipedia'|'google' } | null. Google is skipped when
- * opts.allowGoogle === false or the stop has no coords. Sources are injectable for tests
- * (opts.fetchWiki / opts.fetchGoogle). Never throws.
+ * Best photo URL for one stop, FREE FIRST: Wikipedia thumbnail → Wikimedia Commons → Google
+ * Places photo. Returns { url, source: 'wikipedia'|'commons'|'google' } | null. Google is
+ * skipped when opts.allowGoogle === false or the stop has no coords. Sources are injectable for
+ * tests (opts.fetchWiki / opts.fetchCommons / opts.fetchGoogle). Never throws.
  */
 export async function resolveActivityPhoto(act, opts = {}) {
   const name = String(act?.name || '').trim();
   if (!name) return null;
   const fetchWiki = opts.fetchWiki || fetchDestinationImage;
+  const fetchCommons = opts.fetchCommons || fetchCommonsImage;
   const fetchGoogle = opts.fetchGoogle || fetchPlacePhoto;
 
   try {
     const wiki = await fetchWiki(name);
     if (wiki && wiki.imageUrl) return { url: wiki.imageUrl, source: 'wikipedia' };
+  } catch { /* free source missed — fall through */ }
+
+  try {
+    const commons = await fetchCommons(name);
+    if (commons && commons.imageUrl) return { url: commons.imageUrl, source: 'commons' };
   } catch { /* free source missed — fall through */ }
 
   if (opts.allowGoogle !== false && act?.lat != null && act?.lng != null) {
@@ -99,6 +105,7 @@ export async function enrichTripPhotos(store, tripId, opts = {}) {
       res = await resolveActivityPhoto(act, {
         allowGoogle: googleUsed < googleCap,
         fetchWiki: opts.fetchWiki,
+        fetchCommons: opts.fetchCommons,
         fetchGoogle: opts.fetchGoogle,
       });
       if (res && res.source === 'google') googleUsed += 1;

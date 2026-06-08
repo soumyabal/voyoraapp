@@ -679,6 +679,18 @@ async function renameForShare(uri, fileName) {
 
 // ─── Public export functions ──────────────────────────────────────────────────
 
+// Single in-flight guard shared by all three exports: a double-tap (or tapping a second
+// export while one is still generating/sharing) is IGNORED rather than racing two
+// printToFileAsync + two share sheets — which is what intermittently crashed iOS sharing.
+let exportInFlight = false;
+export function _isExporting() { return exportInFlight; }   // test seam
+async function runExclusive(fn) {
+  if (exportInFlight) return undefined;                     // already exporting → ignore this tap
+  exportInFlight = true;
+  try { return await fn(); } finally { exportInFlight = false; }
+}
+export function _runExclusive(fn) { return runExclusive(fn); }   // test seam
+
 /**
  * exportDayAsPDF(trip, day, dayIndex)
  *
@@ -687,40 +699,41 @@ async function renameForShare(uri, fileName) {
  */
 export async function exportDayAsPDF(trip, day, dayIndex) {
   if (!trip || !day) return;
-
-  try {
-    let Print, Sharing;
+  return runExclusive(async () => {
     try {
-      Print   = await import('expo-print');
-      Sharing = await import('expo-sharing');
-    } catch {
-      Alert.alert(
-        'Package not installed',
-        'Run this in your terminal first:\n\nnpx expo install expo-print expo-sharing\n\nThen restart Expo Go.',
-        [{ text: 'OK' }],
-      );
-      return;
+      let Print, Sharing;
+      try {
+        Print   = await import('expo-print');
+        Sharing = await import('expo-sharing');
+      } catch {
+        Alert.alert(
+          'Package not installed',
+          'Run this in your terminal first:\n\nnpx expo install expo-print expo-sharing\n\nThen restart Expo Go.',
+          [{ text: 'OK' }],
+        );
+        return;
+      }
+
+      const html = buildDayHTML(trip, day, dayIndex);
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Sharing not available', 'PDF was saved but sharing is not supported on this device.');
+        return;
+      }
+
+      const shareUri = await renameForShare(uri, tripPdfName(trip, 'day', day));
+      await Sharing.shareAsync(shareUri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Share ${day.label} plan`,
+        UTI: 'com.adobe.pdf',
+      });
+    } catch (err) {
+      console.error('[exportPlan:day]', err);
+      Alert.alert('Export failed', `Could not generate PDF: ${err.message}`);
     }
-
-    const html = buildDayHTML(trip, day, dayIndex);
-    const { uri } = await Print.printToFileAsync({ html, base64: false });
-
-    const canShare = await Sharing.isAvailableAsync();
-    if (!canShare) {
-      Alert.alert('Sharing not available', 'PDF was saved but sharing is not supported on this device.');
-      return;
-    }
-
-    const shareUri = await renameForShare(uri, tripPdfName(trip, 'day', day));
-    await Sharing.shareAsync(shareUri, {
-      mimeType: 'application/pdf',
-      dialogTitle: `Share ${day.label} plan`,
-      UTI: 'com.adobe.pdf',
-    });
-  } catch (err) {
-    console.error('[exportPlan:day]', err);
-    Alert.alert('Export failed', `Could not generate PDF: ${err.message}`);
-  }
+  });
 }
 
 /**
@@ -733,46 +746,46 @@ export async function exportDayAsPDF(trip, day, dayIndex) {
  */
 export async function exportTripAsPDF(trip, travelers = []) {
   if (!trip) return;
-
-  try {
-    // Dynamic import — gracefully fails if packages not yet installed
-    let Print, Sharing;
+  return runExclusive(async () => {
     try {
-      Print   = await import('expo-print');
-      Sharing = await import('expo-sharing');
-    } catch {
-      Alert.alert(
-        'Package not installed',
-        'Run this in your terminal first:\n\nnpx expo install expo-print expo-sharing\n\nThen restart Expo Go.',
-        [{ text: 'OK' }],
-      );
-      return;
+      // Dynamic import — gracefully fails if packages not yet installed
+      let Print, Sharing;
+      try {
+        Print   = await import('expo-print');
+        Sharing = await import('expo-sharing');
+      } catch {
+        Alert.alert(
+          'Package not installed',
+          'Run this in your terminal first:\n\nnpx expo install expo-print expo-sharing\n\nThen restart Expo Go.',
+          [{ text: 'OK' }],
+        );
+        return;
+      }
+
+      const html = buildHTML(trip, travelers);
+
+      // Generate PDF file on device
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+
+      // Check if sharing is available (it always is on device builds)
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Sharing not available', 'PDF was saved but sharing is not supported on this device.');
+        return;
+      }
+
+      // Open share sheet — user can save to Files, AirDrop, email, etc.
+      const shareUri = await renameForShare(uri, tripPdfName(trip, 'plan'));
+      await Sharing.shareAsync(shareUri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Share ${trip.name} itinerary`,
+        UTI: 'com.adobe.pdf',
+      });
+    } catch (err) {
+      console.error('[exportPlan]', err);
+      Alert.alert('Export failed', `Could not generate PDF: ${err.message}`);
     }
-
-    const html = buildHTML(trip, travelers);
-
-    // Generate PDF file on device
-    const { uri } = await Print.printToFileAsync({ html, base64: false });
-
-    // Check if sharing is available (it always is on device builds)
-    const canShare = await Sharing.isAvailableAsync();
-    if (!canShare) {
-      Alert.alert('Sharing not available', 'PDF was saved but sharing is not supported on this device.');
-      return;
-    }
-
-    // Open share sheet — user can save to Files, AirDrop, email, etc.
-    const shareUri = await renameForShare(uri, tripPdfName(trip, 'plan'));
-    await Sharing.shareAsync(shareUri, {
-      mimeType: 'application/pdf',
-      dialogTitle: `Share ${trip.name} itinerary`,
-      UTI: 'com.adobe.pdf',
-    });
-
-  } catch (err) {
-    console.error('[exportPlan]', err);
-    Alert.alert('Export failed', `Could not generate PDF: ${err.message}`);
-  }
+  });
 }
 
 /**
@@ -783,37 +796,39 @@ export async function exportTripAsPDF(trip, travelers = []) {
  */
 export async function exportSettlementAsPDF(trip, travelers = []) {
   if (!trip) return;
-  try {
-    let Print, Sharing;
+  return runExclusive(async () => {
     try {
-      Print   = await import('expo-print');
-      Sharing = await import('expo-sharing');
-    } catch {
-      Alert.alert(
-        'Package not installed',
-        'Run this in your terminal first:\n\nnpx expo install expo-print expo-sharing\n\nThen restart Expo Go.',
-        [{ text: 'OK' }],
-      );
-      return;
+      let Print, Sharing;
+      try {
+        Print   = await import('expo-print');
+        Sharing = await import('expo-sharing');
+      } catch {
+        Alert.alert(
+          'Package not installed',
+          'Run this in your terminal first:\n\nnpx expo install expo-print expo-sharing\n\nThen restart Expo Go.',
+          [{ text: 'OK' }],
+        );
+        return;
+      }
+
+      const html = buildSettlementHTML(trip, travelers);
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        Alert.alert('Sharing not available', 'PDF was saved but sharing is not supported on this device.');
+        return;
+      }
+
+      const shareUri = await renameForShare(uri, tripPdfName(trip, 'settlement'));
+      await Sharing.shareAsync(shareUri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Share ${trip.name} settlement`,
+        UTI: 'com.adobe.pdf',
+      });
+    } catch (err) {
+      console.error('[exportPlan:settlement]', err);
+      Alert.alert('Export failed', `Could not generate PDF: ${err.message}`);
     }
-
-    const html = buildSettlementHTML(trip, travelers);
-    const { uri } = await Print.printToFileAsync({ html, base64: false });
-
-    const canShare = await Sharing.isAvailableAsync();
-    if (!canShare) {
-      Alert.alert('Sharing not available', 'PDF was saved but sharing is not supported on this device.');
-      return;
-    }
-
-    const shareUri = await renameForShare(uri, tripPdfName(trip, 'settlement'));
-    await Sharing.shareAsync(shareUri, {
-      mimeType: 'application/pdf',
-      dialogTitle: `Share ${trip.name} settlement`,
-      UTI: 'com.adobe.pdf',
-    });
-  } catch (err) {
-    console.error('[exportPlan:settlement]', err);
-    Alert.alert('Export failed', `Could not generate PDF: ${err.message}`);
-  }
+  });
 }

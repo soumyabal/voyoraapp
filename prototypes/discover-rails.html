@@ -225,6 +225,45 @@
   .tab.on{color:var(--accent)}.tab.on .tabring{background:color-mix(in srgb,var(--accent) 16%,transparent)}
   .tabring{padding:4px 12px;border-radius:999px;transition:background .2s}.tab:active{transform:scale(.92)}
 
+  /* ---------- bottom sheet (create / paste / ai / templates) ---------- */
+  .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5);z-index:90;opacity:0;pointer-events:none;transition:opacity .25s}
+  .backdrop.show{opacity:1;pointer-events:auto}
+  .sheet{position:absolute;left:0;right:0;bottom:0;z-index:91;background:var(--bg2);border-radius:28px 28px 0 0;border-top:1px solid var(--line);
+    transform:translateY(102%);transition:transform .32s cubic-bezier(.2,.85,.25,1);max-height:90%;display:flex;flex-direction:column;box-shadow:0 -16px 40px rgba(0,0,0,.4)}
+  .sheet.show{transform:none}
+  .sheet .grip{width:40px;height:4px;border-radius:3px;background:var(--line);margin:10px auto 2px}
+  .sheet .shead{display:flex;align-items:center;justify-content:space-between;padding:6px 20px 6px}
+  .sheet .shead h3{margin:0;font-size:21px;font-weight:800}
+  .sheet .sclose{font-size:20px;color:var(--faint);cursor:pointer;padding:4px 8px}
+  .scontent{padding:4px 20px 24px;overflow-y:auto}
+  .scontent::-webkit-scrollbar{display:none}
+  .snote{font-size:13px;color:var(--muted);line-height:1.45;margin:2px 0 12px}
+  .ta{width:100%;min-height:118px;border-radius:16px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:13px;font:inherit;font-size:14px;resize:none}
+  .ta::placeholder{color:var(--faint)}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:11px;font-weight:800;color:var(--muted);margin-bottom:6px;letter-spacing:.4px}
+  .input{width:100%;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:12px 14px;font:inherit;font-size:15px}
+  .input::placeholder{color:var(--faint)}
+  .datepills{display:flex;gap:8px}
+  .datepills .dp{flex:1;border-radius:14px;border:1px solid var(--line);background:var(--card);padding:11px;text-align:center;cursor:pointer}
+  .datepills .dp .dl2{font-size:11px;color:var(--muted);font-weight:800}.datepills .dp .dv{font-weight:800;margin-top:2px}
+  .cta{width:100%;border:0;border-radius:16px;background:var(--accent);color:#fff;font:inherit;font-weight:800;font-size:16px;padding:15px;cursor:pointer;margin-top:8px}
+  .cta:active{transform:scale(.99)}
+  .cta.ghost{background:var(--card);color:var(--text);border:1px solid var(--line)}
+  .linkbtn{background:0;border:0;color:var(--accent);font:inherit;font-weight:800;font-size:13px;cursor:pointer;padding:6px 0}
+  .steps{display:flex;gap:6px;margin:2px 0 14px}
+  .steps i{flex:1;height:4px;border-radius:3px;background:var(--line)}.steps i.on{background:var(--accent)}
+  .famline{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:14px;border:1px solid var(--line);background:var(--card);margin-bottom:9px}
+  .famline .fe2{font-size:22px}.famline .fn2{font-weight:800;font-size:14px}.famline .fs2{font-size:12px;color:var(--muted)}
+  .famline .rm{margin-left:auto;color:var(--faint);cursor:pointer;font-size:18px;padding:0 4px}
+  .shimmer{height:13px;border-radius:7px;margin:9px 0;background:linear-gradient(90deg,var(--card) 25%,var(--card2) 37%,var(--card) 63%);background-size:400% 100%;animation:sh 1.15s infinite}
+  @keyframes sh{0%{background-position:100% 0}100%{background-position:-100% 0}}
+  .loadwrap{text-align:center;padding:14px 0 6px}.loadwrap .le{font-size:40px}.loadwrap .lt{font-weight:800;font-size:17px;margin-top:8px}.loadwrap .ls{font-size:13px;color:var(--muted);margin-top:3px}
+  .tmpl{display:flex;gap:12px;align-items:center;padding:10px;border-radius:16px;border:1px solid var(--line);background:var(--card);margin-bottom:10px;cursor:pointer}
+  .tmpl:active{transform:scale(.99)}
+  .tmpl .te{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;font-size:24px;flex:0 0 auto}
+  .tmpl .tt2{font-weight:800;font-size:15px}.tmpl .ts2{font-size:12px;color:var(--muted);margin-top:2px}
+
   .toast{position:absolute;left:50%;bottom:92px;transform:translateX(-50%) translateY(14px);z-index:80;background:#000;color:#fff;padding:11px 16px;border-radius:14px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;border:1px solid rgba(255,255,255,.14);max-width:84%;text-align:center}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
@@ -291,10 +330,10 @@
 
         <div class="sec" id="startrail"><h2>Start your trip</h2></div>
         <div class="rail">
-          <div class="act" onclick="toast('✨ Magic Paste')"><div class="ai" style="background:color-mix(in srgb,var(--smart) 22%,transparent)">✨</div><div><div class="at">Paste a plan</div><div class="as">From ChatGPT, a blog, anywhere</div></div></div>
-          <div class="act" onclick="toast('👨‍👩‍👧 New group trip')"><div class="ai" style="background:color-mix(in srgb,var(--accent) 18%,transparent)">👨‍👩‍👧‍👦</div><div><div class="at">Group trip</div><div class="as">Add families · costs auto-split</div></div></div>
-          <div class="act" onclick="toast('🤖 Plan with AI')"><div class="ai" style="background:color-mix(in srgb,var(--smart) 22%,transparent)">🤖</div><div><div class="at">Plan with AI</div><div class="as">Day-by-day from your vibe</div></div></div>
-          <div class="act" onclick="toast('📋 Templates')"><div class="ai" style="background:color-mix(in srgb,var(--accent) 18%,transparent)">📋</div><div><div class="at">Templates</div><div class="as">Proven multi-family routes</div></div></div>
+          <div class="act" onclick="openSheet('paste')"><div class="ai" style="background:color-mix(in srgb,var(--smart) 22%,transparent)">✨</div><div><div class="at">Paste a plan</div><div class="as">From ChatGPT, a blog, anywhere</div></div></div>
+          <div class="act" onclick="openSheet('create')"><div class="ai" style="background:color-mix(in srgb,var(--accent) 18%,transparent)">👨‍👩‍👧‍👦</div><div><div class="at">Group trip</div><div class="as">Add families · costs auto-split</div></div></div>
+          <div class="act" onclick="openSheet('ai')"><div class="ai" style="background:color-mix(in srgb,var(--smart) 22%,transparent)">🤖</div><div><div class="at">Plan with AI</div><div class="as">Day-by-day from your vibe</div></div></div>
+          <div class="act" onclick="openSheet('templates')"><div class="ai" style="background:color-mix(in srgb,var(--accent) 18%,transparent)">📋</div><div><div class="at">Templates</div><div class="as">Proven multi-family routes</div></div></div>
         </div>
 
         <div class="sec"><h2>Made for groups</h2><a onclick="toast('See all')">See all</a></div>
@@ -307,7 +346,7 @@
 
       <!-- ================= TRIPS ================= -->
       <section class="screen" id="s-trips">
-        <div class="dhead"><h1>Trips</h1><div class="iconpill"><button class="iconbtn" onclick="toast('New trip')"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div></div>
+        <div class="dhead"><h1>Trips</h1><div class="iconpill"><button class="iconbtn" onclick="openSheet('create')"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div></div>
         <div style="padding:0 16px">
           <div class="trip" style="width:100%;margin-bottom:13px" onclick="openTrip('ord')"><div class="ph" style="background:linear-gradient(160deg,#d98a3d,#a85a22)">🏰<span class="badge">🟢 Happening now</span></div><div class="body"><div class="ti">7-Day ORD ⇌ LAX Trip</div><div class="me"><span class="chip">3 families</span><span class="chip split">$2,140 · auto-split</span></div></div></div>
           <div class="trip" style="width:100%;margin-bottom:13px" onclick="openTrip('holland')"><div class="ph" style="background:linear-gradient(160deg,#5f8f7a,#2f5547)">⛵<span class="badge">In 3 days</span></div><div class="body"><div class="ti">HollandJun12</div><div class="me"><span class="chip">2 families</span><span class="chip split">auto-split</span></div></div></div>
@@ -428,12 +467,88 @@
       <div class="tab" data-s="profile" onclick="goTab('profile')"><span class="tabring"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/><path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><span>Profile</span></div>
     </nav>
 
+    <!-- ============ bottom sheet (flows) ============ -->
+    <div class="backdrop" id="backdrop" onclick="closeSheet()"></div>
+    <div class="sheet" id="sheet">
+      <div class="grip"></div>
+      <div class="shead"><h3 id="sheetTitle">Start a trip</h3><span class="sclose" onclick="closeSheet()">✕</span></div>
+      <div class="scontent" id="scontent"></div>
+    </div>
+
     <div class="toast" id="toast"></div>
   </div>
 
 <script>
   let toastTimer;
   function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),1700);}
+
+  /* ---------- bottom-sheet onboarding flows ---------- */
+  const SAMPLE_PLAN = `Day 1: Arrive in LA — Santa Monica Pier, sunset dinner\nDay 2: Griffith Observatory, then Hollywood\nDay 3: Universal Studios (full day)\nDay 4: Drive to San Diego — Balboa Park`;
+  const TITLES = {paste:'✨ Paste a plan', create:'New group trip', ai:'🤖 Plan with AI', templates:'Templates'};
+  let createStep = 1;
+  let createFamilies = [{e:'👨‍👩‍👧',n:'The Patels',s:'4 members · 2 rooms'},{e:'👩‍👦',n:'The Lees',s:'2 members · 1 room'}];
+
+  function openSheet(mode){ createStep=1; renderSheet(mode);
+    document.getElementById('backdrop').classList.add('show'); document.getElementById('sheet').classList.add('show'); }
+  function closeSheet(){ document.getElementById('backdrop').classList.remove('show'); document.getElementById('sheet').classList.remove('show'); }
+  function renderSheet(mode){ document.getElementById('sheetTitle').textContent = TITLES[mode]||'Start a trip';
+    document.getElementById('scontent').innerHTML = SHEETS[mode] ? SHEETS[mode]() : ''; }
+
+  const famLine = (f,i)=>`<div class="famline"><span class="fe2">${f.e}</span><div><div class="fn2">${f.n}</div><div class="fs2">${f.s}</div></div><span class="rm" onclick="rmFam(${i})">✕</span></div>`;
+
+  const SHEETS = {
+    paste(){ return `
+      <div class="snote">Drop an itinerary from ChatGPT, Gemini, or a travel blog — we'll draft the whole trip, day by day.</div>
+      <textarea class="ta" id="pasteTA" placeholder="Paste your plan…&#10;&#10;Day 1: Arrive, Santa Monica&#10;Day 2: Griffith Observatory…"></textarea>
+      <button class="linkbtn" onclick="document.getElementById('pasteTA').value=SAMPLE_PLAN">Try a sample ›</button>
+      <div class="snote" style="background:var(--card);padding:10px 12px;border-radius:12px;border:1px solid var(--line)">📅 Real dates? We use them. No dates? We start it ~2 weeks out — change anytime.</div>
+      <button class="cta" onclick="buildTrip('paste')">✨ Build my trip</button>`; },
+    create(){
+      if(createStep===1) return `
+        <div class="steps"><i class="on"></i><i></i><i></i></div>
+        <div class="field"><label>TRIP NAME</label><input class="input" value="Smoky Mountains Reunion"></div>
+        <div class="field"><label>DESTINATION</label><input class="input" value="Gatlinburg, TN"></div>
+        <div class="field"><label>DATES</label><div class="datepills"><div class="dp"><div class="dl2">START</div><div class="dv">Aug 9</div></div><div class="dp"><div class="dl2">END</div><div class="dv">Aug 13</div></div></div></div>
+        <button class="cta" onclick="createGo(2)">Next: add families →</button>`;
+      if(createStep===2) return `
+        <div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
+        <div class="snote">Each family splits costs by its own size — <b>hotels by rooms × nights</b>, meals &amp; transit <b>by heads</b>. This is what makes the split fair.</div>
+        <div id="famlist">${createFamilies.map(famLine).join('')}</div>
+        <button class="cta ghost" onclick="addFam()">＋ Add a family</button>
+        <button class="cta" onclick="createGo(3)">Review →</button>`;
+      return `
+        <div class="steps"><i class="on"></i><i class="on"></i><i class="on"></i></div>
+        <div class="loadwrap"><div class="le">🎉</div><div class="lt">Ready to go</div><div class="ls">${createFamilies.length} families · costs auto-split per family</div></div>
+        <button class="cta" onclick="buildTrip('create')">Create trip</button>
+        <button class="cta ghost" onclick="createGo(2)">← Back</button>`;
+    },
+    ai(){ return `
+      <div class="snote">Tell us the vibe — we plan it day-by-day with the deterministic rule engine (route, travel time, opening hours).</div>
+      <input class="input" placeholder="5 relaxed days in San Diego with 2 kids…" style="margin-bottom:10px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <span class="chip">🧘 Relaxed</span><span class="chip">⚡ Packed</span><span class="chip">🏖 Beach</span><span class="chip">🍜 Food</span><span class="chip">♿ Step-free</span></div>
+      <button class="cta" onclick="buildTrip('ai')">🤖 Generate plan</button>`; },
+    templates(){ return `
+      <div class="snote">Start from a proven multi-family route — fully editable after.</div>
+      <div class="tmpl" onclick="openTrip('smoky')"><div class="te" style="background:linear-gradient(160deg,#5f8f7a,#2f5547)">🏔️</div><div><div class="tt2">Smoky Mountains Reunion</div><div class="ts2">4 families · 5 days · cabins</div></div></div>
+      <div class="tmpl" onclick="openTrip('socal')"><div class="te" style="background:linear-gradient(160deg,#2bb3c0,#0a7c91)">🌊</div><div><div class="tt2">SoCal Coast with Kids</div><div class="ts2">3 families · 7 days · beach</div></div></div>
+      <div class="tmpl" onclick="openTrip('georgia')"><div class="te" style="background:linear-gradient(160deg,#8a93a3,#5c6675)">⛰️</div><div><div class="tt2">Georgia: Caucasus</div><div class="ts2">3 families · 6 days · epic</div></div></div>`; }
+  };
+
+  function createGo(step){ createStep=step; renderSheet('create'); }
+  function addFam(){ const pool=[{e:'👨‍👧‍👦',n:'The Reyes',s:'3 members · 1 room'},{e:'👪',n:'The Okolies',s:'5 members · 2 rooms'},{e:'👩‍👩‍👧',n:'The Kims',s:'3 members · 2 rooms'}];
+    const next=pool[createFamilies.length%pool.length]; createFamilies.push(next); renderSheet('create'); }
+  function rmFam(i){ if(createFamilies.length>1){ createFamilies.splice(i,1); renderSheet('create'); } }
+
+  function buildTrip(mode){
+    const M={paste:['Reading your plan…','Found 4 days · 9 stops · coords resolved'],create:['Setting up families…','Splitting costs per family'],ai:['Planning your days…','Route + travel time + opening hours']};
+    document.getElementById('sheetTitle').textContent='Building…';
+    document.getElementById('scontent').innerHTML =
+      `<div class="loadwrap"><div class="le">✨</div><div class="lt">${M[mode][0]}</div><div class="ls">${M[mode][1]}</div></div>
+       <div class="shimmer"></div><div class="shimmer" style="width:82%"></div><div class="shimmer" style="width:64%"></div>`;
+    setTimeout(()=>{ closeSheet(); openTrip(mode==='create'?'smoky':'holland');
+      toast(mode==='paste'?'Trip built — 4 days, 9 stops':mode==='ai'?'Plan generated — review & tweak':'Trip created — costs auto-split'); }, 1350);
+  }
   function goTab(name){
     document.querySelectorAll('.app .screen').forEach(s=>s.classList.remove('active'));
     document.getElementById('s-'+name)?.classList.add('active');

@@ -47,5 +47,8 @@ describe('itineraryConfig', () => {
       expect(actEmoji({ type: 'activity' })).toBe('🎯');
       expect(actEmoji({})).toBe('🎯');   // safe default
     });
+    test('a hotel check-out (stored as a misc activity) shows luggage, not 🎯', () => {
+      expect(actEmoji({ type: 'activity', subtype: 'misc', checkout: true })).toBe('🧳');
+    });
   });
 });

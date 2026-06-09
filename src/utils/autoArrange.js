@@ -815,6 +815,25 @@ const FAR_CHECKOUT_MIN = 75;
 // time-locked Check-out anchor at the hotel's check-out time + location. Locked → it
 // anchors the morning and the rest of the day routes around it. Uses the same `checkout`
 // flag the manual "Add checkout" banner sets, so it's idempotent across both paths.
+// Smart check-out time: you must be OUT before you leave. If a departure transport (a timed
+// flight / drive / car-return leg) sits at or before the hotel's nominal check-out, anchor the
+// 15-min check-out so it ENDS just as that first leg begins — never after it (the "check out at
+// 11:00 when the flight is 10:30" bug). No earlier departure → keep the hotel's standard time.
+const CHECKOUT_DUR_MIN = 15;
+export function smartCheckoutTime(hotelCheckoutTime, acts) {
+  const base = timeToMin(hotelCheckoutTime);
+  if (!(base >= 0)) return hotelCheckoutTime;
+  const earliestDep = (acts || [])
+    .filter(a => a.type === 'transport' && a.time && a.status !== 'skipped')
+    .map(a => timeToMin(a.time))
+    .filter(m => m > 0)
+    .sort((x, y) => x - y)[0];
+  if (earliestDep != null && earliestDep < base + CHECKOUT_DUR_MIN) {
+    return minToTime(Math.max(0, earliestDep - CHECKOUT_DUR_MIN));
+  }
+  return hotelCheckoutTime;
+}
+
 function withCheckoutStop(activities, opts) {
   const co = opts.checkout;
   const list = activities || [];
@@ -824,7 +843,8 @@ function withCheckoutStop(activities, opts) {
     checkout: true, subtype: 'misc', type: 'activity', timeLocked: true,
     name: co.name ? `Check out of ${co.name}` : 'Hotel check-out',
     detail: 'Pack up and head out',
-    time: co.time, durationMins: 15, costPerPerson: 0, costMode: 'per_person', costAmount: 0,
+    time: smartCheckoutTime(co.time, list), durationMins: CHECKOUT_DUR_MIN,
+    costPerPerson: 0, costMode: 'per_person', costAmount: 0,
     lat: co.lat ?? null, lng: co.lng ?? null, status: null,
   }, ...list];
 }

@@ -22,6 +22,7 @@ export const ACT_ICON = { transport: 'transport', stay: 'hotel', food: 'food', a
 export const TYPE_EMOJI = { transport: '🚗', stay: '🏨', food: '🍽️', activity: '🎯', note: '📝' };
 export const TRANSPORT_EMOJI = { car: '🚗', flight: '✈️', train: '🚆', ship: '⛴️', bus: '🚌', pitstop: '⛽' };
 export function actEmoji(act) {
+  if (act?.checkout) return '🧳';   // a hotel check-out (stored as a misc activity) — luggage, not a 🎯
   if (act?.type === 'transport') return TRANSPORT_EMOJI[act.subtype] || TYPE_EMOJI.transport;
   return TYPE_EMOJI[act?.type] || '🎯';
 }

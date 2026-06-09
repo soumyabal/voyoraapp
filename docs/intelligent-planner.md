@@ -112,7 +112,7 @@ ordering. Pure function: returns sorted copies, never mutates, preserves notes/s
 | Type | Window | Notes |
 |---|---|---|
 | Hotel check-in | ~16:00 | Late afternoon — never morning. Day-1 arrival lands here |
-| Hotel check-out | ~10:00 | On the departure day only |
+| Hotel check-out | ~10:00 | On the departure day only. **Smart-capped** (`smartCheckoutTime`): if a departure leg (flight / car-return) is timed before the hotel's nominal check-out, the 15-min check-out is pulled to END just before that leg — you can't check out at 11:00 when you fly at 10:30. Used by both Plan-my-day's `withCheckoutStop` and the manual "Add checkout" banner |
 | Breakfast | ~08:00 | |
 | Lunch | ~12:30 | |
 | Dinner | ~19:00 | |

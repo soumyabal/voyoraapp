@@ -19,7 +19,7 @@ import { fmt, fmtM, uid, checkOutOf, resolveDayZones, pastActivityIds, isDayInPa
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost } from '../utils/costs';
 import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor, nightCityFor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
-import { planDay, returnJourneyDraft, suggestDayForVenue } from '../utils/autoArrange';
+import { planDay, returnJourneyDraft, suggestDayForVenue, smartCheckoutTime } from '../utils/autoArrange';
 import { travelLeg, formatMi } from '../utils/geo';
 import { weekdayOf, hoursLabel, weeklyHoursLabel, dayIntervals } from '../utils/hours';
 import { refreshPhotoKey } from '../utils/places';
@@ -1396,10 +1396,16 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             const hotel = (co?.stay && co.isLastNight) ? co.stay : null;
             if (!hotel) return null;
             if ((day.activities || []).some(a => a.checkout && a.status !== 'skipped')) return null;
-            const time = checkOutOf(hotel);
+            const nominal = checkOutOf(hotel);
+            // Smart: if a departure (flight/car return) is earlier than the hotel's checkout, place
+            // the checkout just before it — you can't check out at 11:00 if you fly at 10:30.
+            const time = smartCheckoutTime(nominal, day.activities);
+            const adjusted = time !== nominal;
             const askAddCheckout = () => Alert.alert(
               `Leaving ${hotel.name}`,
-              `Add a 15-minute checkout so this day's route starts from the hotel? Standard checkout is ${time} — you can change the time on the card.`,
+              adjusted
+                ? `Your first departure is before the hotel's ${nominal} checkout, so we'll add a 15-minute checkout at ${time} — before you leave. You can change the time on the card.`
+                : `Add a 15-minute checkout so this day's route starts from the hotel? Standard checkout is ${time} — you can change the time on the card.`,
               [
                 { text: 'Not now', style: 'cancel' },
                 { text: `Add checkout (${time})`, onPress: () => {

@@ -1022,7 +1022,8 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           const isFlight = draft.subtype === 'flight';
           const addReturn = () => {
             const id = uid();
-            addActivity(trip.id, currentDay, { ...draft, id });
+            const { driveMin: _dm, ...act } = draft;   // driveMin is card-only metadata, not an activity field
+            addActivity(trip.id, currentDay, { ...act, id });
             showUndoAction(`${emoji} ${draft.name} added · ${isFlight ? 'set the time' : 'set the time + cost'}`, 'airplane-outline', () => deleteActivity(trip.id, id));
           };
           return (
@@ -1033,6 +1034,11 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                   ? `Your return flight is usually booked round-trip (already paid) — add “${draft.name}” so the last day plans around it. We left the cost off; just set the time.`
                   : `Add your way home — we pre-filled “${draft.name}”. Set the time, and the cost if there is one.`}
               </Text>
+              {!isFlight && draft.driveMin ? (
+                <Text style={styles.returnEta}>
+                  🚗 ≈ {formatDuration(draft.driveMin)} drive · leave {draft.time} → home by ~{draft.arriveTime}
+                </Text>
+              ) : null}
               <View style={styles.returnBtnRow}>
                 <TouchableOpacity style={styles.returnAddBtn} onPress={addReturn} activeOpacity={0.85}>
                   <Text style={styles.returnAddText}>+ Add return</Text>
@@ -2342,6 +2348,7 @@ const styles = StyleSheet.create({
   returnCard: { marginHorizontal: spacing.xxl, marginTop: spacing.sm, marginBottom: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: 12, backgroundColor: '#eef2ff', borderRadius: radius.lg, borderWidth: 1, borderColor: '#c7d2fe' },
   returnTitle: { fontSize: 14, fontWeight: '800', color: '#3730a3' },
   returnBody: { fontSize: 12.5, color: '#4338ca', marginTop: 4, lineHeight: 17 },
+  returnEta: { fontSize: 12.5, fontWeight: '700', color: '#3730a3', marginTop: 6 },
   returnBtnRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: 10 },
   returnAddBtn: { backgroundColor: '#4f46e5', paddingHorizontal: spacing.lg, paddingVertical: 8, borderRadius: radius.full },
   returnAddText: { color: '#fff', fontSize: 13, fontWeight: '800' },

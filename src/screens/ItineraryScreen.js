@@ -1485,9 +1485,9 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
               const inner = (
                 <>
                   <Icon name="hotel" size={14} color={colors.smart} />
-                  <Text style={styles.lodgeChipText}>Night {lod.nightNumber} of {lod.nights} · {lod.stay.name}</Text>
-                  {!lod.isCheckInDay && <Text style={styles.lodgeChipMuted}>· no extra charge</Text>}
-                  {!!book && <Text style={styles.lodgeBookLink}>  🛏 Book ›</Text>}
+                  <Text style={styles.lodgeChipText} numberOfLines={1}>Night {lod.nightNumber} of {lod.nights} · {lod.stay.name}</Text>
+                  {!lod.isCheckInDay && <Text style={styles.lodgeChipMuted} numberOfLines={1}>· no extra charge</Text>}
+                  {!!book && <Text style={styles.lodgeBookLink} numberOfLines={1}>  🛏 Book ›</Text>}
                 </>
               );
               return book ? (
@@ -2676,8 +2676,8 @@ const styles = StyleSheet.create({
   // ── Activities list ──────────────────────────────────────────────
   activities: { paddingTop: spacing.sm },
   // Derived "where you sleep tonight" footer chip
-  lodgeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.smartSoft },
-  lodgeChipText: { ...typography.caption, color: colors.smartDeep, fontWeight: '700' },
+  lodgeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', maxWidth: '90%', marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.smartSoft },
+  lodgeChipText: { ...typography.caption, color: colors.smartDeep, fontWeight: '700', flexShrink: 1 },
   lodgeChipMuted: { ...typography.caption, color: colors.subtle },
   lodgeBookLink:  { ...typography.caption, color: colors.accent, fontWeight: '800' },
   // Checkout-day prompt — informational indigo (matches the lodging family), never amber.

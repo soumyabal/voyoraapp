@@ -28,7 +28,7 @@ import { getDietaryWarning } from '../utils/dietary';
 import { generateDayShareText } from '../utils/dayShare';
 import { computeTripHealth } from '../utils/tripHealth';
 import { tripCheckStatus } from '../utils/tripCheckStatus';
-import { DAY_SLOTS, actIconName, SEV_RANK, DAY_PILL, HEALTH_DOT, NIGHT_PLAN_OPTIONS, NIGHT_PLAN_META } from '../utils/itineraryConfig';
+import { DAY_SLOTS, actEmoji, SEV_RANK, DAY_PILL, HEALTH_DOT, NIGHT_PLAN_OPTIONS, NIGHT_PLAN_META } from '../utils/itineraryConfig';
 import { bookingUrl } from '../utils/booking';
 import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
@@ -1862,7 +1862,7 @@ function ActivityCard({ activity: act, trip, dayDate, zoneLabel, leg, autoLocked
         <View style={styles.actLead}>
           {heroPhoto ? (
             <View style={[styles.actLeadIcon, { backgroundColor: (activityColors[act.type] || colors.muted) + '1A' }]}>
-              <Icon name={actIconName(act)} size={22} color={activityColors[act.type] || colors.subtle} />
+              <Text style={styles.actLeadEmoji}>{actEmoji(act)}</Text>
             </View>
           ) : thumbAction ? (
             <TouchableOpacity
@@ -1876,7 +1876,7 @@ function ActivityCard({ activity: act, trip, dayDate, zoneLabel, leg, autoLocked
                 <Image source={{ uri: refreshPhotoKey(act.photo) }} style={styles.actLeadPhoto} />
               ) : (
                 <View style={[styles.actLeadIcon, { backgroundColor: (activityColors[act.type] || colors.muted) + '1A' }]}>
-                  <Icon name={actIconName(act)} size={22} color={activityColors[act.type] || colors.subtle} />
+                  <Text style={styles.actLeadEmoji}>{actEmoji(act)}</Text>
                 </View>
               )}
               <View style={[styles.thumbLinkBadge, thumbAction.kind === 'book' && styles.thumbBookBadge]} pointerEvents="none">
@@ -1887,7 +1887,7 @@ function ActivityCard({ activity: act, trip, dayDate, zoneLabel, leg, autoLocked
             <Image source={{ uri: refreshPhotoKey(act.photo) }} style={styles.actLeadPhoto} />
           ) : (
             <View style={[styles.actLeadIcon, { backgroundColor: (activityColors[act.type] || colors.muted) + '1A' }]}>
-              <Icon name={actIconName(act)} size={22} color={activityColors[act.type] || colors.subtle} />
+              <Text style={styles.actLeadEmoji}>{actEmoji(act)}</Text>
             </View>
           )}
         </View>
@@ -2904,6 +2904,7 @@ const styles = StyleSheet.create({
   actLead:       { width: 56, alignItems: 'center', justifyContent: 'center' },
   actLeadPhoto:  { width: 56, height: 56, borderRadius: 12, backgroundColor: colors.surface2 },
   actLeadIcon:   { width: 56, height: 56, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  actLeadEmoji:  { fontSize: 28, lineHeight: 34, textAlign: 'center' },
   thumbLinkBadge:{ position: 'absolute', right: -3, bottom: -3, width: 19, height: 19, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.surface },
   thumbBookBadge:{ backgroundColor: colors.accent },
   actEyebrow:    { ...typography.caption, color: colors.subtle, marginBottom: 1 },

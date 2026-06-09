@@ -78,7 +78,7 @@ a one-tap fix). Rules run per-day, then trip-wide.
 | 9 | `wake_time` | info | Activity scheduled before a family's wake window (late risers < 9 AM, or anyone < 7 AM) |
 | 10 | `dietary_conflict` | warning | Food name implies meat/seafood vs a vegetarian/vegan family, or alcohol vs a no-alcohol family |
 | 11 | `duplicate_activity` | warning | Same place added more than once on a day |
-| 12 | `multi_city_day` | warning | Activities tagged with ≥2 different cities on one day |
+| 12 | `multi_city_day` | warning | Activities tagged with ≥2 different cities on one day **and no inter-city journey planned**. A real "Drive/Fly A→B" leg on the day = a normal travel day → not flagged (a fuel pitstop doesn't count) |
 | 12b | `timezone_shift` | info | The day's located stops span ≥2 UTC offsets — a heads-up that clocks change mid-day |
 | 13 | `closed_venue` | `closed_permanently` error · `closed_temporarily` warning · verify-hours info | **Hours/status-aware**: an attraction/restaurant scheduled while it's closed (opening hours don't cover the time), permanently closed, or temporarily shut (with a "verify current hours" link) |
 

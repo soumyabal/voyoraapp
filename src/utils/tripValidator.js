@@ -867,7 +867,11 @@ function ruleMultiCity(ctx) {
   const warnings = [];
   const cityTagged = acts.filter(a => a.city && a.type !== 'transport');
   const distinctCities = [...new Set(cityTagged.map(a => a.city))];
-  if (distinctCities.length >= 2) {
+  // If the day already has a real journey leg (a planned "Drive/Fly A→B", not a fuel pitstop), the
+  // inter-city travel IS planned — a road-trip travel day is normal, not a warning. The rule's own
+  // advice ("add the inter-city transport") is already satisfied, so don't nag.
+  const hasJourneyLeg = acts.some(a => a.type === 'transport' && a.subtype !== 'pitstop');
+  if (distinctCities.length >= 2 && !hasJourneyLeg) {
     warnings.push({
       type:     'multi_city_day',
       severity: 'warning',

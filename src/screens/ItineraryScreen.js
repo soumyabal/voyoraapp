@@ -1013,7 +1013,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
         {/* ── "Heading home?" — last-day return-journey one-tap draft (propose, never
             commit; only known facts pre-filled, cost left blank, dismissal remembered) ── */}
         {(() => {
-          const isLastDay = trip.days.length > 1 && currentDay === trip.days.length - 1;
+          const isLastDay = currentDay === trip.days.length - 1;   // also true on a 1-day day-trip
           if (!isLastDay) return null;
           if ((trip.ignoredWarnings || []).includes('return_journey')) return null;
           const draft = returnJourneyDraft(trip);

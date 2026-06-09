@@ -50,8 +50,35 @@ describe('returnJourneyDraft', () => {
     expect(returnJourneyDraft(trip)).toBeNull();
   });
 
-  test('proposes nothing on a one-day trip', () => {
+  test('proposes nothing on an EMPTY one-day trip (nowhere to return from)', () => {
     expect(returnJourneyDraft(tripOf([day('D1', '2026-07-10', [])]))).toBeNull();
+  });
+
+  test('a DAY TRIP with a stop away from home proposes a drive back FROM the farthest stop', () => {
+    const HOLLAND = { lat: 42.79, lng: -86.11 };   // Holland, MI — far from Chicago
+    const trip = tripOf([
+      day('D1', '2026-07-10', [
+        { id: 't', type: 'transport', subtype: 'car', name: 'Drive to Holland', ...HOLLAND },
+      ]),
+    ]);
+    const d = returnJourneyDraft(trip);
+    expect(d).not.toBeNull();
+    expect(d.subtype).toBe('car');                  // mirrors the outbound drive
+    expect(d.lat).toBe(HOME.lat);                   // destination = home
+    expect(d.fromLat).toBeCloseTo(HOLLAND.lat);     // departs FROM where the day trip reached
+    expect(d.name).toContain('Holland');
+    expect(d.name).toContain('Chicago');
+  });
+
+  test('a day trip that already has a drive back home proposes nothing', () => {
+    const HOLLAND = { lat: 42.79, lng: -86.11 };
+    const trip = tripOf([
+      day('D1', '2026-07-10', [
+        { id: 't', type: 'transport', subtype: 'car', name: 'Drive to Holland', ...HOLLAND },
+        { id: 'r', type: 'transport', subtype: 'car', name: 'Drive home', lat: HOME.lat, lng: HOME.lng },
+      ]),
+    ]);
+    expect(returnJourneyDraft(trip)).toBeNull();    // homeward leg already present
   });
 
   test('open-jaw: the return departs from where the trip ENDS, not where it arrived', () => {

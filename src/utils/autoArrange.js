@@ -263,17 +263,36 @@ function tripEndLocation(trip) {
   return null;
 }
 
+// The last LOCATED stop in a list (ANY type — for a day trip the drive OUT is what got you there,
+// so unlike tripEndLocation we don't exclude transport). Returns { lat, lng, label } | null.
+function lastLocatedStop(acts) {
+  const loc = (acts || []).filter(a => a.lat != null);
+  if (!loc.length) return null;
+  const a = loc[loc.length - 1];
+  return { lat: a.lat, lng: a.lng, label: a.city || a.name };
+}
+
 export function returnJourneyDraft(trip) {
   const days = trip?.days || [];
-  if (days.length < 2) return null;                       // one-day trip
+  if (!days.length) return null;
   const origin = trip?.origin;
   if (!origin || !origin.label) return null;              // no home → the "no way home" tip handles it
+  const dayTrip = days.length === 1;                       // a same-day out-and-back (Chicago → Holland → home)
   const lastDay = days[days.length - 1];
   const acts = (lastDay.activities || []).filter(a => a.status !== 'skipped');
-  if (acts.some(a => a.type === 'transport')) return null; // a departure is already there — propose nothing
 
-  // Loop guard: a road trip that ENDS back at the origin city needs no return leg.
-  const end = tripEndLocation(trip);
+  // A way home already planned? Multi-day: ANY transport on the last day is the departure home.
+  // Day trip: the day's transports are OUTBOUND, so only one whose DESTINATION is near home counts
+  // (the drive OUT must not suppress the proposed drive BACK).
+  const homeward = (a) => a.type === 'transport' && a.lat != null && origin.lat != null
+    && haversine({ lat: a.lat, lng: a.lng }, origin) < LOOP_KM;
+  if (dayTrip ? acts.some(homeward) : acts.some(a => a.type === 'transport')) return null;
+
+  // Where the return departs FROM. Multi-day: last night's place (open-jaw aware). Day trip: the
+  // farthest point reached today — the last LOCATED stop (the wake anchor is just home on day 1).
+  const end = dayTrip ? lastLocatedStop(acts) : tripEndLocation(trip);
+  if (dayTrip && (!end || end.lat == null)) return null;   // an empty day trip — nowhere to return from
+  // Loop guard: a trip that ENDS back at the origin needs no return leg.
   if (end && origin.lat != null && haversine(end, origin) < LOOP_KM) return null;
 
   // Mirror HOW they arrived (Day-1's first transport) → the home-bound mode. Soft + editable.

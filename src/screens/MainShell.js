@@ -12,6 +12,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from './HomeScreen';
 import DiscoverScreen from './DiscoverScreen';
+import UpdatesScreen from './UpdatesScreen';
 import Icon from '../components/ui/Icon';
 import PressableScale from '../components/ui/PressableScale';
 import { colors, radius, shadow } from '../theme';
@@ -42,9 +43,7 @@ export default function MainShell({ navigation }) {
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={show('trips')}><HomeScreen navigation={navigation} /></View>
       <View style={show('discover')}><DiscoverScreen navigation={navigation} /></View>
-      <View style={show('updates')}>
-        <Placeholder emoji="🔔" title="Updates" sub="Trip activity, expense nudges, and what your group changed — coming soon." />
-      </View>
+      <View style={show('updates')}><UpdatesScreen navigation={navigation} /></View>
       <View style={show('profile')}>
         <Placeholder emoji="🙂" title="Profile" sub="Your traveler library, families, and saved trips — coming soon." />
       </View>

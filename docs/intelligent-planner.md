@@ -57,30 +57,41 @@ a one-tap fix). Rules run per-day, then trip-wide.
 
 ### Per-day rules
 
+> **Severity philosophy (re-tiered).** `error` is reserved for *provable* conflicts (a closed/
+> permanently-shut venue, a 6 h+ journey that can't share the day). Everything estimate-based —
+> overlap, travel time, packed, full-day — is a soft **`info`/`warning` tip**, never red, because
+> the duration/distance is a guess. Don't "promote" a heuristic to `error`.
+
 | # | Type | Sev | What it catches |
 |---|------|-----|-----------------|
-| 1 | `overlap` | error ≥90 min · else warning | Next activity starts before the previous one's *estimated* end (duration-based) |
-| 1b | `travel_time` | error ≥20 min short · else warning | **Distance-aware**: two located stops are too far apart for the gap between them (free haversine estimate). Pure time overlaps stay with rule 1; transport legs between stops count as the travel |
-| 2 | `full_day_conflict` | error | A ≥6 h "full-day" venue (theme park, etc.) sharing the day with ≥2 other substantial activities |
-| 3 | `packed` | warning | ≥8 substantial activities in one day |
+| 0 | `no_fit_hours` | error | A known-hours, non-seasonal venue the planner left UNSCHEDULED (no open slot during its hours) — the terminal "move it to another day" signal |
+| 1 | `overlap` | warning ≥90 min · else info | Next activity starts before the previous one's *estimated* end (duration-based). **Zone-aware** across a multi-timezone day |
+| 1b | `travel_time` | info | **Distance-aware**: two located stops are too far apart for the gap between them (free haversine estimate). Always a soft tip (straight-line, not routing). Pure time overlaps stay with rule 1; transport legs between stops count as the travel. **Zone-aware** across a multi-timezone day |
+| 2 | `full_day_conflict` | warning | A ≥6 h "full-day" venue (theme park, etc.) sharing the day with ≥2 other substantial activities |
+| 3 | `packed` | info | ≥8 substantial activities in one day |
+| 3b | `tiring_day` | info | A very long active day (large first-to-last span with several substantial stops) — a "build in downtime" nudge |
 | 4 | `no_meal` | info | A ≥4 h day with ≥3 activities and no food stop |
 | 4b | `meal_gap` | info | Day HAS meals but two of them bracket a ≥6 h gap with touring in between and no food (the "missing lunch") — complements `no_meal` |
 | 5 | `past_midnight` | info | Last activity's estimated end crosses midnight |
 | 6 | `early_start` | info | Non-transport activity before 6 AM |
-| 8 | `multi_day_journey` | info | Transport whose `arriveTime` is earlier than departure → crosses midnight |
-| 9 | `wake_time` | warning (late fams <9 AM) · info (regular <7 AM) | Activity scheduled before a family's wake window |
+| 8 | `multi_day_journey` | info | Transport whose arrival is genuinely the next day. **Zone-aware**: a westward hop (clocks back) that only *looks* like it crosses midnight is not flagged |
+| 9 | `wake_time` | info | Activity scheduled before a family's wake window (late risers < 9 AM, or anyone < 7 AM) |
 | 10 | `dietary_conflict` | warning | Food name implies meat/seafood vs a vegetarian/vegan family, or alcohol vs a no-alcohol family |
 | 11 | `duplicate_activity` | warning | Same place added more than once on a day |
 | 12 | `multi_city_day` | warning | Activities tagged with ≥2 different cities on one day |
-| 13 | `closed_venue` | warning | **Hours-aware**: an attraction/restaurant scheduled while it's closed (its opening hours don't cover the time) |
+| 12b | `timezone_shift` | info | The day's located stops span ≥2 UTC offsets — a heads-up that clocks change mid-day |
+| 13 | `closed_venue` | `closed_permanently` error · `closed_temporarily` warning · verify-hours info | **Hours/status-aware**: an attraction/restaurant scheduled while it's closed (opening hours don't cover the time), permanently closed, or temporarily shut (with a "verify current hours" link) |
 
 ### Trip-level rules
 
 | Type | Sev | What it catches |
 |---|-----|-----------------|
+| `first_stop_unreachable` | info | A day's first stop is set earlier than you could realistically DRIVE there from where the day starts (home on Day 1, last night's hotel otherwise). Soft — we're guessing a drive |
 | `empty_day` | warning (interior) · info (first/last) | A day with nothing planned |
 | `notes_only_day` | info | Notes but no real activities/transport |
 | `unbooked_night` | warning | **Lodging gap**: an interior night with no accommodation (only when the trip uses hotels and isn't home-based) |
+| `check_out_by` | info | A stay's check-out time is earlier than activities already planned that morning |
+| `hotel_overlap` | warning | Two stays cover the same night (offers a "trim the earlier stay to N nights" fix) |
 | `lastday_missing_checkout` | info | Last day has activities but no check-out / way home |
 | `long_journey_conflict` | error | A ≥6 h transport leg sharing the day with other activities (each gets a "move to Day N" suggestion) |
 

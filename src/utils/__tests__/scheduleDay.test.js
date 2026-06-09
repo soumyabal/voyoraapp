@@ -165,4 +165,27 @@ describe('scheduleDay', () => {
     expect(scheduleDay([])).toEqual([]);
     expect(scheduleDay(null)).toEqual([]);
   });
+
+  describe('the proposed way home (source:auto-return) is placed LAST', () => {
+    test('after every other stop — even a locked late one', () => {
+      const out = scheduleDay([
+        { id: 'koi',  type: 'activity',  name: 'Koi Pond', lat: 42.79, lng: -86.11 },
+        { id: 'show', type: 'activity',  name: 'Evening Show', time: '20:00', timeLocked: true, lat: 42.79, lng: -86.11 },
+        { id: 'ret',  type: 'transport', subtype: 'car', name: 'Drive home', time: '16:00', source: 'auto-return', lat: 42.17, lng: -87.96 },
+      ], { dayRole: 'departure', endAnchor: { lat: 42.79, lng: -86.11 } });
+      const t = (id) => out.find(a => a.id === id).time;
+      expect(t('ret') > t('show')).toBe(true);   // the return departs AFTER the locked 20:00 show
+      expect(t('ret') > t('koi')).toBe(true);
+    });
+
+    test('never anchors at its soft default when a stop would fall after it', () => {
+      const out = scheduleDay([
+        { id: 'a', type: 'activity', name: 'Long museum', durationMins: 300, lat: 42.79, lng: -86.11 },
+        { id: 'b', type: 'activity', name: 'Sunset viewpoint', lat: 42.79, lng: -86.11 },
+        { id: 'ret', type: 'transport', subtype: 'car', name: 'Drive home', time: '16:00', source: 'auto-return', lat: 42.17, lng: -87.96 },
+      ], { dayRole: 'departure' });
+      const ret = out.find(a => a.id === 'ret').time;
+      out.filter(a => a.id !== 'ret' && a.time).forEach(a => expect(ret >= a.time).toBe(true));
+    });
+  });
 });

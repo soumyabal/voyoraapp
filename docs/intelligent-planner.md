@@ -109,6 +109,7 @@ ordering. Pure function: returns sorted copies, never mutates, preserves notes/s
 | Sunrise | ~06:00 | sunrise activities by name |
 | Sunset / viewpoint | ~18:30 | |
 | Transport with a set time | anchors the day | departures/arrivals fixed |
+| Proposed way home (`source:auto-return`) | **placed LAST** | a soft 16:00 default; placed after every other stop (wake → … → drive home), never mid-day. A locked return (booked flight) or a locked pit-stop after it is honored as a fixed anchor. |
 | Everything else | flows from 09:00 | nearest-neighbour around the day's hotel |
 
 **Hours-aware placement.** A daytime stop is never placed before it opens (or after it

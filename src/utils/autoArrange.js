@@ -576,8 +576,10 @@ export function scheduleDay(activities, opts = {}) {
   sched.filter(isLocked)
        .forEach(a => addInterval(occ, timeToMin(a.time), Math.max(BUFFER_MIN, estimateDuration(a))));
 
-  // 1. Transport with a user-set time anchors the day (departures/arrivals).
-  sched.filter(a => a.type === 'transport' && a.time && !isLocked(a))
+  // 1. Transport with a user-set time anchors the day (departures/arrivals). The PROPOSED way
+  //    home (source:'auto-return') is excluded — its time is a soft default, and it must land at
+  //    the day's TAIL (placed last, below), not anchored mid-afternoon.
+  sched.filter(a => a.type === 'transport' && a.time && !isLocked(a) && a.source !== 'auto-return')
        .forEach(a => addInterval(occ, timeToMin(a.time), Math.max(BUFFER_MIN, estimateDuration(a))));
   // 2. Stays → the hotel's REAL check-in time (or check-out on the departure day).
   //    Defaults to 3pm/11am; never schedules the room before the hotel will give it.
@@ -678,6 +680,19 @@ export function scheduleDay(activities, opts = {}) {
     const nxt = daytime[idx + 1];
     const leg = nxt ? travelLeg(a, nxt) : null;
     cursor = start + need + (leg ? Math.max(BUFFER_MIN, leg.min) : BUFFER_MIN);
+  });
+
+  // 6. The proposed way home goes LAST — after every other stop placed today — so the day reads
+  //    wake → … → drive home. Unless the user LOCKED it (a booked flight = a fixed anchor) or
+  //    pinned a pit-stop after it (locked stops keep their times), it sits at the tail, no earlier
+  //    than its soft default. It never anchors mid-day where a later stop could fall after it.
+  sched.filter(a => a.type === 'transport' && a.source === 'auto-return' && !isLocked(a)).forEach(a => {
+    const need = Math.max(BUFFER_MIN, estimateDuration(a));
+    const softMin = a.time ? timeToMin(a.time) : 16 * 60;
+    const latestEnd = occ.length ? Math.max(...occ.map(iv => iv[1])) : softMin;
+    const start = Math.min(Math.max(softMin, latestEnd + BUFFER_MIN), 23 * 60 + 30);   // tail of the day
+    a.time = minToTime(start);
+    addInterval(occ, start, need);
   });
 
   return all.sort((a, b) => timeToMin(a.time || '99:99') - timeToMin(b.time || '99:99'));

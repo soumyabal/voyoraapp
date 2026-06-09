@@ -151,6 +151,13 @@ export default function PasteImportModal({ visible, onClose, onCreated }) {
             Works best with a dated, day-by-day plan (the more structure, the better). It&apos;s a
             starting draft — add photos, costs, and fine-tune on the next screen.
           </Text>
+
+          <View style={s.dateTip}>
+            <Text style={s.dateTipText}>
+              📅  If your plan has real dates, we&apos;ll use them. No dates? We&apos;ll start the
+              trip about 2 weeks out — change it anytime in Edit Trip.
+            </Text>
+          </View>
         </ScrollView>
 
         {/* Sticky CTA — lives outside the scroll so the KeyboardAvoidingView keeps it ABOVE the
@@ -194,6 +201,12 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
   link: { ...typography.smallBold, color: colors.accent },
   note: { ...typography.caption, color: colors.subtle, lineHeight: 16, marginTop: spacing.lg },
+  // Date heads-up — a fresh undated paste lands ~2 weeks out, not "happening now".
+  dateTip: {
+    marginTop: spacing.md, backgroundColor: colors.accentSoft, borderRadius: radius.md,
+    padding: spacing.md, borderWidth: 1, borderColor: colors.accentTint,
+  },
+  dateTipText: { ...typography.caption, color: colors.accentDark, lineHeight: 16 },
   // Inline "that's not a trip plan" notice — calm amber, visible without relying on a toast
   // (which the keyboard would cover).
   notice: {

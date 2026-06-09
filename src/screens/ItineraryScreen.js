@@ -11,6 +11,7 @@ import DiscoverModal from '../modals/DiscoverModal';
 import SetOriginModal from '../modals/SetOriginModal';
 import PlayTripModal from '../modals/PlayTripModal';
 import { colors, spacing, radius, typography, shadow, activityColors } from '../theme';
+import { LinearGradient } from 'expo-linear-gradient';
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
 import ConfettiBurst from '../components/ui/ConfettiBurst';
@@ -395,6 +396,21 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const scrollRef = useRef(null);
   const scrollYRef = useRef(0);          // live scroll offset (from onScroll)
   const rowRefs = useRef({});
+
+  // Day rail (horizontal day picker) scroll metrics → a right/left edge fade that hints there
+  // are more days off-screen (the known discoverability gap of a horizontal rail). {w} viewport,
+  // {cw} content width, {x} offset. Pure measurement; no behaviour change to the chips.
+  const [dayRail, setDayRail] = useState({ w: 0, cw: 0, x: 0 });
+  const showDayRailRightFade = dayRail.cw > dayRail.w + 4 && dayRail.x + dayRail.w < dayRail.cw - 4;
+  const showDayRailLeftFade  = dayRail.cw > dayRail.w + 4 && dayRail.x > 4;
+
+  // Step to an adjacent day from the bottom-of-day stepper, and snap back to the top so you
+  // "fall into" the next day (the one real ergonomic win of a vertical agenda, kept here).
+  const goToDay = (idx) => {
+    if (idx < 0 || idx >= (trip.days?.length || 0)) return;
+    setCurrentDay(idx);
+    scrollRef.current?.scrollTo?.({ y: 0, animated: true });
+  };
   useEffect(() => {
     const id = highlightedActIds[0];
     if (!id) return undefined;
@@ -959,7 +975,15 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             to the top, even on long photo-forward days. Solid bar so content doesn't bleed
             through when stuck. (no live "today" tracking in the planner) */}
         <View style={styles.dayNavBar}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xxl }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: spacing.xxl }}
+            onLayout={e => setDayRail(s => ({ ...s, w: e.nativeEvent.layout.width }))}
+            onContentSizeChange={cw => setDayRail(s => ({ ...s, cw }))}
+            onScroll={e => setDayRail(s => ({ ...s, x: e.nativeEvent.contentOffset.x }))}
+            scrollEventThrottle={32}
+          >
             {trip.days.map((d, i) => {
               const dc = calcDayCostForTrip(d, trip);
               const healthDot = HEALTH_DOT[healthByDay[i]];   // undefined for clean/empty/tip → calm
@@ -978,6 +1002,16 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
               );
             })}
           </ScrollView>
+          {/* Edge fades — soft cue that more days sit off-screen left/right (a horizontal rail
+              hides this otherwise). Pure overlay, never intercepts taps. */}
+          {showDayRailLeftFade && (
+            <LinearGradient pointerEvents="none" style={[styles.dayRailFade, styles.dayRailFadeLeft]}
+              colors={['rgba(247,245,242,1)', 'rgba(247,245,242,0)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
+          )}
+          {showDayRailRightFade && (
+            <LinearGradient pointerEvents="none" style={[styles.dayRailFade, styles.dayRailFadeRight]}
+              colors={['rgba(247,245,242,0)', 'rgba(247,245,242,1)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
+          )}
         </View>
 
         {/* ── Must-dos strip ── */}
@@ -1467,6 +1501,28 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             return null;
           })()}
         </View>
+
+        {/* Prev / next day — fall naturally into the next day without scrolling back up to the
+            picker (the one real ergonomic win of a vertical agenda). Each edge shows only the
+            available direction; hidden entirely on a 1-day trip. goToDay snaps back to the top. */}
+        {trip.days.length > 1 && (
+          <View style={styles.dayStepRow}>
+            {currentDay > 0 ? (
+              <TouchableOpacity style={styles.dayStepBtn} onPress={() => goToDay(currentDay - 1)} activeOpacity={0.7}
+                accessibilityRole="button" accessibilityLabel={`Previous day: ${trip.days[currentDay - 1].label}`}>
+                <Icon name="chevron-back" size={15} color={colors.primary} />
+                <Text style={styles.dayStepText} numberOfLines={1}>{trip.days[currentDay - 1].label}</Text>
+              </TouchableOpacity>
+            ) : <View style={styles.dayStepSpacer} />}
+            {currentDay < trip.days.length - 1 ? (
+              <TouchableOpacity style={styles.dayStepBtn} onPress={() => goToDay(currentDay + 1)} activeOpacity={0.7}
+                accessibilityRole="button" accessibilityLabel={`Next day: ${trip.days[currentDay + 1].label}`}>
+                <Text style={styles.dayStepText} numberOfLines={1}>{trip.days[currentDay + 1].label}</Text>
+                <Icon name="chevron-forward" size={15} color={colors.primary} />
+              </TouchableOpacity>
+            ) : <View style={styles.dayStepSpacer} />}
+          </View>
+        )}
       </ScrollView>
 
       {/* ── Discover FAB — single primary action, bottom-right ── */}
@@ -2431,6 +2487,22 @@ const styles = StyleSheet.create({
   dayBtnWeekday: { ...typography.caption, color: colors.text, fontSize: 12, fontWeight: '800', marginTop: 1 },
   dayBtnDate: { ...typography.caption, color: colors.muted, fontSize: 10, marginTop: 1 },
   dayCost: { ...typography.caption, color: colors.muted, fontWeight: '700', fontSize: 10, marginTop: 1 },
+  // Day-rail edge fades (hint at more days off-screen). Overlay only — pointerEvents none.
+  dayRailFade: { position: 'absolute', top: 0, bottom: 0, width: 26 },
+  dayRailFadeLeft: { left: 0 },
+  dayRailFadeRight: { right: 0 },
+  // Bottom-of-day prev/next stepper — each edge shows only the available direction.
+  dayStepRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: spacing.xl, marginBottom: spacing.lg, paddingHorizontal: spacing.xxl, gap: spacing.md,
+  },
+  dayStepBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44,
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg, borderWidth: 1.5, borderColor: colors.border, backgroundColor: '#fff', flexShrink: 1,
+  },
+  dayStepText: { ...typography.caption, color: colors.primary, fontWeight: '800', fontSize: 13 },
+  dayStepSpacer: { width: 1 },
 
   // ── Day header ───────────────────────────────────────────────────
   dayHeader: {

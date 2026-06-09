@@ -9,6 +9,7 @@
     "web": "expo start --web",
     "eas-build-pre-install": "node scripts/ensure-config.js",
     "rule-report": "node scripts/gen-rule-report.js",
+    "ux:guard": "node scripts/ux-guard.js",
     "test": "jest",
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.js\"",

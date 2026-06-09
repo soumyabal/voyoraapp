@@ -4,7 +4,6 @@
  * committed. Returns null whenever it can't be confidently helpful.
  */
 import { returnJourneyDraft } from '../autoArrange';
-import { timeToMin } from '../slots';
 
 const day = (label, date, activities = []) => ({ label, date, activities });
 const HOME = { label: 'Chicago, IL', lat: 41.88, lng: -87.63 };
@@ -69,11 +68,11 @@ describe('returnJourneyDraft', () => {
     expect(d.fromLat).toBeCloseTo(HOLLAND.lat);     // departs FROM where the day trip reached
     expect(d.name).toContain('Holland');
     expect(d.name).toContain('Chicago');
-    // estimates the drive home (free haversine leg) so the card can show an ETA
+    // estimates the drive home (free haversine leg) so the card can show "≈ Xh drive home"
     expect(d.driveMin).toBeGreaterThan(0);
     expect(d.time).toBe('16:00');
-    expect(d.arriveTime).toBeTruthy();
-    expect(timeToMin(d.arriveTime)).toBeGreaterThan(timeToMin('16:00'));   // arrives after it leaves
+    // no pre-filled arriveTime — a zone-naive/stale guess produced a bogus duration + false overnight flag
+    expect(d.arriveTime).toBeUndefined();
   });
 
   test('a day trip that already has a drive back home proposes nothing', () => {

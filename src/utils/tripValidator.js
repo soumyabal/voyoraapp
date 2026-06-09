@@ -689,15 +689,29 @@ function ruleMealGap(ctx) {
 }
 
 // ── Rule 8: Multi-day journey (arriveTime crosses midnight) ──────
-// When a transport activity has arriveTime set and it is earlier in
-// the clock than departTime, the journey crosses midnight and the
-// arrival logically belongs on the next day.
+// A transport whose arriveTime reads EARLIER than departTime *usually* crossed midnight (a
+// red-eye). But a WESTWARD timezone hop (e.g. Holland EDT → Chicago CDT, clocks go back 1h) also
+// makes the arrival wall-clock earlier without crossing midnight. So we confirm in UTC: only flag
+// when the arrival INSTANT is genuinely before the departure instant once both zones are applied.
 function ruleMultiDayJourney(ctx) {
-  const { acts, dayIndex } = ctx;
+  const { acts, dayIndex, day } = ctx;
+  const date = day?.date;
   const warnings = [];
+  const timed = acts.filter(a => a.time).slice().sort((a, b) => (a.time || '').localeCompare(b.time || ''));
   acts.filter(a => a.type === 'transport' && a.arriveTime).forEach(act => {
-    const crossesMidnight = act.arriveTime < act.time; // e.g. departs 22:00, arrives 06:00
-    if (crossesMidnight) {
+    if (act.arriveTime >= act.time) return;            // arrives later in the day → never overnight
+    // Resolve the zones: arrival = this leg's own destination coords; departure = the located stop
+    // just before it (time order). Unknown → assume same zone, so the wall-clock signal still holds.
+    const arriveZone = (act.lat != null && date) ? tzForCoords(act.lat, act.lng) : null;
+    let departZone = null;
+    const idx = timed.findIndex(a => a.id === act.id);
+    for (let j = idx - 1; j >= 0; j--) { if (timed[j].lat != null) { departZone = tzForCoords(timed[j].lat, timed[j].lng); break; } }
+    if (!departZone) departZone = arriveZone;
+    let overnight = true;
+    if (arriveZone && departZone && date) {
+      overnight = zonedWallToUtcMs(date, act.arriveTime, arriveZone) < zonedWallToUtcMs(date, act.time, departZone);
+    }
+    if (overnight) {
       warnings.push({
         type:     'multi_day_journey',
         severity: 'info',

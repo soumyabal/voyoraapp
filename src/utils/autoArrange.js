@@ -300,21 +300,19 @@ export function returnJourneyDraft(trip) {
   const subtype = arrival?.subtype || 'car';
   const word = ARRIVAL_MODE_WORD[subtype] || 'Trip';
   const fromCity = end?.label ? String(end.label).split(',')[0].trim() : null;   // departs where the trip ENDS
-  // For a DRIVE home, estimate how long it takes from the trip's end → home (free haversine leg)
-  // and pre-fill the arrival so the leg reads "depart 16:00 → home ~18:30". Driving only — a flight/
-  // train home has no road estimate, so leave its arrival for the user. The 16:00 start is the soft
-  // default; the user can re-time it and the card re-derives. null when either end lacks coords.
-  const START = '16:00';
+  // For a DRIVE home, estimate how long it takes from the trip's end → home (free haversine leg) so
+  // the card can show "≈ 2h30 drive home". We do NOT pre-fill arriveTime: across a timezone (e.g.
+  // Holland EDT → Chicago CDT) a naive depart+duration arrival is in the wrong zone, and it goes
+  // stale the moment Plan-my-day re-times the departure — both produced a bogus "19 min" leg and a
+  // false "overnight journey" flag. The estimate stands on its own; the user sets a clock if needed.
   const leg = subtype === 'car' && end?.lat != null && origin.lat != null
     ? travelLeg(end, { lat: origin.lat, lng: origin.lng }) : null;
   const driveMin = leg && leg.min ? leg.min : null;
-  const arriveTime = driveMin != null ? minToTime(Math.min(timeToMin(START) + driveMin, 23 * 60 + 59)) : null;
   return {
     type: 'transport',
     subtype,
     name: fromCity ? `${word} home to ${origin.label} from ${fromCity}` : `${word} home to ${origin.label}`,
-    time: START,              // SOFT default (sorts to the day's tail); editable, never locked
-    arriveTime,               // estimated home arrival for a drive (null for flight/train/no-coords)
+    time: '16:00',            // SOFT default (sorts to the day's tail); editable, never locked
     driveMin,                 // the estimated drive minutes (for the card's "≈ 2h30" hint)
     detail: '',
     lat: origin.lat ?? null,  // destination = home

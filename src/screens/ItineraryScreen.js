@@ -1048,9 +1048,7 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
                   : `Add your way home — we pre-filled “${draft.name}”. Set the time, and the cost if there is one.`}
               </Text>
               {!isFlight && draft.driveMin ? (
-                <Text style={styles.returnEta}>
-                  🚗 ≈ {formatDuration(draft.driveMin)} drive · leave {draft.time} → home by ~{draft.arriveTime}
-                </Text>
+                <Text style={styles.returnEta}>🚗 ≈ {formatDuration(draft.driveMin)} drive home</Text>
               ) : null}
               <View style={styles.returnBtnRow}>
                 <TouchableOpacity style={styles.returnAddBtn} onPress={addReturn} activeOpacity={0.85}>

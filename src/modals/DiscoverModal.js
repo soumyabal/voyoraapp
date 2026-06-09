@@ -23,6 +23,7 @@ import { bookingUrl } from '../utils/booking';
 import { fetchDestinationImage, WIKI_UA } from '../utils/destinationImage';
 import { WebView } from 'react-native-webview';
 import Icon from '../components/ui/Icon';
+import LocationSearchField from '../components/ui/LocationSearchField';
 
 // Place type → Icon name + tint
 const TYPE_ICON = { food: 'food', stay: 'hotel', activity: 'activity' };
@@ -810,9 +811,10 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
   const clearResults = () => { setTextResults([]); setLayerData({ see: [], eat: [], stay: [] }); setError(null); };
   const chooseCity = c => { setCityPickerOpen(false); setAreaSearch(null); setMapMoved(false); setNearLabel(null); clearResults(); setFitToken(t => t + 1); setActiveCity(c); };
 
-  // Commit a freely-typed city (need not be in the trip's destination).
-  const commitNewCity = () => {
-    const c = newCity.trim();
+  // Commit a city (picked from the Photon autocomplete, or freely typed). Need not be in the
+  // trip's destination. `cityArg` comes from LocationSearchField's onSelect; falls back to newCity.
+  const commitNewCity = (cityArg) => {
+    const c = (typeof cityArg === 'string' ? cityArg : newCity).trim();
     setNewCity('');
     if (!c) { setCityPickerOpen(false); return; }
     setCities(prev => prev.some(x => cityLabel(x) === cityLabel(c)) ? prev : [...prev, c]);
@@ -1265,16 +1267,12 @@ export default function DiscoverModal({ visible, onClose, trip, dayIndex, defaul
               </View>
 
               <Text style={s.cityAddLabel}>Add another city</Text>
-              <View style={s.cityAddRow}>
-                <TextInput
-                  style={s.cityAddInput} value={newCity} onChangeText={setNewCity}
-                  placeholder="e.g. San Diego" placeholderTextColor={colors.muted}
-                  returnKeyType="search" onSubmitEditing={commitNewCity} autoCorrect={false}
-                />
-                <TouchableOpacity style={[s.cityAddBtn, !newCity.trim()&&s.cityAddBtnOff]} onPress={commitNewCity} disabled={!newCity.trim()}>
-                  <Text style={s.cityAddBtnText}>Search</Text>
-                </TouchableOpacity>
-              </View>
+              <LocationSearchField
+                label=""
+                value={newCity}
+                placeholder="e.g. San Diego"
+                onSelect={(label) => { if (label && label.trim()) commitNewCity(label.trim()); else setNewCity(''); }}
+              />
             </View>
           </TouchableOpacity>
           </KeyboardAvoidingView>
@@ -1352,11 +1350,6 @@ const s = StyleSheet.create({
   cityPickTextActive:{color:colors.accentDark,fontWeight:'800'},
   cityPickCheck:{fontSize:14,fontWeight:'800',color:colors.accent},
   cityAddLabel:{fontSize:10,fontWeight:'800',color:colors.muted,textTransform:'uppercase',letterSpacing:0.8,marginBottom:spacing.sm},
-  cityAddRow:{flexDirection:'row',alignItems:'center',gap:spacing.sm},
-  cityAddInput:{flex:1,borderWidth:1.5,borderColor:colors.border,borderRadius:radius.md,paddingHorizontal:spacing.md,paddingVertical:spacing.sm,fontSize:15,color:colors.text,backgroundColor:'#fff'},
-  cityAddBtn:{backgroundColor:colors.primary,borderRadius:radius.md,paddingHorizontal:spacing.lg,paddingVertical:spacing.sm},
-  cityAddBtnOff:{backgroundColor:colors.border},
-  cityAddBtnText:{color:'#fff',fontWeight:'800',fontSize:14},
   filterChipActive:{backgroundColor:'#dcfce7',borderColor:'#16a34a'},
   filterChipTextActive:{color:'#15803d',fontWeight:'700'},
   dietBadge:{fontSize:11,color:'#15803d',fontWeight:'700',marginTop:3},

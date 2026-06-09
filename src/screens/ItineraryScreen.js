@@ -397,12 +397,21 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
   const scrollYRef = useRef(0);          // live scroll offset (from onScroll)
   const rowRefs = useRef({});
 
-  // Day rail (horizontal day picker) scroll metrics → a right/left edge fade that hints there
-  // are more days off-screen (the known discoverability gap of a horizontal rail). {w} viewport,
-  // {cw} content width, {x} offset. Pure measurement; no behaviour change to the chips.
-  const [dayRail, setDayRail] = useState({ w: 0, cw: 0, x: 0 });
-  const showDayRailRightFade = dayRail.cw > dayRail.w + 4 && dayRail.x + dayRail.w < dayRail.cw - 4;
-  const showDayRailLeftFade  = dayRail.cw > dayRail.w + 4 && dayRail.x > 4;
+  // Day rail (horizontal day picker) edge fades — hint that more days sit off-screen (the known
+  // discoverability gap of a horizontal rail). Width/content/offset live in REFS, and we flip a
+  // tiny boolean state ONLY when a fade actually toggles — so scrolling never re-renders this big
+  // screen per frame. nativeEvent is read SYNCHRONOUSLY in each handler (the pooled synthetic event
+  // is nulled by the time an async setState updater would run — that was the LogBox crash).
+  const dayRailW = useRef(0);
+  const dayRailCW = useRef(0);
+  const dayRailX = useRef(0);
+  const [dayFade, setDayFade] = useState({ left: false, right: false });
+  const recomputeDayFade = () => {
+    const w = dayRailW.current, cw = dayRailCW.current, x = dayRailX.current;
+    const right = cw > w + 4 && x + w < cw - 4;
+    const left  = cw > w + 4 && x > 4;
+    setDayFade(prev => (prev.left === left && prev.right === right) ? prev : { left, right });
+  };
 
   // Step to an adjacent day from the bottom-of-day stepper, and snap back to the top so you
   // "fall into" the next day (the one real ergonomic win of a vertical agenda, kept here).
@@ -979,10 +988,10 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: spacing.xxl }}
-            onLayout={e => setDayRail(s => ({ ...s, w: e.nativeEvent.layout.width }))}
-            onContentSizeChange={cw => setDayRail(s => ({ ...s, cw }))}
-            onScroll={e => setDayRail(s => ({ ...s, x: e.nativeEvent.contentOffset.x }))}
-            scrollEventThrottle={32}
+            onLayout={e => { dayRailW.current = e.nativeEvent.layout.width; recomputeDayFade(); }}
+            onContentSizeChange={cw => { dayRailCW.current = cw; recomputeDayFade(); }}
+            onScroll={e => { dayRailX.current = e.nativeEvent.contentOffset.x; recomputeDayFade(); }}
+            scrollEventThrottle={64}
           >
             {trip.days.map((d, i) => {
               const dc = calcDayCostForTrip(d, trip);
@@ -1004,11 +1013,11 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
           </ScrollView>
           {/* Edge fades — soft cue that more days sit off-screen left/right (a horizontal rail
               hides this otherwise). Pure overlay, never intercepts taps. */}
-          {showDayRailLeftFade && (
+          {dayFade.left && (
             <LinearGradient pointerEvents="none" style={[styles.dayRailFade, styles.dayRailFadeLeft]}
               colors={['rgba(247,245,242,1)', 'rgba(247,245,242,0)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
           )}
-          {showDayRailRightFade && (
+          {dayFade.right && (
             <LinearGradient pointerEvents="none" style={[styles.dayRailFade, styles.dayRailFadeRight]}
               colors={['rgba(247,245,242,0)', 'rgba(247,245,242,1)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
           )}
@@ -2371,7 +2380,7 @@ const ch = StyleSheet.create({
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
-  content: { paddingBottom: 100 },
+  content: { paddingBottom: 132 },   // clears the floating Discover FAB (incl. the bottom-of-day stepper)
 
   // ── Cost banner ──────────────────────────────────────────────────
   banner: {

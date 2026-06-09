@@ -395,6 +395,38 @@ export function planFloorMin(trip, dayIndex, nowMs = Date.now()) {
   return zonedNowMinutes(tz, nowMs);
 }
 
+/**
+ * Is the trip happening RIGHT NOW — today (in the trip's start zone) falls within its date range?
+ * Mirrors HomeScreen's "Happening now" badge. Clock-injected; pure.
+ */
+export function isTripOngoing(trip, nowMs = Date.now()) {
+  const days = trip?.days;
+  if (!days || !days.length) return false;
+  const first = days[0]?.date, last = days[days.length - 1]?.date;
+  if (!first || !last) return false;
+  const today = zonedNowDate(tzForDay(trip, 0), nowMs);
+  return first <= today && today <= last;
+}
+
+/**
+ * Gentle "log your expenses" nudge: should we remind the traveller about this WRAPPED day? True
+ * only on an ONGOING trip, for a day already in the past, that had real paid-for stops (any food /
+ * transport, or a priced activity) but has NO expense linked to any of its activities yet. So a
+ * planned day whose expenses auto-populated, an all-free day, or a future/today day never nags.
+ * Dismissal is handled by the caller (via ignoredWarnings). Clock-injected; pure.
+ */
+export function dayNeedsExpenseLog(trip, dayIndex, nowMs = Date.now()) {
+  if (!isTripOngoing(trip, nowMs)) return false;
+  if (!isDayInPast(trip, dayIndex, nowMs)) return false;
+  const acts = (trip?.days?.[dayIndex]?.activities || []).filter(a => a.status !== 'skipped');
+  const payable = acts.some(a =>
+    a.type === 'food' || a.type === 'transport' || (a.type === 'activity' && Number(a.costPerPerson) > 0));
+  if (!payable) return false;
+  const ids = new Set(acts.map(a => a.id));
+  const logged = (trip?.expenses || []).some(e => !e.excluded && e.activityId && ids.has(e.activityId));
+  return !logged;
+}
+
 export function nowNextOf(day, nowMin) {
   const tMin = (t) => { if (!t) return null; const [h, m] = t.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
   const acts = (day?.activities || [])

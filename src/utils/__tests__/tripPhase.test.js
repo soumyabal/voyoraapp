@@ -2,7 +2,7 @@
  * tripPhase.test.js — trip lifecycle (before/during/after) + the landing-day fix
  * for "a not-started trip opens on Day 2".
  */
-import { tripPhase, defaultDayFor, daysBetweenISO, nowNextOf, openFocusFor, dayZoneLabel, resolveDayZones, pastActivityIds, isDayInPast, planFloorMin, crossZoneLeg } from '../helpers';
+import { tripPhase, defaultDayFor, daysBetweenISO, nowNextOf, openFocusFor, dayZoneLabel, resolveDayZones, pastActivityIds, isDayInPast, planFloorMin, crossZoneLeg, isTripOngoing, dayNeedsExpenseLog } from '../helpers';
 
 const trip = (start, end, nDays) => ({
   startDate: start, endDate: end,
@@ -269,4 +269,49 @@ describe('daysBetweenISO', () => {
   test('counts whole days', () => expect(daysBetweenISO('2026-07-10', '2026-07-12')).toBe(2));
   test('handles a month boundary', () => expect(daysBetweenISO('2026-06-30', '2026-07-02')).toBe(2));
   test('same day → 0', () => expect(daysBetweenISO('2026-07-10', '2026-07-10')).toBe(0));
+});
+
+describe('isTripOngoing / dayNeedsExpenseLog — gentle expense-log nudge (clock-aware)', () => {
+  const LA = { lat: 34.05, lng: -118.24 };           // PDT (-7) in July
+  const NOW = Date.UTC(2026, 6, 11, 21, 0);          // 2026-07-11 14:00 PDT → mid-trip
+  // Trip 07-10 → 07-13. Day 0 (07-10) is wrapped; day 1 is today; day 2 is future.
+  const tripWith = (expenses = [], d0 = [{ id: 'd0food', type: 'food', name: 'Dinner', time: '19:00', ...LA }]) => ({
+    defaultTz: 'America/Los_Angeles', startDate: '2026-07-10', endDate: '2026-07-13', expenses,
+    days: [
+      { date: '2026-07-10', activities: d0 },
+      { date: '2026-07-11', activities: [{ id: 'd1', type: 'activity', name: 'Museum', time: '10:00', costPerPerson: 20, ...LA }] },
+      { date: '2026-07-12', activities: [{ id: 'd2', type: 'food', name: 'Lunch', time: '12:00', ...LA }] },
+    ],
+  });
+
+  test('isTripOngoing: true mid-trip, false before/after', () => {
+    expect(isTripOngoing(tripWith(), NOW)).toBe(true);
+    expect(isTripOngoing(tripWith(), Date.UTC(2026, 6, 1, 21, 0))).toBe(false);   // before start
+    expect(isTripOngoing(tripWith(), Date.UTC(2026, 6, 20, 21, 0))).toBe(false);  // after end
+  });
+
+  test('a wrapped day with paid-for stops and no logged expense → reminds', () => {
+    expect(dayNeedsExpenseLog(tripWith(), 0, NOW)).toBe(true);
+  });
+
+  test('once an expense is linked to that day → no reminder', () => {
+    const t = tripWith([{ id: 'e1', activityId: 'd0food', amount: 50 }]);
+    expect(dayNeedsExpenseLog(t, 0, NOW)).toBe(false);
+  });
+
+  test('today and future days never remind (only wrapped days)', () => {
+    expect(dayNeedsExpenseLog(tripWith(), 1, NOW)).toBe(false);   // today
+    expect(dayNeedsExpenseLog(tripWith(), 2, NOW)).toBe(false);   // future
+  });
+
+  test('a finished trip does not remind (only ongoing)', () => {
+    const past = { ...tripWith(), startDate: '2026-07-01', endDate: '2026-07-03',
+      days: [{ date: '2026-07-01', activities: [{ id: 'x', type: 'food', name: 'Dinner', time: '19:00', ...LA }] }] };
+    expect(dayNeedsExpenseLog(past, 0, NOW)).toBe(false);
+  });
+
+  test('a wrapped but free day (no food/transport, no priced activity) does not remind', () => {
+    const free = tripWith([], [{ id: 'walk', type: 'activity', name: 'Free walking tour', time: '10:00', costPerPerson: 0, ...LA }]);
+    expect(dayNeedsExpenseLog(free, 0, NOW)).toBe(false);
+  });
 });

@@ -15,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Icon from '../components/ui/Icon';
 import Snackbar from '../components/ui/Snackbar';
 import ConfettiBurst from '../components/ui/ConfettiBurst';
-import { fmt, fmtM, uid, checkOutOf, resolveDayZones, pastActivityIds, isDayInPast, planFloorMin, crossZoneLeg } from '../utils/helpers';
+import { fmt, fmtM, uid, checkOutOf, resolveDayZones, pastActivityIds, isDayInPast, planFloorMin, crossZoneLeg, dayNeedsExpenseLog } from '../utils/helpers';
 import { calcTripItineraryTotal, calcDayCostForTrip, calcFamilyItineraryCost } from '../utils/costs';
 import { estimateDuration, formatDuration, lodgingForNight, dayStartAnchor, nightCityFor } from '../utils/tripValidator';
 import { googleMapsDayUrl } from '../utils/mapsRoute';
@@ -1170,6 +1170,34 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
               <Text style={[styles.dayPillText, { color: pal.fg }]} numberOfLines={1}>{label}</Text>
               <Icon name="forward" size={13} color={pal.fg} />
             </TouchableOpacity>
+          );
+        })()}
+
+        {/* Gentle "log your expenses" nudge — only on an ONGOING trip, for a WRAPPED day that had
+            paid-for stops but no expense logged yet (see dayNeedsExpenseLog). Calm + dismissible
+            per day (remembered via ignoredWarnings); taps through to the Split tab. */}
+        {day && (() => {
+          const key = `expense_log:${day.date}`;
+          if ((trip.ignoredWarnings || []).includes(key)) return null;
+          if (!dayNeedsExpenseLog(trip, currentDay, nowMs)) return null;
+          return (
+            <View style={styles.expenseRemind}>
+              <View style={styles.expenseRemindTop}>
+                <Text style={styles.expenseRemindIcon}>🧾</Text>
+                <Text style={styles.expenseRemindText}>
+                  {day.label}’s wrapped — log what you spent so each family’s split stays fair.
+                </Text>
+              </View>
+              <View style={styles.expenseRemindBtns}>
+                <TouchableOpacity onPress={() => ignoreWarning(trip.id, key)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                  <Text style={styles.expenseRemindDismiss}>Got it</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.expenseRemindAddBtn} onPress={() => switchTab?.('splitwise')} activeOpacity={0.85}
+                  accessibilityRole="button" accessibilityLabel={`Add expenses for ${day.label}`}>
+                  <Text style={styles.expenseRemindAddText}>Add expenses →</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           );
         })()}
 
@@ -2553,6 +2581,15 @@ const styles = StyleSheet.create({
   dayPill: { flexDirection: 'row', alignItems: 'center', gap: 7, alignSelf: 'flex-start', maxWidth: '100%', borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 7, marginBottom: spacing.sm },
   dayPillText: { fontSize: 12.5, fontWeight: '700', flexShrink: 1 },
   dayWarnings: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
+  // Gentle "log your expenses" nudge on a wrapped day of an ongoing trip
+  expenseRemind:       { backgroundColor: colors.smartSoft, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.smart + '22' },
+  expenseRemindTop:    { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  expenseRemindIcon:   { fontSize: 17, lineHeight: 20 },
+  expenseRemindText:   { flex: 1, fontSize: 12.5, color: colors.smartDeep, fontWeight: '600', lineHeight: 16 },
+  expenseRemindBtns:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.lg, marginTop: spacing.sm },
+  expenseRemindDismiss:{ fontSize: 12.5, color: colors.subtle, fontWeight: '700' },
+  expenseRemindAddBtn: { backgroundColor: colors.smart, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 6 },
+  expenseRemindAddText:{ fontSize: 12, color: '#fff', fontWeight: '800' },
   dayWarnChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 6 },
   dayWarnIcon: { fontSize: 12 },
   dayWarnText: { fontSize: 12, fontWeight: '700' },

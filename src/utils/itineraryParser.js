@@ -150,7 +150,10 @@ export function extractCandidates(text) {
  */
 export function parseItineraryText(text, opts = {}) {
   const year = opts.year || 2026;
-  const base = opts.startDate || todayISO();   // base date for "Day N" (no-calendar) itineraries
+  // "Day N" (no-calendar) itineraries default a couple of weeks out — a pasted plan is UPCOMING,
+  // not "Happening now" today. Real calendar dates in the text are honored as-is. (Matches
+  // itineraryExtract.normalizeExtraction.)
+  const base = opts.startDate || addDaysISO(todayISO(), 14);
   const lines = presegment(text).split(/\r?\n/).map(l => normalizeLine(l)).filter(Boolean);
 
   // Year-rollover: a calendar-dated itinerary that crosses New Year ("December 30 … January 2")

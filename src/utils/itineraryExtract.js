@@ -135,8 +135,13 @@ function normItem(it) {
  * shape. Synthesises consecutive dates for "dayNumber"-style days (Day 1 = base, +1 each), keeps a
  * real `date` when present, drops junk, never throws. Pure.
  */
+// A pasted plan with no real dates ("Day 1, Day 2…") is something the user is PLANNING, not on —
+// default its start a couple of weeks out so a fresh import isn't immediately "Happening now". Real
+// dates in the paste are honored as-is; the user re-dates an undated import via Edit Trip.
+const DEFAULT_FUTURE_OFFSET_DAYS = 14;
+
 export function normalizeExtraction(raw, opts = {}) {
-  const base = opts.startDate || todayISO();
+  const base = opts.startDate || addDaysISO(todayISO(), DEFAULT_FUTURE_OFFSET_DAYS);
   const out = { segments: [], days: [], warnings: [], tripName: str(raw?.tripName, 80) || null, destination: str(raw?.destination, 120) || null };
   const rawDays = Array.isArray(raw?.days) ? raw.days : [];
   const segSeen = new Set();

@@ -23,6 +23,16 @@ describe('normalizeExtraction — repair/validate LLM JSON → assembler shape',
     expect(n.days[1].items[0].time).toBe('09:30');   // padded
   });
 
+  test('a no-date paste defaults to a FUTURE start (not "Happening now" today)', () => {
+    const n = normalizeExtraction({ days: [
+      { dayNumber: 1, items: [{ name: 'Fly out' }] },
+      { dayNumber: 2, items: [{ name: 'Explore' }] },
+    ] });
+    const today = new Date().toISOString().slice(0, 10);
+    expect(n.days[0].date > today).toBe(true);          // upcoming, not today (was "happening now")
+    expect(n.days[1].date > n.days[0].date).toBe(true); // still consecutive
+  });
+
   test('preserves stated 12-hour times (9 AM / 9:30 PM) and 24h, drops non-times', () => {
     const n = normalizeExtraction({ days: [{ dayNumber: 1, items: [
       { name: 'Breakfast', type: 'food', time: '9 AM' },

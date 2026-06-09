@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kithova · UX exploration (Lambus-style rails + per-trip Itinerary/Split)</title>
+<style>
+  /* ============================================================================
+     Kithova UX exploration — clickable mockup, fully offline (no external requests).
+     Two levels of nav (this fixes the earlier mistake):
+       • APP tabs (bottom):  Trips · Discover · Updates · Profile
+       • IN-TRIP tabs:       Itinerary · People · Split   (split is PER TRIP)
+     Faux imagery = CSS gradients + inline SVG/emoji.  Dark / Warm palette toggle up top.
+     NOT app code — design evaluation only.
+     ============================================================================ */
+  :root{
+    --bg:#0a0a0c; --bg2:#101014; --card:#17171c; --card2:#1d1d23; --glass:rgba(255,255,255,.08);
+    --glass-strong:rgba(20,20,24,.66); --line:rgba(255,255,255,.10);
+    --text:#fff; --muted:rgba(255,255,255,.62); --faint:rgba(255,255,255,.42);
+    --accent:#e86c3a; --smart:#8b7bf0; --good:#46c178; --tabbar:rgba(28,28,32,.82);
+    --shadow:0 18px 40px rgba(0,0,0,.5);
+  }
+  .warm{
+    --bg:#efe9e1; --bg2:#f7f5f2; --card:#fff; --card2:#fbf7f2; --glass:rgba(255,255,255,.72);
+    --glass-strong:rgba(255,255,255,.86); --line:rgba(0,0,0,.08);
+    --text:#241f1b; --muted:#6f655c; --faint:#9a8d80;
+    --accent:#e86c3a; --smart:#6c5ce7; --good:#2f9e63; --tabbar:rgba(255,255,255,.88);
+    --shadow:0 18px 40px rgba(120,90,60,.18);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 700px at 50% -10%, #2a2a33, #0c0c10 60%); color:#fff;
+    display:flex;flex-direction:column;align-items:center;min-height:100%;padding:24px 14px 56px}
+  body.warm-page{background:radial-gradient(1200px 700px at 50% -10%, #f3ece2, #e7ddcf 60%)}
+
+  .stage-head{width:100%;max-width:430px;display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}
+  .stage-title{font-weight:800;font-size:15px;color:#fff}
+  body.warm-page .stage-title{color:#3a322b}
+  .stage-sub{font-size:12px;opacity:.6;margin-top:2px}
+  .seg{display:flex;gap:4px;background:rgba(255,255,255,.1);border-radius:999px;padding:4px}
+  body.warm-page .seg{background:rgba(0,0,0,.06)}
+  .seg button{border:0;background:transparent;color:inherit;font:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;cursor:pointer;opacity:.7}
+  .seg button.on{background:#e86c3a;color:#fff;opacity:1}
+
+  .phone{width:390px;max-width:96vw;height:800px;max-height:86vh;border-radius:46px;overflow:hidden;position:relative;
+    background:var(--bg);color:var(--text);box-shadow:var(--shadow),0 0 0 11px #000,0 0 0 13px #2a2a2e;transition:background .35s,color .35s}
+  .statusbar{position:absolute;top:0;left:0;right:0;height:46px;display:flex;align-items:center;justify-content:space-between;padding:14px 28px 0;font-size:13px;font-weight:700;z-index:60;pointer-events:none}
+  .statusbar .dots{display:flex;gap:6px;align-items:center}
+  .battery{border:1.6px solid currentColor;border-radius:3px;width:22px;height:11px;position:relative;display:inline-block}
+  .battery::after{content:"";position:absolute;right:-3px;top:3px;width:2px;height:5px;background:currentColor;border-radius:1px}
+  .battery i{position:absolute;inset:1.5px;width:62%;background:currentColor;border-radius:1px;display:block}
+
+  .app{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding-bottom:104px;scroll-behavior:smooth}
+  .app::-webkit-scrollbar{display:none}
+  .screen{display:none;padding-top:52px}
+  .screen.active{display:block;animation:fade .28s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  .dhead{display:flex;align-items:flex-start;justify-content:space-between;padding:8px 20px 6px}
+  .dhead h1{font-size:36px;font-weight:800;margin:6px 0 0;letter-spacing:-.5px}
+  .iconpill{display:flex;gap:6px;background:var(--glass);border:1px solid var(--line);border-radius:999px;padding:9px}
+  .iconbtn{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:var(--text);background:transparent;border:0}
+  .iconbtn svg{width:19px;height:19px}.iconbtn:active{transform:scale(.9)}
+
+  .onbo{margin:6px 18px 2px;border-radius:18px;padding:13px 14px;display:flex;align-items:center;gap:11px;cursor:pointer;
+    background:linear-gradient(100deg,rgba(232,108,58,.22),rgba(108,92,231,.20));border:1px solid var(--line)}
+  .onbo .ob-emoji{font-size:22px}.onbo .ob-t{font-weight:800;font-size:14px}
+  .onbo .ob-s{font-size:12px;color:var(--muted);margin-top:1px}
+  .onbo .ob-go{margin-left:auto;font-weight:800;color:var(--accent);font-size:13px}
+  .onbo .ob-x{margin-left:6px;color:var(--faint);font-size:18px;padding:2px 6px}
+
+  .hero{position:relative;margin:14px 18px 4px;height:320px;border-radius:26px;overflow:hidden;cursor:pointer;box-shadow:0 14px 30px rgba(0,0,0,.45)}
+  .hero svg.scene{position:absolute;inset:0;width:100%;height:100%}
+  .hero .grad{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.12),rgba(0,0,0,0) 38%,rgba(0,0,0,.55))}
+  .hero .heart{position:absolute;top:14px;right:14px;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.16);backdrop-filter:blur(6px);z-index:3;cursor:pointer}
+  .hero .heart svg{width:20px;height:20px;color:#fff}.hero .heart.saved svg{color:#ff6a8a;fill:#ff6a8a}
+  .hero .eyebrow{position:absolute;left:0;right:0;top:40%;transform:translateY(-50%);text-align:center;z-index:2}
+  .hero .eyebrow b{display:block;color:#fff;font-weight:800;font-size:40px;line-height:1.02;letter-spacing:1px;text-shadow:0 3px 18px rgba(0,0,0,.45)}
+  .hero .infocard{position:absolute;left:14px;right:54px;bottom:14px;z-index:3;border-radius:16px;padding:12px 14px;background:var(--glass-strong);backdrop-filter:blur(10px);border:1px solid var(--line)}
+  .hero .infocard .t{font-weight:800;font-size:17px;color:#fff;line-height:1.18}
+  .hero .infocard .m{font-size:13px;color:rgba(255,255,255,.74);margin-top:3px}
+  .hero .dl{position:absolute;right:12px;bottom:24px;z-index:4;color:#fff;opacity:.92;cursor:pointer}.hero .dl svg{width:24px;height:24px}
+
+  .sec{display:flex;align-items:baseline;justify-content:space-between;padding:22px 20px 10px}
+  .sec h2{font-size:22px;font-weight:800;margin:0;letter-spacing:-.3px}
+  .sec a{font-size:13px;font-weight:700;color:var(--accent);text-decoration:none;cursor:pointer}
+  .rail{display:flex;gap:13px;overflow-x:auto;padding:0 18px 4px;scroll-snap-type:x mandatory}
+  .rail::-webkit-scrollbar{display:none}.rail>*{scroll-snap-align:start;flex:0 0 auto}
+
+  .cat{width:154px;height:118px;border-radius:18px;position:relative;overflow:hidden;cursor:pointer}
+  .cat .scene2{position:absolute;inset:0;display:grid;place-items:center;font-size:44px}
+  .cat .ov{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 40%,rgba(0,0,0,.42))}
+  .cat .num{position:absolute;left:9px;bottom:8px;width:25px;height:25px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px;z-index:2}
+  .cat .lbl{position:absolute;left:41px;bottom:11px;color:#fff;font-weight:800;font-size:14px;z-index:2;text-shadow:0 2px 8px rgba(0,0,0,.5)}
+  .cat:active{transform:scale(.97)}
+
+  .act{width:150px;height:148px;border-radius:20px;padding:15px;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;border:1px solid var(--line);background:var(--card)}
+  .act .ai{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:24px}
+  .act .at{font-weight:800;font-size:15px;line-height:1.15}.act .as{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.25}
+  .act:active{transform:scale(.97)}
+
+  .trip{width:230px;border-radius:20px;overflow:hidden;cursor:pointer;background:var(--card);border:1px solid var(--line)}
+  .trip .ph{height:126px;position:relative;display:grid;place-items:center;font-size:48px}
+  .trip .ph .badge{position:absolute;top:9px;left:9px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;font-weight:800;padding:5px 9px;border-radius:999px}
+  .trip .ph .save{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.18);display:grid;place-items:center;backdrop-filter:blur(5px)}
+  .trip .ph .save svg{width:15px;height:15px;color:#fff}.trip .ph .save.saved svg{color:#ff6a8a;fill:#ff6a8a}
+  .trip .body{padding:11px 13px 14px}.trip .ti{font-weight:800;font-size:15px;line-height:1.2}
+  .trip .me{font-size:12px;color:var(--muted);margin-top:5px;display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--glass);border:1px solid var(--line)}
+  .chip.split{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+  .trip:active{transform:scale(.98)}
+  .footnote{padding:18px 22px 10px;color:var(--faint);font-size:12px;line-height:1.5}
+
+  .ph-screen{min-height:520px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:40px;text-align:center}
+  .ph-screen .pe{font-size:52px}.ph-screen h3{font-size:24px;margin:0;font-weight:800}
+  .ph-screen p{color:var(--muted);margin:0;font-size:14px;max-width:240px}
+  .ph-card{width:100%;max-width:320px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:6px 14px}
+  .ph-card .row{display:flex;align-items:center;gap:12px;padding:11px 2px}
+  .ph-card .row+.row{border-top:1px solid var(--line)}
+  .ph-card .e{font-size:22px}.ph-card .tt{font-weight:700;font-size:14px}.ph-card .ss{font-size:12px;color:var(--muted)}
+
+  /* ---------- TRIP DETAIL (pushed screen) ---------- */
+  #s-trip{display:none;position:absolute;inset:0;background:var(--bg);z-index:55;flex-direction:column;animation:slidein .3s ease}
+  #s-trip.active{display:flex}
+  @keyframes slidein{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+  .thead{padding:52px 18px 0;background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 24%,var(--bg)),var(--bg));flex:0 0 auto}
+  .warm .thead{background:linear-gradient(180deg,#f4ddd0,var(--bg))}
+  .trow{display:flex;align-items:center;justify-content:space-between}
+  .tback{display:flex;align-items:center;gap:5px;color:var(--text);font-weight:700;font-size:15px;cursor:pointer;background:0;border:0}
+  .tback svg{width:20px;height:20px}
+  .tname{display:flex;align-items:center;gap:11px;margin:12px 0 8px}
+  .tname .em{width:50px;height:50px;border-radius:14px;display:grid;place-items:center;font-size:26px;background:var(--glass);border:1px solid var(--line)}
+  .tname h2{margin:0;font-size:23px;font-weight:800;line-height:1.1}
+  .tname .sub{font-size:13px;color:var(--muted);margin-top:3px}
+  .tpills{display:flex;gap:7px;padding:2px 0 12px}
+  .tpill{font-size:12px;font-weight:700;padding:5px 11px;border-radius:999px;background:var(--glass);border:1px solid var(--line);display:flex;gap:5px;align-items:center}
+  .tpill.live{color:var(--good)}
+  /* in-trip segmented tabs */
+  .subtabs{display:flex;gap:4px;background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:4px;margin:0 0 4px}
+  .subtab{flex:1;text-align:center;padding:9px;border-radius:11px;font-weight:800;font-size:14px;color:var(--muted);cursor:pointer}
+  .subtab.on{background:var(--accent);color:#fff}
+  .tbody{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 0 110px}
+  .tbody::-webkit-scrollbar{display:none}
+  .subscreen{display:none}.subscreen.on{display:block;animation:fade .24s ease}
+
+  /* trip total bar */
+  .ttotal{display:flex;align-items:center;justify-content:space-between;margin:0 16px 8px;padding:11px 14px;border-radius:14px;background:var(--card2);border:1px solid var(--line)}
+  .ttotal .l{font-size:11px;font-weight:800;letter-spacing:.6px;color:var(--faint)}
+  .ttotal .v{font-size:17px;font-weight:800}
+  .ttotal .acts{display:flex;gap:8px}
+  .miniact{width:32px;height:32px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;cursor:pointer}
+  .miniact svg{width:15px;height:15px;color:var(--text)}
+
+  /* day rail */
+  .dayrail{display:flex;gap:9px;overflow-x:auto;padding:4px 16px 12px}
+  .dayrail::-webkit-scrollbar{display:none}
+  .daychip{flex:0 0 auto;width:74px;border-radius:16px;border:1.6px solid var(--line);background:var(--card);padding:9px 6px;text-align:center;cursor:pointer;position:relative}
+  .daychip.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+  .daychip .dn{font-size:10px;font-weight:800;color:var(--faint);letter-spacing:.4px}
+  .daychip.on .dn{color:var(--accent)}
+  .daychip .dd{font-size:15px;font-weight:800;margin-top:1px}.daychip .dm{font-size:10px;color:var(--muted);margin-top:1px}
+  .daychip .dot{position:absolute;top:6px;right:7px;width:7px;height:7px;border-radius:50%}
+
+  .dayacts{display:flex;gap:8px;padding:0 16px 8px;flex-wrap:wrap}
+  .dbtn{display:flex;gap:5px;align-items:center;font-size:13px;font-weight:800;padding:8px 13px;border-radius:999px;border:1px solid var(--line);cursor:pointer;background:var(--card)}
+  .dbtn.smart{color:var(--smart);background:color-mix(in srgb,var(--smart) 12%,transparent);border-color:color-mix(in srgb,var(--smart) 30%,transparent)}
+  .dbtn.primary{color:#fff;background:var(--accent);border-color:var(--accent)}
+
+  .tippill{display:flex;align-items:center;gap:7px;margin:2px 16px 8px;padding:9px 13px;border-radius:999px;font-weight:700;font-size:13px;
+    background:color-mix(in srgb,var(--smart) 13%,transparent);color:var(--smart);border:1px solid color-mix(in srgb,var(--smart) 26%,transparent);cursor:pointer;align-self:flex-start;width:max-content}
+
+  .slot{display:flex;align-items:center;gap:8px;padding:14px 18px 6px}
+  .slot .sl{font-size:11px;font-weight:800;letter-spacing:1px;color:var(--accent)}
+  .slot .line{flex:1;height:1px;background:var(--line)}
+  .slot .add{font-size:13px;font-weight:800;color:var(--accent);cursor:pointer}
+  .leg{display:flex;align-items:center;gap:7px;padding:2px 20px 2px 26px;color:var(--muted);font-size:12px;font-weight:600}
+  .leg .d{width:6px;height:6px;border-radius:50%;background:var(--muted)}
+
+  .acard{display:flex;gap:12px;margin:6px 16px;padding:12px;border-radius:18px;background:var(--card);border:1px solid var(--line);position:relative;cursor:pointer;overflow:hidden}
+  .acard .accent{position:absolute;left:0;top:0;bottom:0;width:4px}
+  .acard .ico{width:50px;height:50px;border-radius:13px;display:grid;place-items:center;font-size:26px;flex:0 0 auto}
+  .acard .ct{flex:1;min-width:0}
+  .acard .tm{font-size:12px;font-weight:800;color:var(--accent)}.acard .tz{color:var(--smart)}.acard .dur{color:var(--muted);font-weight:600}
+  .acard .nm{font-weight:800;font-size:16px;margin-top:2px;line-height:1.2}
+  .acard .mt{font-size:12px;color:var(--muted);margin-top:4px}
+  .acard .star{font-size:12px;font-weight:800;background:#f6c945;color:#1a1407;border-radius:8px;padding:2px 7px}
+  .acard .check{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);flex:0 0 auto}
+  .acard.hotel .photo{position:absolute;inset:0;opacity:.0}
+
+  .lodge{display:flex;align-items:center;gap:7px;align-self:center;max-width:88%;margin:14px auto 6px;padding:8px 14px;border-radius:999px;background:color-mix(in srgb,var(--smart) 13%,transparent);border:1px solid var(--line);color:var(--smart);font-weight:700;font-size:12.5px}
+  .lodge .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stepday{display:flex;justify-content:flex-end;padding:8px 18px 0}
+  .stepbtn{display:flex;gap:6px;align-items:center;font-weight:800;color:var(--accent);background:var(--card);border:1px solid var(--line);padding:9px 15px;border-radius:14px;cursor:pointer}
+
+  .fab{position:absolute;right:16px;bottom:88px;z-index:40;display:flex;align-items:center;gap:7px;background:var(--accent);color:#fff;font-weight:800;font-size:15px;padding:13px 18px;border-radius:999px;cursor:pointer;box-shadow:0 10px 24px rgba(0,0,0,.4)}
+  .fab svg{width:18px;height:18px}
+
+  /* split screen */
+  .splitnote{margin:4px 16px 10px;padding:12px 14px;border-radius:16px;background:linear-gradient(100deg,color-mix(in srgb,var(--accent) 16%,transparent),color-mix(in srgb,var(--smart) 14%,transparent));border:1px solid var(--line);font-size:13px;line-height:1.45}
+  .splitnote b{color:var(--accent)}
+  .famcard{margin:8px 16px;padding:13px 15px;border-radius:18px;background:var(--card);border:1px solid var(--line)}
+  .famrow{display:flex;align-items:center;gap:11px}
+  .famrow .fe{width:42px;height:42px;border-radius:12px;background:var(--glass);display:grid;place-items:center;font-size:22px}
+  .famrow .fn{font-weight:800;font-size:15px}.famrow .fs{font-size:12px;color:var(--muted);margin-top:1px}
+  .famrow .bal{margin-left:auto;font-weight:800;font-size:16px}
+  .bal.owe{color:var(--accent)}.bal.get{color:var(--good)}
+  .barwrap{height:7px;border-radius:6px;background:var(--glass);margin-top:10px;overflow:hidden}
+  .bar{height:100%;border-radius:6px}
+  .settle{margin:8px 16px;padding:6px 14px;border-radius:18px;background:var(--card);border:1px solid var(--line)}
+  .settle .row{display:flex;align-items:center;gap:9px;padding:11px 2px;font-size:14px}
+  .settle .row+.row{border-top:1px solid var(--line)}
+  .settle .ar{color:var(--muted)}
+  .settle .amt{margin-left:auto;font-weight:800;color:var(--accent)}
+  .exp{margin:8px 16px;padding:4px 14px;border-radius:18px;background:var(--card);border:1px solid var(--line)}
+  .exp .row{display:flex;align-items:center;gap:11px;padding:11px 2px}
+  .exp .row+.row{border-top:1px solid var(--line)}
+  .exp .ee{font-size:22px}.exp .en{font-weight:700;font-size:14px}.exp .es{font-size:11px;color:var(--muted);margin-top:1px}
+  .exp .ev{margin-left:auto;font-weight:800;font-size:14px}
+
+  .tabbar{position:absolute;left:14px;right:14px;bottom:14px;height:66px;border-radius:24px;z-index:50;background:var(--tabbar);backdrop-filter:blur(16px);border:1px solid var(--line);display:flex;align-items:center;justify-content:space-around;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+  .tabbar.hidden{display:none}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);cursor:pointer;padding:6px 8px;border-radius:14px;min-width:60px}
+  .tab svg{width:23px;height:23px}.tab span{font-size:10.5px;font-weight:700}
+  .tab.on{color:var(--accent)}.tab.on .tabring{background:color-mix(in srgb,var(--accent) 16%,transparent)}
+  .tabring{padding:4px 12px;border-radius:999px;transition:background .2s}.tab:active{transform:scale(.92)}
+
+  .toast{position:absolute;left:50%;bottom:92px;transform:translateX(-50%) translateY(14px);z-index:80;background:#000;color:#fff;padding:11px 16px;border-radius:14px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;border:1px solid rgba(255,255,255,.14);max-width:84%;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+  <div class="stage-head">
+    <div>
+      <div class="stage-title">Kithova — UX exploration · rails + per-trip Itinerary/Split</div>
+      <div class="stage-sub">Tap a trip → Itinerary · People · Split. Clickable mockup, no app code.</div>
+    </div>
+    <div class="seg" id="themeSeg"><button class="on" data-theme="dark">Dark</button><button data-theme="warm">Warm</button></div>
+  </div>
+
+  <div class="phone" id="phone">
+    <div class="statusbar"><span>4:08</span><span class="dots">
+      <svg width="18" height="12" viewBox="0 0 18 12"><g fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="5" y="4" width="3" height="8" rx="1"/><rect x="10" y="1" width="3" height="11" rx="1" opacity=".5"/></g></svg>
+      <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><path d="M8 10.5a1.3 1.3 0 100-2.6 1.3 1.3 0 000 2.6Z" fill="currentColor"/><path d="M2 5.5a8.5 8.5 0 0112 0M4.4 7.7a5.2 5.2 0 017.2 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <span class="battery"><i></i></span></span>
+    </div>
+
+    <div class="app" id="app">
+
+      <!-- ================= DISCOVER ================= -->
+      <section class="screen active" id="s-discover">
+        <div class="dhead"><h1>Discover</h1>
+          <div class="iconpill">
+            <button class="iconbtn" onclick="toast('Search destinations & templates')"><svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m20 20-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+            <button class="iconbtn" onclick="toast('Your saved trips')"><svg viewBox="0 0 24 24" fill="none"><path d="M12 20s-7-4.4-7-9.3A3.7 3.7 0 0112 8a3.7 3.7 0 017 2.7C19 15.6 12 20 12 20Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
+          </div>
+        </div>
+        <div class="onbo" id="onbo" onclick="scrollToRail()"><span class="ob-emoji">👋</span>
+          <div><div class="ob-t">New to Kithova? Start in ~10 seconds</div><div class="ob-s">Paste a plan, or spin up a group trip — we auto-split the costs.</div></div>
+          <span class="ob-go">Start →</span><span class="ob-x" onclick="event.stopPropagation();document.getElementById('onbo').remove()">✕</span>
+        </div>
+
+        <div class="hero" onclick="openTrip('georgia')">
+          <svg class="scene" viewBox="0 0 400 320" preserveAspectRatio="xMidYMid slice">
+            <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fa8c9"/><stop offset="1" stop-color="#cfe0ec"/></linearGradient>
+            <linearGradient id="rock" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a93a3"/><stop offset="1" stop-color="#5c6675"/></linearGradient></defs>
+            <rect width="400" height="320" fill="url(#sky)"/><circle cx="318" cy="56" r="26" fill="#fff" opacity=".55"/>
+            <polygon points="120,158 230,38 360,178 360,320 120,320" fill="url(#rock)"/>
+            <polygon points="230,38 268,84 246,94 280,118 230,126 196,96 215,84" fill="#eef4f8" opacity=".92"/>
+            <polygon points="-20,198 90,118 210,208 210,320 -20,320" fill="#717a89"/>
+            <polygon points="90,118 120,148 104,156 130,174 90,180 64,154 80,144" fill="#f2f6f9" opacity=".85"/>
+            <path d="M-20,248 C70,220 150,234 210,260 C300,298 360,274 420,298 L420,320 L-20,320 Z" fill="#5f7d4e"/>
+            <path d="M-20,270 C80,250 150,264 230,284 C320,306 380,292 420,310 L420,320 L-20,320 Z" fill="#4d6a3f"/>
+            <g transform="translate(96,232)"><rect x="0" y="10" width="20" height="20" fill="#3b3b40"/><polygon points="0,10 10,-2 20,10" fill="#2c2c30"/>
+            <rect x="24" y="4" width="9" height="26" fill="#34343a"/><polygon points="24,4 28.5,-6 33,4" fill="#26262b"/><rect x="27" y="-12" width="3" height="7" fill="#26262b"/><rect x="25.5" y="-10" width="6" height="2.4" fill="#26262b"/></g>
+          </svg>
+          <div class="grad"></div>
+          <div class="heart" onclick="event.stopPropagation();this.classList.toggle('saved');toast(this.classList.contains('saved')?'Saved':'Removed')"><svg viewBox="0 0 24 24" fill="none"><path d="M12 20s-7-4.4-7-9.3A3.7 3.7 0 0112 8a3.7 3.7 0 017 2.7C19 15.6 12 20 12 20Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></div>
+          <div class="eyebrow"><b>TRIP OF<br/>THE WEEK</b></div>
+          <div class="infocard"><div class="t">Georgia: The Pearl<br/>Of The Caucasus</div><div class="m">Georgia · 6 stops · great for 3 families</div></div>
+          <div class="dl" onclick="event.stopPropagation();toast('Added — costs auto-split per family')"><svg viewBox="0 0 24 24" fill="none"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        </div>
+
+        <div class="sec"><h2>Popular Categories</h2><a onclick="toast('See all')">See all</a></div>
+        <div class="rail">
+          <div class="cat" style="background:linear-gradient(160deg,#2bb3c0,#0a7c91)" onclick="toast('Beaches')"><div class="scene2">🏝️</div><div class="ov"></div><div class="num">1</div><div class="lbl">Beaches</div></div>
+          <div class="cat" style="background:linear-gradient(160deg,#d98a3d,#a85a22)" onclick="toast('Road trips')"><div class="scene2">🚐</div><div class="ov"></div><div class="num">2</div><div class="lbl">Road trips</div></div>
+          <div class="cat" style="background:linear-gradient(160deg,#6d77c9,#3a3f86)" onclick="toast('City')"><div class="scene2">🌆</div><div class="ov"></div><div class="num">3</div><div class="lbl">City</div></div>
+          <div class="cat" style="background:linear-gradient(160deg,#6f8f6a,#3f5a3a)" onclick="toast('Mountains')"><div class="scene2">⛰️</div><div class="ov"></div><div class="num">4</div><div class="lbl">Mountains</div></div>
+        </div>
+
+        <div class="sec" id="startrail"><h2>Start your trip</h2></div>
+        <div class="rail">
+          <div class="act" onclick="toast('✨ Magic Paste')"><div class="ai" style="background:color-mix(in srgb,var(--smart) 22%,transparent)">✨</div><div><div class="at">Paste a plan</div><div class="as">From ChatGPT, a blog, anywhere</div></div></div>
+          <div class="act" onclick="toast('👨‍👩‍👧 New group trip')"><div class="ai" style="background:color-mix(in srgb,var(--accent) 18%,transparent)">👨‍👩‍👧‍👦</div><div><div class="at">Group trip</div><div class="as">Add families · costs auto-split</div></div></div>
+          <div class="act" onclick="toast('🤖 Plan with AI')"><div class="ai" style="background:color-mix(in srgb,var(--smart) 22%,transparent)">🤖</div><div><div class="at">Plan with AI</div><div class="as">Day-by-day from your vibe</div></div></div>
+          <div class="act" onclick="toast('📋 Templates')"><div class="ai" style="background:color-mix(in srgb,var(--accent) 18%,transparent)">📋</div><div><div class="at">Templates</div><div class="as">Proven multi-family routes</div></div></div>
+        </div>
+
+        <div class="sec"><h2>Made for groups</h2><a onclick="toast('See all')">See all</a></div>
+        <div class="rail">
+          <div class="trip" onclick="openTrip('smoky')"><div class="ph" style="background:linear-gradient(160deg,#5f8f7a,#2f5547)">🏔️<span class="badge">4 families · 5 days</span><span class="save" onclick="event.stopPropagation();this.classList.toggle('saved')"><svg viewBox="0 0 24 24" fill="none"><path d="M12 20s-7-4.4-7-9.3A3.7 3.7 0 0112 8a3.7 3.7 0 017 2.7C19 15.6 12 20 12 20Z" stroke="currentColor" stroke-width="2"/></svg></span></div><div class="body"><div class="ti">Smoky Mountains Reunion</div><div class="me"><span class="chip">cabins</span><span class="chip split">auto-split</span></div></div></div>
+          <div class="trip" onclick="openTrip('socal')"><div class="ph" style="background:linear-gradient(160deg,#2bb3c0,#0a7c91)">🌊<span class="badge">3 families · 7 days</span><span class="save" onclick="event.stopPropagation();this.classList.toggle('saved')"><svg viewBox="0 0 24 24" fill="none"><path d="M12 20s-7-4.4-7-9.3A3.7 3.7 0 0112 8a3.7 3.7 0 017 2.7C19 15.6 12 20 12 20Z" stroke="currentColor" stroke-width="2"/></svg></span></div><div class="body"><div class="ti">SoCal Coast with Kids</div><div class="me"><span class="chip">beach</span><span class="chip split">auto-split</span></div></div></div>
+        </div>
+        <div class="footnote">Tap the <b>Trip of the Week</b> or any trip card to open <b>Itinerary · People · Split</b>. Flip <b>Dark / Warm</b> up top.</div>
+      </section>
+
+      <!-- ================= TRIPS ================= -->
+      <section class="screen" id="s-trips">
+        <div class="dhead"><h1>Trips</h1><div class="iconpill"><button class="iconbtn" onclick="toast('New trip')"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div></div>
+        <div style="padding:0 16px">
+          <div class="trip" style="width:100%;margin-bottom:13px" onclick="openTrip('ord')"><div class="ph" style="background:linear-gradient(160deg,#d98a3d,#a85a22)">🏰<span class="badge">🟢 Happening now</span></div><div class="body"><div class="ti">7-Day ORD ⇌ LAX Trip</div><div class="me"><span class="chip">3 families</span><span class="chip split">$2,140 · auto-split</span></div></div></div>
+          <div class="trip" style="width:100%;margin-bottom:13px" onclick="openTrip('holland')"><div class="ph" style="background:linear-gradient(160deg,#5f8f7a,#2f5547)">⛵<span class="badge">In 3 days</span></div><div class="body"><div class="ti">HollandJun12</div><div class="me"><span class="chip">2 families</span><span class="chip split">auto-split</span></div></div></div>
+        </div>
+      </section>
+
+      <!-- ================= UPDATES ================= -->
+      <section class="screen" id="s-updates"><div class="ph-screen"><div class="pe">🔔</div><h3>Updates</h3><p>Trip activity, expense nudges, and what your group changed.</p>
+        <div class="ph-card"><div class="row"><span class="e">🧾</span><div><div class="tt">Log Day 2's spend</div><div class="ss">HollandJun12 · keeps the split fair</div></div></div><div class="row"><span class="e">✈️</span><div><div class="tt">The Lees added a flight</div><div class="ss">7-Day ORD ⇌ LAX</div></div></div></div></div></section>
+
+      <!-- ================= PROFILE ================= -->
+      <section class="screen" id="s-profile"><div class="ph-screen"><div class="pe">🙂</div><h3>Profile</h3><p>Your traveler library, families, and saved trips.</p></div></section>
+
+    </div><!-- /app -->
+
+    <!-- ============ TRIP DETAIL (pushed) ============ -->
+    <section id="s-trip">
+      <div class="thead">
+        <div class="trow"><button class="tback" onclick="closeTrip()"><svg viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Back</button>
+          <button class="iconbtn" onclick="toast('Trip menu')"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button></div>
+        <div class="tname"><div class="em">🏰</div><div><h2 id="tn">HollandJun12</h2><div class="sub" id="ts">Holland, Michigan · Jun 12–14</div></div></div>
+        <div class="tpills"><span class="tpill live">🟢 Happening now</span><span class="tpill">✎ Manual</span><span class="tpill">👨‍👩‍👧 2 families</span></div>
+        <div class="subtabs">
+          <div class="subtab on" data-t="itinerary" onclick="subTab('itinerary')">Itinerary</div>
+          <div class="subtab" data-t="people" onclick="subTab('people')">People</div>
+          <div class="subtab" data-t="split" onclick="subTab('split')">Split</div>
+        </div>
+      </div>
+
+      <div class="tbody" id="tbody">
+        <!-- ---------- ITINERARY ---------- -->
+        <div class="subscreen on" id="t-itinerary">
+          <div class="ttotal"><div><div class="l">TRIP TOTAL</div><div class="v">$2,140 <span style="font-size:12px;color:var(--muted);font-weight:600">· split 3 ways</span></div></div>
+            <div class="acts"><div class="miniact" onclick="subTab('split')"><svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M5 7v10a2 2 0 002 2h10a2 2 0 002-2V7" stroke="currentColor" stroke-width="2"/></svg></div>
+              <div class="miniact" onclick="toast('Play trip')"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
+              <div class="miniact" onclick="toast('Share')"><svg viewBox="0 0 24 24" fill="none"><path d="M16 6l-4-4-4 4M12 2v13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div></div>
+          </div>
+
+          <div class="dayrail">
+            <div class="daychip on" onclick="toast('Day 1')"><div class="dn">DAY 1</div><div class="dd">Fri</div><div class="dm">Jun 12</div></div>
+            <div class="daychip" onclick="toast('Day 2')"><div class="dn">DAY 2</div><div class="dd">Sat</div><div class="dm">Jun 13</div><span class="dot" style="background:#f6c945"></span></div>
+            <div class="daychip" onclick="toast('Day 3')"><div class="dn">DAY 3</div><div class="dd">Sun</div><div class="dm">Jun 14</div></div>
+          </div>
+
+          <div class="dayacts">
+            <div class="dbtn smart" onclick="toast('✨ Plan my day — deterministic, route + travel + hours')">✨ Plan my day</div>
+            <div class="dbtn" onclick="toast('🗺 Route this day in Maps')">🗺 Route</div>
+            <div class="dbtn" onclick="toast('+ Add stop')">＋ Add</div>
+          </div>
+          <div class="tippill" onclick="toast('Trip Check: 2 soft tips for this day')">💡 2 tips for this day ›</div>
+
+          <div class="slot"><span class="sl">⛅ AFTERNOON</span><span class="line"></span><span class="add" onclick="toast('Add')">＋ add</span></div>
+          <div class="leg"><span class="d"></span>🚗 25 min · 5.2 mi to your first stop</div>
+          <div class="acard hotel" onclick="toast('Open Courtyard by Marriott')">
+            <div class="accent" style="background:#6c5ce7"></div>
+            <div class="ico" style="background:color-mix(in srgb,#6c5ce7 16%,transparent)">🏨</div>
+            <div class="ct"><div class="tm">16:10 <span class="tz">EDT</span> · <span class="dur">check-in</span></div><div class="nm">Courtyard by Marriott Holland…</div><div class="mt">⭐ 4.6 · ▾ details · 🛏 Book ›</div></div>
+            <div class="star">4.6</div>
+          </div>
+
+          <div class="slot"><span class="sl">🌙 EVENING</span><span class="line"></span><span class="add" onclick="toast('Add')">＋ add</span></div>
+          <div class="leg"><span class="d"></span>🚶 8 min · 0.4 mi</div>
+          <div class="acard" onclick="toast('Open dinner')">
+            <div class="accent" style="background:#e17055"></div>
+            <div class="ico" style="background:color-mix(in srgb,#e17055 16%,transparent)">🍽️</div>
+            <div class="ct"><div class="tm">19:00 <span class="tz">EDT</span> · <span class="dur">~1.5h</span></div><div class="nm">Dinner on the waterfront</div><div class="mt">🌿 1 veg family · ▾ details</div></div>
+            <div class="check"></div>
+          </div>
+
+          <div class="lodge">🛏 <span class="nm">Night 1 of 2 · Courtyard by Marriott Holland Downtown</span></div>
+          <div class="stepday"><div class="stepbtn" onclick="toast('Go to Day 2')">Day 2 ›</div></div>
+        </div>
+
+        <!-- ---------- PEOPLE ---------- -->
+        <div class="subscreen" id="t-people">
+          <div class="famcard"><div class="famrow"><div class="fe">👨‍👩‍👧</div><div><div class="fn">The Patels</div><div class="fs">4 members · 2 rooms</div></div></div>
+            <div class="me" style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap"><span class="chip">🌿 Vegetarian</span><span class="chip">🍼 Infant</span></div></div>
+          <div class="famcard"><div class="famrow"><div class="fe">👩‍👦</div><div><div class="fn">The Lees</div><div class="fs">2 members · 1 room</div></div></div>
+            <div class="me" style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap"><span class="chip">♿ Step-free</span></div></div>
+          <div style="text-align:center;margin-top:14px"><div class="dbtn" style="display:inline-flex" onclick="toast('Add a family')">＋ Add a family</div></div>
+        </div>
+
+        <!-- ---------- SPLIT (per trip) ---------- -->
+        <div class="subscreen" id="t-split">
+          <div class="splitnote">Costs split <b>per family</b>, not equally per person — <b>hotels by rooms × nights</b>, transit &amp; meals <b>by heads</b>. So a family of 4 pays its real share, not an average.</div>
+
+          <div class="famcard"><div class="famrow"><div class="fe">👨‍👩‍👧</div><div><div class="fn">The Patels</div><div class="fs">paid $1,460 · share $1,040</div></div><div class="bal get">+$420</div></div>
+            <div class="barwrap"><div class="bar" style="width:68%;background:var(--good)"></div></div></div>
+          <div class="famcard"><div class="famrow"><div class="fe">👩‍👦</div><div><div class="fn">The Lees</div><div class="fs">paid $300 · share $560</div></div><div class="bal owe">–$260</div></div>
+            <div class="barwrap"><div class="bar" style="width:54%;background:var(--accent)"></div></div></div>
+          <div class="famcard"><div class="famrow"><div class="fe">👨‍👧‍👦</div><div><div class="fn">The Reyes</div><div class="fs">paid $380 · share $540</div></div><div class="bal owe">–$160</div></div>
+            <div class="barwrap"><div class="bar" style="width:50%;background:var(--accent)"></div></div></div>
+
+          <div class="sec" style="padding:18px 16px 6px"><h2 style="font-size:17px">Settle up</h2></div>
+          <div class="settle">
+            <div class="row"><span>👩‍👦 The Lees</span><span class="ar">→</span><span>👨‍👩‍👧 The Patels</span><span class="amt">$260</span></div>
+            <div class="row"><span>👨‍👧‍👦 The Reyes</span><span class="ar">→</span><span>👨‍👩‍👧 The Patels</span><span class="amt">$160</span></div>
+          </div>
+
+          <div class="sec" style="padding:18px 16px 6px"><h2 style="font-size:17px">Expenses</h2><a onclick="toast('Add expense')">＋ Add</a></div>
+          <div class="exp">
+            <div class="row"><span class="ee">🏨</span><div><div class="en">Courtyard — 2 nights</div><div class="es">by rooms × nights · all 3 families</div></div><span class="ev">$1,120</span></div>
+            <div class="row"><span class="ee">✈️</span><div><div class="en">Flights ORD⇌LAX</div><div class="es">by heads · all 3 families</div></div><span class="ev">$760</span></div>
+            <div class="row"><span class="ee">🍽️</span><div><div class="en">Group dinner</div><div class="es">by heads · Patels + Lees</div></div><span class="ev">$140</span></div>
+            <div class="row"><span class="ee">🎯</span><div><div class="en">Museum tickets</div><div class="es">by heads · all 3 families</div></div><span class="ev">$120</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fab" id="tripFab" onclick="toast('Discover places near this day')"><svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m20 20-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Discover</div>
+    </section>
+
+    <!-- ============ bottom app tabs ============ -->
+    <nav class="tabbar" id="tabbar">
+      <div class="tab" data-s="trips" onclick="goTab('trips')"><span class="tabring"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="3" width="11" height="18" rx="2.5" stroke="currentColor" stroke-width="2"/><path d="M18 6h2v12h-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><span>Trips</span></div>
+      <div class="tab on" data-s="discover" onclick="goTab('discover')"><span class="tabring"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="m15 9-2.2 4.8L8 16l2.2-4.8L15 9Z" fill="currentColor"/></svg></span><span>Discover</span></div>
+      <div class="tab" data-s="updates" onclick="goTab('updates')"><span class="tabring"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 19a2 2 0 004 0" stroke="currentColor" stroke-width="2"/></svg></span><span>Updates</span></div>
+      <div class="tab" data-s="profile" onclick="goTab('profile')"><span class="tabring"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/><path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><span>Profile</span></div>
+    </nav>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+<script>
+  let toastTimer;
+  function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),1700);}
+  function goTab(name){
+    document.querySelectorAll('.app .screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById('s-'+name)?.classList.add('active');
+    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.s===name));
+    document.getElementById('app').scrollTo({top:0});
+  }
+  const TRIPS={
+    georgia:{em:'⛰️',n:'Georgia: Pearl of the Caucasus',s:'Georgia · 6 stops'},
+    smoky:{em:'🏔️',n:'Smoky Mountains Reunion',s:'4 families · 5 days'},
+    socal:{em:'🌊',n:'SoCal Coast with Kids',s:'3 families · 7 days'},
+    ord:{em:'🏰',n:'7-Day ORD ⇌ LAX Trip',s:'Los Angeles · Jun 8–14'},
+    holland:{em:'🏰',n:'HollandJun12',s:'Holland, Michigan · Jun 12–14'},
+  };
+  function openTrip(id){
+    const t=TRIPS[id]||TRIPS.holland;
+    document.getElementById('tn').textContent=t.n;
+    document.getElementById('ts').textContent=t.s;
+    document.querySelector('#s-trip .em').textContent=t.em;
+    document.getElementById('s-trip').classList.add('active');
+    document.getElementById('tabbar').classList.add('hidden');
+    subTab('itinerary');
+    document.getElementById('tbody').scrollTo({top:0});
+  }
+  function closeTrip(){
+    document.getElementById('s-trip').classList.remove('active');
+    document.getElementById('tabbar').classList.remove('hidden');
+  }
+  function subTab(name){
+    document.querySelectorAll('.subscreen').forEach(s=>s.classList.toggle('on',s.id==='t-'+name));
+    document.querySelectorAll('.subtab').forEach(t=>t.classList.toggle('on',t.dataset.t===name));
+    document.getElementById('tripFab').style.display = name==='itinerary' ? 'flex':'none';
+    document.getElementById('tbody').scrollTo({top:0});
+  }
+  function scrollToRail(){document.getElementById('startrail').scrollIntoView({behavior:'smooth',block:'start'});toast('Pick a way to start ↓');}
+  document.getElementById('themeSeg').addEventListener('click',e=>{
+    const b=e.target.closest('button');if(!b)return;
+    document.querySelectorAll('#themeSeg button').forEach(x=>x.classList.toggle('on',x===b));
+    const warm=b.dataset.theme==='warm';
+    document.getElementById('phone').classList.toggle('warm',warm);
+    document.body.classList.toggle('warm-page',warm);
+  });
+</script>
+</body>
+</html>

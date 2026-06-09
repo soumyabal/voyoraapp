@@ -382,6 +382,15 @@ function buildDayContext(day, dayIndex, families) {
   // UNSCHEDULED (the planner couldn't fit it in its open hours that day) — it must not
   // be mapped to a phantom 09:00 and generate false overlap/closed warnings; it's handled
   // by the dedicated "doesn't fit this day" rule below.
+  // A stop's UTC offset (minutes) at its own coords + the day's date — null when we can't tell
+  // (no coords/date). Lets the time rules compare stops in DIFFERENT zones correctly: on a day
+  // that crosses a timezone, two wall-clocks aren't directly comparable (16:30 CDT is later than
+  // 17:00 EDT). Single-zone or unknown → every offset matches (or is null) → no behaviour change.
+  const tzOffsetOf = (act) => {
+    if (act.lat == null || act.lng == null || !day.date || !act.time) return null;
+    const z = tzForCoords(act.lat, act.lng);
+    return z ? offsetMinutes(z, zonedWallToUtcMs(day.date, act.time, z)) : null;
+  };
   const timed = acts.filter(act => act.time);
   const timeline = timed.map((act, i) => {
     const parts = act.time.split(':');
@@ -389,7 +398,7 @@ function buildDayContext(day, dayIndex, families) {
     // Pass the prior timed stop so a drive's duration can come from the real leg
     // (origin → destination geocode), not the flat per-mode default.
     const duration = estimateDuration(act, i > 0 ? timed[i - 1] : undefined);
-    return { act, startMin, duration, endMin: startMin + duration };
+    return { act, startMin, duration, endMin: startMin + duration, tzOffset: tzOffsetOf(act) };
   });
 
   const wd = weekdayOf(day.date);
@@ -412,6 +421,13 @@ function buildDayContext(day, dayIndex, families) {
   const substantialActs = acts.filter(a => a.type !== 'note' && a.type !== 'stay');
 
   return { day, dayIndex, families, acts, timeline, wd, wouldCloseBefore, isQuietMisc, substantialActs };
+}
+
+// Minutes between two timeline stops' zones: (next − curr). Add it to a curr-zone time to read it
+// in next's zone; subtract it from a next-zone time to read it in curr's. 0 when either offset is
+// unknown or they match — so single-zone / no-coords days are byte-for-byte unchanged.
+function zoneDelta(curr, next) {
+  return (curr.tzOffset != null && next.tzOffset != null) ? next.tzOffset - curr.tzOffset : 0;
 }
 
 // ── Rule 0: Doesn't fit this day (unscheduled by the planner) ──
@@ -449,11 +465,14 @@ function ruleOverlap(ctx) {
   for (let i = 0; i < timeline.length - 1; i++) {
     const curr = timeline[i];
     const next = timeline[i + 1];
-    if (curr.duration > 0 && curr.endMin > next.startMin &&
+    const delta = zoneDelta(curr, next);           // read both stops on curr's clock
+    const nextStart = next.startMin - delta;       // next's start, expressed in curr's local zone
+    const currEndNextZone = curr.endMin + delta;   // curr's end, expressed in NEXT's zone (hours + suggestion live there)
+    if (curr.duration > 0 && curr.endMin > nextStart &&
         !isQuietMisc(curr.act) && !isQuietMisc(next.act)) {
-      const overlapMin = curr.endMin - next.startMin;
-      const sug = formatEndTime(curr.endMin);
-      const fitsLater = !wouldCloseBefore(next.act, curr.endMin); // moving later still within hours?
+      const overlapMin = curr.endMin - nextStart;
+      const sug = formatEndTime(currEndNextZone);
+      const fitsLater = !wouldCloseBefore(next.act, currEndNextZone); // moving later still within hours?
       warnings.push({
         type:          'overlap',
         // Estimate-based (durations are guessed) → big overlap = worth checking,
@@ -497,13 +516,15 @@ function ruleTravelTime(ctx) {
     if (isQuietMisc(curr.act) || isQuietMisc(next.act)) continue; // a quick fuel/rest stop isn't a travel-time problem
     const leg = travelLeg(curr.act, next.act);
     if (!leg || leg.min < 10) continue;            // unknown coords, or a trivial hop
-    const gap = next.startMin - curr.endMin;       // free minutes between end and next start
+    const delta = zoneDelta(curr, next);           // read both stops on curr's clock
+    const gap = (next.startMin - delta) - curr.endMin;  // free minutes between end and next start
     if (gap < 0 || gap >= leg.min) continue;       // overlap → Rule 1; enough time → fine
     const short = leg.min - gap;
     if (short < 5) continue;                        // within rounding noise
-    const sugStart = curr.endMin + leg.min;
-    const sug = formatEndTime(sugStart);
-    const fitsLater = !wouldCloseBefore(next.act, sugStart); // does it still fit its hours after the drive?
+    const sugStart = curr.endMin + leg.min;             // in curr's zone
+    const sugNextZone = sugStart + delta;               // expressed in NEXT's zone (its hours + the label)
+    const sug = formatEndTime(sugNextZone);
+    const fitsLater = !wouldCloseBefore(next.act, sugNextZone); // does it still fit its hours after the drive?
     warnings.push({
       type:     'travel_time',
       // Straight-line estimate (not real routing) — the biggest false-alarm risk,

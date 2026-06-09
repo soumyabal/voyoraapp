@@ -155,6 +155,14 @@ Surfaces:
   "only N min gap" / "overlaps" when there isn't time to travel — *the same call the rule
   makes, so the cue and the warning always agree*. Legs bridge across time-of-day sections.
 
+> **Timezone-aware comparisons (multi-zone days).** `overlap` and `travel_time` compare two
+> consecutive stops on a single clock: `buildDayContext` tags each timed stop with its UTC offset
+> (`tzForCoords` + `offsetMinutes`) and `zoneDelta(curr, next)` re-expresses the next stop's time in
+> the current stop's zone before the gap/overlap math. So a westward hop (16:30 CDT *after* a 17:00
+> EDT stop) no longer reads as a false overlap, and an eastward hop's real overlap isn't masked.
+> Single-zone or no-coords days have `delta = 0` → byte-for-byte identical (same class of fix as the
+> zone-aware `multi_day_journey` rule).
+
 > **Reliability (be honest with users):** this is a free *estimate*, not routing. The
 > displayed km is **straight-line**; the minutes apply the 1.3 detour + a fixed speed. It's
 > directionally trustworthy (good for the `travel_time` check — close vs. far) but NOT

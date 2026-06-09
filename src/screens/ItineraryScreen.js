@@ -370,7 +370,7 @@ function StickyHeader({ trip, currentDay, onSelectDay, onPush, onCheckTrip, onRe
   );
 }
 
-export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [] }) {
+export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheckTrip, highlightedActIds = [], replanRequest = null }) {
   const { currentDay, setCurrentDay, addActivity, deleteActivity, updateActivity, pushItineraryToSplitwise, markActivityStatus, moveActivity, reorderSlotActivities, setDayActivities, resetDayActivities, resetAllActivities, restoreTripState, markPlanDayNoteSeen, setNightPlan, toggleActivityLock, ignoreWarning } = useStore();
   const [showPlayTrip,          setShowPlayTrip]          = useState(false);
   const [showAddActivity,       setShowAddActivity]       = useState(false);
@@ -881,6 +881,19 @@ export default function ItineraryScreen({ trip, switchTab, onPlanWithAI, onCheck
     itineraryPushed: trip.itineraryPushed, budgetByFamily: trip.budgetByFamily,
   });
   const countActs = (day) => (day?.activities || []).filter(a => a.status !== 'skipped').length;
+
+  // "✨ Re-plan this day" from the Trip Check window: it sets the current day + bumps a token, so
+  // when the day catches up here we run the SAME Plan-my-day engine (one placer = one checker —
+  // the per-rule "move one stop" suggestion and the re-plan can never disagree). Deduped by token.
+  // (Placed after planSnapshot/planMyDay so the effect's reference chain is fully declared.)
+  const handledReplan = useRef(0);
+  useEffect(() => {
+    if (replanRequest && replanRequest.token !== handledReplan.current && replanRequest.dayIndex === currentDay) {
+      handledReplan.current = replanRequest.token;
+      planMyDay();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replanRequest, currentDay]);
 
   const resetDay = () => {
     const day = trip.days[currentDay];

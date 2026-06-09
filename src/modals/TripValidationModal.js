@@ -36,7 +36,14 @@ function warningKey(w) {
   return `${w.type}:${w.dayIndex ?? 'trip'}`;
 }
 
-export default function TripValidationModal({ visible, trip, onClose, onNavigate, onIgnore, onClearIgnored }) {
+// Warnings a same-day re-time (Plan-my-day) can actually resolve — so we offer "Re-plan this day"
+// only when the day has one. (Closed venues, dietary, multi-city, duplicates aren't time fixes.)
+const TIME_FIXABLE = new Set([
+  'overlap', 'travel_time', 'packed', 'tiring_day', 'no_meal', 'meal_gap',
+  'early_start', 'past_midnight', 'wake_time', 'no_fit_hours',
+]);
+
+export default function TripValidationModal({ visible, trip, onClose, onNavigate, onReplanDay, onIgnore, onClearIgnored }) {
   const { updateActivity, moveActivity } = useStore();
   const [activeFilter, setActiveFilter] = useState(null);
 
@@ -186,11 +193,24 @@ export default function TripValidationModal({ visible, trip, onClose, onNavigate
               const day         = dayIndex != null ? trip.days[dayIndex] : null;
               const dayLabel    = day ? `${day.label}  —  ${day.date}` : 'Trip Level';
 
+              const canReplan = dayIndex != null && onReplanDay
+                && dayWarnings.some(w => TIME_FIXABLE.has(w.type));
+
               return (
                 <View key={key} style={s.daySection}>
                   <View style={s.dayLabelRow}>
                     <Icon name="calendar" size={13} color={colors.subtle} />
                     <Text style={s.dayLabel}>{dayLabel}</Text>
+                    {canReplan && (
+                      <TouchableOpacity
+                        style={s.replanBtn}
+                        onPress={() => onReplanDay(dayIndex)}
+                        activeOpacity={0.8}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={s.replanText}>✨ Re-plan this day</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                   {dayWarnings.map((w, i) => {
                     const col = SEV[w.severity] || SEV.info;
@@ -414,6 +434,8 @@ const s = StyleSheet.create({
 
   daySection: { marginBottom: spacing.xl },
   dayLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: spacing.sm },
+  replanBtn: { marginLeft: 'auto', backgroundColor: colors.smartSoft, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 5, borderWidth: 1, borderColor: (colors.smart || '#6c5ce7') + '55' },
+  replanText: { fontSize: 12, fontWeight: '800', color: colors.smartDeep || colors.smart || '#4b3fae' },
   dayLabel: {
     fontSize: 11, fontWeight: '800', color: colors.muted,
     textTransform: 'uppercase', letterSpacing: 0.8,

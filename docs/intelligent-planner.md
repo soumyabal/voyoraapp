@@ -233,6 +233,13 @@ member count** — not a shared average. Invariants (never break):
 
 - **Same engine for arrange + check.** Auto-arrange re-runs Trip Check and prompts fix-now /
   later / undo. Non-negotiable: the placer and the checker share `estimateDuration` + windows.
+- **Trip Check → "✨ Re-plan this day" runs Plan-my-day (June 2026).** Per-rule fixes only nudge ONE
+  stop to a local `suggestedTime`, which diverged from Plan-my-day's whole-day route+comfort re-time
+  (they suggested different times). So a day group in the Trip Check window with a time-fixable
+  warning (overlap, travel_time, packed, tiring_day, no_meal, meal_gap, early_start, past_midnight,
+  wake_time, no_fit_hours) now shows a **Re-plan this day** button that invokes the SAME `planDay`
+  engine (preview → Apply). One placer = one checker; the two can't disagree. Non-time warnings
+  (closed venue, dietary, multi-city, duplicate) keep their per-stop move/trim fixes.
 - **Distance is a first-class check**, not just a display. "Far apart *and* the next starts
   too soon" is a real conflict the clock alone misses.
 - **Hours drive meals and a closed-venue check**, captured free from Places.

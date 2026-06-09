@@ -50,6 +50,7 @@ export default function TripScreen({ navigation }) {
   const [showValidation,    setShowValidation]    = useState(false);
   const [showPacking,       setShowPacking]       = useState(false);
   const [highlightedActIds, setHighlightedActIds] = useState([]);
+  const [replanRequest,     setReplanRequest]     = useState(null);   // "Re-plan this day" bridge to ItineraryScreen
   const trip = getCurrentTrip();
 
   // Open to "now": when a trip is opened (or another is switched in), land on the destination's
@@ -88,6 +89,15 @@ export default function TripScreen({ navigation }) {
       setHighlightedActIds(warning.actIds);
       setTimeout(() => setHighlightedActIds([]), 3000);
     }
+  };
+
+  // "Re-plan this day" from Trip Check: close the modal, land on the day, and bump a token that
+  // ItineraryScreen watches to run Plan-my-day on that exact day (one engine resolves the flags).
+  const handleReplanDay = (dayIndex) => {
+    setShowValidation(false);
+    setActiveTab('itinerary');
+    setCurrentDay(dayIndex);
+    setReplanRequest(r => ({ dayIndex, token: (r?.token || 0) + 1 }));
   };
 
   const isAIMode = trip.mode === 'ai';
@@ -235,6 +245,7 @@ export default function TripScreen({ navigation }) {
             onPlanWithAI={isAIMode ? () => setShowPlanner(true) : undefined}
             onCheckTrip={() => setShowValidation(true)}
             highlightedActIds={highlightedActIds}
+            replanRequest={replanRequest}
           />
         </View>
         <View style={{ flex: 1, display: activeTab === 'travelers' ? 'flex' : 'none' }}>
@@ -263,6 +274,7 @@ export default function TripScreen({ navigation }) {
         trip={trip}
         onClose={() => setShowValidation(false)}
         onNavigate={handleValidationNavigate}
+        onReplanDay={handleReplanDay}
         onIgnore={(key) => ignoreWarning(trip.id, key)}
         onClearIgnored={() => clearIgnoredWarnings(trip.id)}
       />

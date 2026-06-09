@@ -14,16 +14,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal, View, Text, ScrollView, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, Dimensions, FlatList, ActivityIndicator,
+  StyleSheet, KeyboardAvoidingView, Platform, Dimensions, FlatList,
 } from 'react-native';
 import useStore from '../store';
 import { colors, spacing, radius, typography, shadow } from '../theme';
 import { uid, defaultNightsFor, DEFAULT_CHECK_IN, DEFAULT_CHECK_OUT } from '../utils/helpers';
 import { estimateDuration, formatDuration } from '../utils/tripValidator';
-import { geocodeAddress, reverseGeocode } from '../utils/places';
+import { reverseGeocode } from '../utils/places';
 import { APP_NAME } from '../config';
 import { SLOTS, getSlotKey, getSuggestedTime, getSlotCount } from '../utils/slots';
-import { ModalHeader } from '../components/ui';
+import { ModalHeader, LocationSearchField } from '../components/ui';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const TILE_GAP = 8;
@@ -387,7 +387,6 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
   // Address + geocode (for Airbnb / off-Places stops → lat/lng for scheduling)
   const [address, setAddress]     = useState('');
   const [geo, setGeo]             = useState(null);     // {lat,lng} once located
-  const [geoStatus, setGeoStatus] = useState('idle');   // idle | loading | ok | fail
 
   // Secondary fields (Details, Notes, Reminder) collapsed by default
   const [showMore, setShowMore]   = useState(false);
@@ -418,7 +417,6 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setAddress(editActivity.address || '');
       const hasGeo = editActivity.lat != null && editActivity.lng != null;
       setGeo(hasGeo ? { lat: editActivity.lat, lng: editActivity.lng } : null);
-      setGeoStatus(hasGeo ? 'ok' : 'idle');
     } else {
       // seed: { name?, address?, lat?, lng?, tile? } — from the Discover "add
       // manually" bridge (name only) OR a dropped map pin (lat/lng, maybe address).
@@ -451,7 +449,6 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       setAddress(seed?.address || '');
       const hasGeo = seed?.lat != null && seed?.lng != null;
       setGeo(hasGeo ? { lat: seed.lat, lng: seed.lng } : null);
-      setGeoStatus(hasGeo ? 'ok' : 'idle');
     }
   }, [visible, editActivity, defaultTime, currentDay, seed]);
 
@@ -462,22 +459,6 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
       reverseGeocode(seed.lat, seed.lng).then(a => { if (a) setAddress(a); }).catch(() => {});
     }
   }, [visible, seed, isEdit]);
-
-  // Geocode the typed address → lat/lng so the stop schedules with the rest of the day.
-  const locate = async () => {
-    const q = address.trim();
-    if (!q) return;
-    setGeoStatus('loading');
-    const r = await geocodeAddress(q);
-    if (r) {
-      setGeo({ lat: r.lat, lng: r.lng });
-      setAddress(r.formattedAddress);
-      setGeoStatus('ok');
-    } else {
-      setGeo(null);
-      setGeoStatus('fail');
-    }
-  };
 
   // The day being edited (fixed in Edit mode; Add mode has its own day picker). Shown as a
   // context chip so the user always knows which day this activity lives on.
@@ -861,32 +842,14 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                 <Text style={[s.sectionLabel, { marginTop: spacing.lg }]}>
                   DESTINATION <Text style={s.optional}>({dest.hint})</Text>
                 </Text>
-                <View style={s.addrRow}>
-                  <TextInput
-                    style={s.addrInput}
-                    value={address}
-                    onChangeText={t => { setAddress(t); setGeo(null); setGeoStatus('idle'); }}
-                    placeholder={dest.ph}
-                    placeholderTextColor={colors.muted}
-                    returnKeyType="search"
-                    onSubmitEditing={locate}
-                  />
-                  <TouchableOpacity
-                    style={[s.addrFind, geoStatus === 'ok' && s.addrFindOk]}
-                    onPress={locate}
-                    disabled={geoStatus === 'loading' || !address.trim()}
-                    activeOpacity={0.85}
-                  >
-                    {geoStatus === 'loading'
-                      ? <ActivityIndicator size="small" color="#fff" />
-                      : <Text style={s.addrFindText}>{geoStatus === 'ok' ? '✓ Located' : 'Find'}</Text>}
-                  </TouchableOpacity>
-                </View>
-                {geoStatus === 'ok' && (
+                <LocationSearchField
+                  label=""
+                  value={address}
+                  placeholder={dest.ph}
+                  onSelect={(label, coords) => { setAddress(label); setGeo(coords || null); }}
+                />
+                {geo && (
                   <Text style={s.addrOk}>📍 Pinned — the next stop’s drive starts from here.</Text>
-                )}
-                {geoStatus === 'fail' && (
-                  <Text style={s.addrFail}>Couldn&apos;t find that address — try a fuller one (street, city).</Text>
                 )}
               </>
               );
@@ -1019,32 +982,14 @@ export default function AddActivityModal({ visible, trip, currentDay, onClose, e
                     <Text style={[s.sectionLabel, { marginTop: spacing.sm }]}>
                       ADDRESS <Text style={s.optional}>(Airbnb / off-map — locates it for scheduling)</Text>
                     </Text>
-                    <View style={s.addrRow}>
-                      <TextInput
-                        style={s.addrInput}
-                        value={address}
-                        onChangeText={t => { setAddress(t); setGeo(null); setGeoStatus('idle'); }}
-                        placeholder="123 River Rd, Wisconsin Dells…"
-                        placeholderTextColor={colors.muted}
-                        returnKeyType="search"
-                        onSubmitEditing={locate}
-                      />
-                      <TouchableOpacity
-                        style={[s.addrFind, geoStatus === 'ok' && s.addrFindOk]}
-                        onPress={locate}
-                        disabled={geoStatus === 'loading' || !address.trim()}
-                        activeOpacity={0.85}
-                      >
-                        {geoStatus === 'loading'
-                          ? <ActivityIndicator size="small" color="#fff" />
-                          : <Text style={s.addrFindText}>{geoStatus === 'ok' ? '✓ Located' : 'Find'}</Text>}
-                      </TouchableOpacity>
-                    </View>
-                    {geoStatus === 'ok' && (
+                    <LocationSearchField
+                      label=""
+                      value={address}
+                      placeholder="123 River Rd, Wisconsin Dells…"
+                      onSelect={(label, coords) => { setAddress(label); setGeo(coords || null); }}
+                    />
+                    {geo && (
                       <Text style={s.addrOk}>📍 Pinned — this stop schedules with the rest of the day.</Text>
-                    )}
-                    {geoStatus === 'fail' && (
-                      <Text style={s.addrFail}>Couldn&apos;t find that address — try a fuller one (street, city).</Text>
                     )}
                   </>
                 )}
@@ -1240,32 +1185,8 @@ const s = StyleSheet.create({
   quickStopLabel: { fontSize: 14, fontWeight: '700', color: colors.text },
   quickStopHint: { fontSize: 12, color: colors.subtle, marginTop: 2 },
 
-  // Address → geocode row
-  addrRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'stretch' },
-  addrInput: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: 14,
-    color: colors.text,
-    ...shadow.sm,
-  },
-  addrFind: {
-    paddingHorizontal: spacing.lg,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: radius.lg,
-    backgroundColor: colors.accent,
-    minWidth: 76,
-  },
-  addrFindOk:   { backgroundColor: colors.success || '#10b981' },
-  addrFindText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  // "Pinned" confirmation under the LocationSearchField
   addrOk:   { marginTop: spacing.xs, fontSize: 12, color: colors.success || '#10b981', fontWeight: '600' },
-  addrFail: { marginTop: spacing.xs, fontSize: 12, color: colors.danger || '#ef4444', fontWeight: '600' },
 
   // Nights stepper (stay)
   nightsRow:    { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

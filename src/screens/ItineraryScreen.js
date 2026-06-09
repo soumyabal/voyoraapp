@@ -28,7 +28,7 @@ import { getDietaryWarning } from '../utils/dietary';
 import { generateDayShareText } from '../utils/dayShare';
 import { computeTripHealth } from '../utils/tripHealth';
 import { tripCheckStatus } from '../utils/tripCheckStatus';
-import { DAY_SLOTS, ACT_ICON, SEV_RANK, DAY_PILL, HEALTH_DOT, NIGHT_PLAN_OPTIONS, NIGHT_PLAN_META } from '../utils/itineraryConfig';
+import { DAY_SLOTS, actIconName, SEV_RANK, DAY_PILL, HEALTH_DOT, NIGHT_PLAN_OPTIONS, NIGHT_PLAN_META } from '../utils/itineraryConfig';
 import { bookingUrl } from '../utils/booking';
 import { exportDayAsPDF } from '../utils/exportPlan';
 import LocationSearchField from '../components/ui/LocationSearchField';
@@ -1862,7 +1862,7 @@ function ActivityCard({ activity: act, trip, dayDate, zoneLabel, leg, autoLocked
         <View style={styles.actLead}>
           {heroPhoto ? (
             <View style={[styles.actLeadIcon, { backgroundColor: (activityColors[act.type] || colors.muted) + '1A' }]}>
-              <Icon name={ACT_ICON[act.type] || 'activity'} size={22} color={activityColors[act.type] || colors.subtle} />
+              <Icon name={actIconName(act)} size={22} color={activityColors[act.type] || colors.subtle} />
             </View>
           ) : thumbAction ? (
             <TouchableOpacity
@@ -1876,7 +1876,7 @@ function ActivityCard({ activity: act, trip, dayDate, zoneLabel, leg, autoLocked
                 <Image source={{ uri: refreshPhotoKey(act.photo) }} style={styles.actLeadPhoto} />
               ) : (
                 <View style={[styles.actLeadIcon, { backgroundColor: (activityColors[act.type] || colors.muted) + '1A' }]}>
-                  <Icon name={ACT_ICON[act.type] || 'activity'} size={22} color={activityColors[act.type] || colors.subtle} />
+                  <Icon name={actIconName(act)} size={22} color={activityColors[act.type] || colors.subtle} />
                 </View>
               )}
               <View style={[styles.thumbLinkBadge, thumbAction.kind === 'book' && styles.thumbBookBadge]} pointerEvents="none">
@@ -1887,7 +1887,7 @@ function ActivityCard({ activity: act, trip, dayDate, zoneLabel, leg, autoLocked
             <Image source={{ uri: refreshPhotoKey(act.photo) }} style={styles.actLeadPhoto} />
           ) : (
             <View style={[styles.actLeadIcon, { backgroundColor: (activityColors[act.type] || colors.muted) + '1A' }]}>
-              <Icon name={ACT_ICON[act.type] || 'activity'} size={22} color={activityColors[act.type] || colors.subtle} />
+              <Icon name={actIconName(act)} size={22} color={activityColors[act.type] || colors.subtle} />
             </View>
           )}
         </View>

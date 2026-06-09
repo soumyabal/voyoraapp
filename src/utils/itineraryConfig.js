@@ -16,6 +16,15 @@ export const DAY_SLOTS = [
 
 // Activity type → Icon name (see components/ui/Icon)
 export const ACT_ICON = { transport: 'transport', stay: 'hotel', food: 'food', activity: 'activity', note: 'note' };
+// Transport sub-mode → an icon name the <Icon> component understands (it falls through to the raw
+// Ionicons glyph). So a drive shows a car, a flight a plane — not the generic bus for everything.
+export const TRANSPORT_ICON = { car: 'car', flight: 'airplane', train: 'train', ship: 'boat', bus: 'bus' };
+// The card icon for an activity: transport branches on its sub-mode; everything else by type.
+// Unknown/blank transport sub-modes (pitstop, misc) fall back to the generic transport glyph.
+export function actIconName(act) {
+  if (act?.type === 'transport') return TRANSPORT_ICON[act.subtype] || 'transport';
+  return ACT_ICON[act?.type] || 'activity';
+}
 // Trip Check severity → sort rank (errors first).
 export const SEV_RANK = { error: 0, warning: 1, info: 2 };
 

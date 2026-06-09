@@ -2,7 +2,7 @@
  * itineraryConfig.test.js — locks the cross-table invariants of the itinerary lookup tables,
  * so a future typo (e.g. a night-plan option with no matching meta) fails loudly.
  */
-import { DAY_SLOTS, SLOT_MEAL, MEAL_LABEL, NIGHT_PLAN_OPTIONS, NIGHT_PLAN_META, SEV_RANK } from '../itineraryConfig';
+import { DAY_SLOTS, SLOT_MEAL, MEAL_LABEL, NIGHT_PLAN_OPTIONS, NIGHT_PLAN_META, SEV_RANK, actIconName } from '../itineraryConfig';
 
 describe('itineraryConfig', () => {
   test('DAY_SLOTS tile the full day 0→1440 with no gaps or overlaps', () => {
@@ -26,5 +26,25 @@ describe('itineraryConfig', () => {
   test('SEV_RANK orders error < warning < info (errors sort first)', () => {
     expect(SEV_RANK.error).toBeLessThan(SEV_RANK.warning);
     expect(SEV_RANK.warning).toBeLessThan(SEV_RANK.info);
+  });
+
+  describe('actIconName — transport branches on sub-mode', () => {
+    test('each transport sub-mode gets its own icon (not the generic bus)', () => {
+      expect(actIconName({ type: 'transport', subtype: 'car' })).toBe('car');
+      expect(actIconName({ type: 'transport', subtype: 'flight' })).toBe('airplane');
+      expect(actIconName({ type: 'transport', subtype: 'train' })).toBe('train');
+      expect(actIconName({ type: 'transport', subtype: 'ship' })).toBe('boat');
+      expect(actIconName({ type: 'transport', subtype: 'bus' })).toBe('bus');
+    });
+    test('unknown/blank transport sub-mode falls back to the generic transport glyph', () => {
+      expect(actIconName({ type: 'transport', subtype: 'pitstop' })).toBe('transport');
+      expect(actIconName({ type: 'transport' })).toBe('transport');
+    });
+    test('non-transport types map by type', () => {
+      expect(actIconName({ type: 'food' })).toBe('food');
+      expect(actIconName({ type: 'stay' })).toBe('hotel');
+      expect(actIconName({ type: 'activity' })).toBe('activity');
+      expect(actIconName({})).toBe('activity');   // safe default
+    });
   });
 });

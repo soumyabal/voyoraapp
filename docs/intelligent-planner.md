@@ -86,7 +86,7 @@ a one-tap fix). Rules run per-day, then trip-wide.
 
 | Type | Sev | What it catches |
 |---|-----|-----------------|
-| `first_stop_unreachable` | info | A day's first stop is set earlier than you could realistically DRIVE there from where the day starts (home on Day 1, last night's hotel otherwise). Soft — we're guessing a drive |
+| `first_stop_unreachable` | info | A day's first stop is set earlier than you could realistically DRIVE there from where the day starts (home on Day 1, last night's hotel otherwise). Soft — we're guessing a drive. A *leading transport* (a planned "Drive/Fly to X") is the journey itself → skipped, not flagged |
 | `empty_day` | warning (interior) · info (first/last) | A day with nothing planned |
 | `notes_only_day` | info | Notes but no real activities/transport |
 | `unbooked_night` | warning | **Lodging gap**: an interior night with no accommodation (only when the trip uses hotels and isn't home-based) |

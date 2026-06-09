@@ -62,4 +62,18 @@ describe('first_stop_unreachable', () => {
     ] };
     expect(tips(trip)).toHaveLength(0);
   });
+
+  test('a leading TRANSPORT (the planned journey) is NOT flagged unreachable', () => {
+    // "Drive to Traverse City" at 08:00 IS the trip there — it departs from home, it isn't an
+    // unreachable destination, even though the destination is ~350 km away. (A too-tight stop AFTER
+    // it is caught by overlap/travel_time instead.)
+    const trip = { origin: HQ, families: [], days: [
+      { label: 'Day 1', date: '2026-06-05', activities: [
+        { id: 'dr', type: 'transport', subtype: 'car', name: 'Drive to Traverse City', time: '08:00', ...DEST },
+        act('Sleeping Bear Dunes', '14:00'),
+      ] },
+      { label: 'Day 2', date: '2026-06-06', activities: [] },
+    ] };
+    expect(tips(trip)).toHaveLength(0);
+  });
 });

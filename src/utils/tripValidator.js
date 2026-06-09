@@ -1049,6 +1049,11 @@ function ruleFirstStopUnreachable(trip) {
     const anchor = dayStartAnchor(trip, i);
     if (!anchor || anchor.lat == null) return;
     const first = acts[0];
+    // If the first stop is a TRANSPORT, the journey there is explicitly planned (a "Drive to X" /
+    // "Fly to X") — it departs from the anchor, it isn't an unreachable destination. Trust it; a
+    // too-tight leg after it is caught by overlap/travel_time instead. (Fixes the drive-home/arrival
+    // departure being flagged "you'd arrive at 10:28".)
+    if (first.type === 'transport') return;
     const leg = travelLeg(anchor, first);
     if (!leg || leg.min < 45) return;                       // only flag a real drive (≥ 45 min)
     const arrival = DEPART + leg.min;

@@ -28,6 +28,9 @@ export const RELEASE_FLAGS = {
   aiReview:         false,  // 🔜 v2.0 — in-trip AI chat review
   distanceWarnings: true,   // ✅ feature ready — user toggle controls actual on/off
   accounts:         false,  // 🔜 freemium — OFF for the free/local TestFlight build
+  newShell:         false,  // 🧪 Lambus-style app shell + Discover screen. OFF → current app
+                            //    unchanged. Flip true to device-test the UX revamp. (Referencing
+                            //    it when undefined is safe — falsy → old app.) See MainShell.js.
 };
 export const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 

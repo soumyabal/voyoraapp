@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from './HomeScreen';
 import DiscoverScreen from './DiscoverScreen';
 import UpdatesScreen from './UpdatesScreen';
+import ProfileScreen from './ProfileScreen';
 import Icon from '../components/ui/Icon';
 import PressableScale from '../components/ui/PressableScale';
 import { colors, radius, shadow } from '../theme';
@@ -24,16 +25,6 @@ const TABS = [
   { key: 'profile',  label: 'Profile',  icon: 'person' },
 ];
 
-function Placeholder({ emoji, title, sub }) {
-  return (
-    <View style={ph.wrap}>
-      <Text style={ph.emoji}>{emoji}</Text>
-      <Text style={ph.title}>{title}</Text>
-      <Text style={ph.sub}>{sub}</Text>
-    </View>
-  );
-}
-
 export default function MainShell({ navigation }) {
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState('discover');
@@ -44,9 +35,7 @@ export default function MainShell({ navigation }) {
       <View style={show('trips')}><HomeScreen navigation={navigation} /></View>
       <View style={show('discover')}><DiscoverScreen navigation={navigation} /></View>
       <View style={show('updates')}><UpdatesScreen navigation={navigation} /></View>
-      <View style={show('profile')}>
-        <Placeholder emoji="🙂" title="Profile" sub="Your traveler library, families, and saved trips — coming soon." />
-      </View>
+      <View style={show('profile')}><ProfileScreen navigation={navigation} /></View>
 
       {/* floating bottom tab bar */}
       <View style={[bar.wrap, { bottom: Math.max(insets.bottom, 10) + 4 }]}>
@@ -65,13 +54,6 @@ export default function MainShell({ navigation }) {
     </View>
   );
 }
-
-const ph = StyleSheet.create({
-  wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 },
-  emoji: { fontSize: 52 },
-  title: { fontSize: 24, fontWeight: '800', color: colors.text },
-  sub: { fontSize: 14, color: colors.muted, textAlign: 'center', maxWidth: 250, lineHeight: 20 },
-});
 
 const bar = StyleSheet.create({
   wrap: {

@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useStore from '../store';
 import { spacing, radius, shadow } from '../theme';
 import { useShellTheme } from '../shellTheme';
+import { tripCountForGroup } from '../utils/groupStats';
 import Icon from '../components/ui/Icon';
 import PressableScale from '../components/ui/PressableScale';
 import AddProfileModal from '../modals/AddProfileModal';
@@ -74,12 +75,16 @@ export default function ProfileScreen() {
             <Text style={s.sec}>Families &amp; groups</Text>
             {groups.map((g) => {
               const count = (g.travelerIds || []).length;
+              const tripsTogether = tripCountForGroup(g, trips);
               return (
                 <View key={g.id} style={s.card}>
                   <View style={[s.dot, { backgroundColor: g.color || c.accent }]} />
                   <View style={{ flex: 1 }}>
                     <Text style={s.cardTitle} numberOfLines={1}>{g.name}</Text>
-                    <Text style={s.cardSub}>{count} {count === 1 ? 'person' : 'people'}</Text>
+                    <Text style={s.cardSub}>
+                      {count} {count === 1 ? 'person' : 'people'}
+                      {tripsTogether > 0 ? ` · ${tripsTogether} trip${tripsTogether === 1 ? '' : 's'} together` : ''}
+                    </Text>
                   </View>
                 </View>
               );

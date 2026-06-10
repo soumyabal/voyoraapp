@@ -57,7 +57,15 @@ function Shell({ navigation }) {
         {TABS.map((t) => {
           const on = tab === t.key;
           return (
-            <PressableScale key={t.key} haptic="light" style={bar.tab} onPress={() => setTab(t.key)}>
+            <PressableScale
+              key={t.key}
+              haptic="light"
+              style={bar.tab}
+              onPress={() => setTab(t.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={t.label}
+            >
               <View style={[bar.ring, on && bar.ringOn]}>
                 <Icon name={t.icon} size={23} color={on ? c.accent : c.muted} />
               </View>
@@ -76,7 +84,7 @@ const makeBar = (c) => StyleSheet.create({
     backgroundColor: c.surface, borderWidth: 1, borderColor: c.hairline,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', ...shadow.lg,
   },
-  tab: { alignItems: 'center', gap: 3, paddingHorizontal: 8, minWidth: 60 },
+  tab: { alignItems: 'center', justifyContent: 'center', gap: 3, paddingHorizontal: 8, minWidth: 60, minHeight: 44 },
   ring: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: radius.full },
   ringOn: { backgroundColor: c.primaryLight },
   label: { fontSize: 10.5, fontWeight: '700' },

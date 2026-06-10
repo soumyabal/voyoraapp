@@ -21,7 +21,7 @@ import TravelersScreen from './TravelersScreen';
 import SplitwiseScreen from './SplitwiseScreen';
 import EditTripModal from '../modals/EditTripModal';
 import TripValidationModal from '../modals/TripValidationModal';
-import { spacing, radius, shadow } from '../theme';
+import { colors, spacing, radius, shadow } from '../theme';
 import { ShellThemeProvider, useShellTheme } from '../shellTheme';
 import { APP_NAME } from '../config';
 import { fmt, getAllMembers } from '../utils/helpers';
@@ -175,8 +175,12 @@ function TripShellBody({ navigation }) {
         </View>
       </View>
 
-      {/* Tab bodies — REUSE the existing screens (stay mounted to preserve scroll) */}
-      <View style={{ flex: 1 }}>
+      {/* Tab bodies — REUSE the existing screens (stay mounted to preserve scroll). The reused
+          Itinerary/People/Split screens are LIGHT-only and transparent at the root, so we paint an
+          opaque light surface here: without it, the dark shell bg shows through (black show-through +
+          floating white day-rail). Result: themed dark header over the existing light body. Full-dark
+          bodies = recoloring the shared ItineraryScreen, a separate device-gated refactor. */}
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
         <View style={{ flex: 1, display: tab === 'itinerary' ? 'flex' : 'none' }}>
           <ItineraryScreen
             trip={trip}

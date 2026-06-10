@@ -1,18 +1,21 @@
 /**
  * TripShellScreen.js — the (flag-gated) new-shell trip detail. The prototype's two-level nav: a flat
- * themed header (back · emoji · name · dest/dates · status/mode/families pills · ⋮) + segmented
+ * header (back · emoji · name · dest/dates · status/mode/families pills · ⋮) + segmented
  * Itinerary / People / Split subtabs — replacing the gradient-hero + bottom-border tabs of the
  * classic TripScreen.
  *
  * CRITICAL: this is a SEPARATE route ('TripShell'); the live `Trip`/TripScreen is untouched and still
  * serves the flag-OFF app. The three tab BODIES REUSE the existing, tested screens (ItineraryScreen /
  * TravelersScreen / SplitwiseScreen) verbatim — the itinerary engine and the split MOAT are never
- * reimplemented here, only re-chromed. Those inner screens read the global light theme, so in dark
- * mode the header is dark and the body is light (a known follow-up — restyling them is a separate,
- * careful step). Theme via its own ShellThemeProvider (reads the persisted mode). Contract:
- * docs/ux-engine-contract.md · Design ref: prototypes/discover-rails.html
+ * reimplemented here, only re-chromed.
+ *
+ * THEME: light always. The reused bodies are light-only and shared with the classic TripScreen, so a
+ * truly dark body would mean recoloring that shared screen (a separate device-gated refactor). To
+ * keep the trip detail cohesive (no dark-header / light-body seam), this whole screen renders light —
+ * even when the shell is in dark mode (the shell tabs stay dark; drilling into a trip shows a clean
+ * light surface). Contract: docs/ux-engine-contract.md · Design ref: prototypes/discover-rails.html
  */
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, StatusBar, Alert, Share } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useStore from '../store';
@@ -22,7 +25,6 @@ import SplitwiseScreen from './SplitwiseScreen';
 import EditTripModal from '../modals/EditTripModal';
 import TripValidationModal from '../modals/TripValidationModal';
 import { colors, spacing, radius, shadow } from '../theme';
-import { ShellThemeProvider, useShellTheme } from '../shellTheme';
 import { APP_NAME } from '../config';
 import { fmt, getAllMembers } from '../utils/helpers';
 import { classifyTrip } from '../utils/tripGrouping';
@@ -37,9 +39,9 @@ const SUBTABS = [
 ];
 
 const MODE_META = {
-  ai:     { icon: 'sparkles',         label: 'AI Planned' },
+  ai:     { icon: 'sparkles',          label: 'AI Planned' },
   expert: { icon: 'briefcase-outline', label: 'Expert' },
-  manual: { icon: 'create-outline',   label: 'Manual' },
+  manual: { icon: 'create-outline',    label: 'Manual' },
 };
 
 function statusPill(trip, nowMs) {
@@ -50,19 +52,7 @@ function statusPill(trip, nowMs) {
 }
 
 export default function TripShellScreen({ navigation }) {
-  // Own provider so the pushed screen is themed like the shell (reads the persisted mode).
-  return (
-    <ShellThemeProvider>
-      <TripShellBody navigation={navigation} />
-    </ShellThemeProvider>
-  );
-}
-
-function TripShellBody({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { c, resolved } = useShellTheme();
-  const s = useMemo(() => makeStyles(c), [c]);
-
   const {
     getCurrentTrip, setCurrentTrip, setCurrentDay, deleteTrip, duplicateTrip,
     ignoreWarning, clearIgnoredWarnings, travelers,
@@ -79,9 +69,9 @@ function TripShellBody({ navigation }) {
   if (!trip) {
     return (
       <View style={[s.screen, { alignItems: 'center', justifyContent: 'center' }]}>
-        <Text style={{ color: c.muted, fontSize: 16, marginBottom: 12 }}>Trip not found</Text>
+        <Text style={{ color: colors.muted, fontSize: 16, marginBottom: 12 }}>Trip not found</Text>
         <PressableScale haptic="light" onPress={() => navigation.goBack()}>
-          <Text style={{ color: c.accent, fontWeight: '800' }}>Go back</Text>
+          <Text style={{ color: colors.accent, fontWeight: '800' }}>Go back</Text>
         </PressableScale>
       </View>
     );
@@ -131,13 +121,13 @@ function TripShellBody({ navigation }) {
 
   return (
     <View style={s.screen}>
-      <StatusBar barStyle={resolved === 'dark' ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle="dark-content" />
 
-      {/* Flat themed header */}
+      {/* Flat header (light) */}
       <View style={[s.header, { paddingTop: insets.top + 6 }]}>
         <View style={s.headTop}>
           <PressableScale haptic="light" style={s.backBtn} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back">
-            <Icon name="back" size={18} color={c.text} />
+            <Icon name="back" size={18} color={colors.text} />
             <Text style={s.backText}>Back</Text>
           </PressableScale>
           <PressableScale haptic="light" style={s.iconBtn} onPress={handleMenu} accessibilityRole="button" accessibilityLabel="Trip menu">
@@ -157,9 +147,9 @@ function TripShellBody({ navigation }) {
 
         <View style={s.pills}>
           <View style={s.pill}><Text style={s.pillText}>{statusPill(trip, now)}</Text></View>
-          <View style={s.pill}><Icon name={mode.icon} size={11} color={c.muted} /><Text style={s.pillText}>{mode.label}</Text></View>
+          <View style={s.pill}><Icon name={mode.icon} size={11} color={colors.muted} /><Text style={s.pillText}>{mode.label}</Text></View>
           <View style={s.pill}><Text style={s.pillText}>👨‍👩‍👧 {fam} famil{fam !== 1 ? 'ies' : 'y'}</Text></View>
-          {hasAccessible && (<View style={s.pill}><Icon name="accessible" size={11} color={c.muted} /><Text style={s.pillText}>Needs</Text></View>)}
+          {hasAccessible && (<View style={s.pill}><Icon name="accessible" size={11} color={colors.muted} /><Text style={s.pillText}>Needs</Text></View>)}
         </View>
 
         {/* Segmented subtabs */}
@@ -175,11 +165,7 @@ function TripShellBody({ navigation }) {
         </View>
       </View>
 
-      {/* Tab bodies — REUSE the existing screens (stay mounted to preserve scroll). The reused
-          Itinerary/People/Split screens are LIGHT-only and transparent at the root, so we paint an
-          opaque light surface here: without it, the dark shell bg shows through (black show-through +
-          floating white day-rail). Result: themed dark header over the existing light body. Full-dark
-          bodies = recoloring the shared ItineraryScreen, a separate device-gated refactor. */}
+      {/* Tab bodies — REUSE the existing screens (stay mounted to preserve scroll) */}
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
         <View style={{ flex: 1, display: tab === 'itinerary' ? 'flex' : 'none' }}>
           <ItineraryScreen
@@ -219,27 +205,27 @@ function TripShellBody({ navigation }) {
   );
 }
 
-const makeStyles = (c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
-  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.hairline },
+const s = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.bg },
+  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.hairline },
   headTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 4, paddingRight: 8, minHeight: 44 },
-  backText: { fontSize: 15, fontWeight: '700', color: c.text },
+  backText: { fontSize: 15, fontWeight: '700', color: colors.text },
   iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  menuDots: { fontSize: 22, fontWeight: '800', color: c.text },
+  menuDots: { fontSize: 22, fontWeight: '800', color: colors.text },
 
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 2 },
   emoji: { fontSize: 30 },
-  name: { fontSize: 22, fontWeight: '800', color: c.text, letterSpacing: -0.3 },
-  sub: { fontSize: 12.5, color: c.muted, marginTop: 2 },
+  name: { fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
+  sub: { fontSize: 12.5, color: colors.muted, marginTop: 2 },
 
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: c.bg, borderWidth: 1, borderColor: c.hairline, borderRadius: radius.full, paddingHorizontal: 9, paddingVertical: 4 },
-  pillText: { fontSize: 11, fontWeight: '700', color: c.muted },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.hairline, borderRadius: radius.full, paddingHorizontal: 9, paddingVertical: 4 },
+  pillText: { fontSize: 11, fontWeight: '700', color: colors.muted },
 
-  segment: { flexDirection: 'row', gap: 4, marginTop: 12, padding: 4, borderRadius: radius.lg, backgroundColor: c.bg, borderWidth: 1, borderColor: c.hairline, ...shadow.sm },
+  segment: { flexDirection: 'row', gap: 4, marginTop: 12, padding: 4, borderRadius: radius.lg, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.hairline, ...shadow.sm },
   segBtn: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: radius.md },
-  segBtnOn: { backgroundColor: c.accent },
-  segText: { fontSize: 14, fontWeight: '800', color: c.muted },
+  segBtnOn: { backgroundColor: colors.accent },
+  segText: { fontSize: 14, fontWeight: '800', color: colors.muted },
   segTextOn: { color: '#ffffff' },
 });

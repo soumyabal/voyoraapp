@@ -8,10 +8,16 @@
  *
  * Pattern: a screen does `const { c } = useShellTheme()` then builds `makeStyles(c)`. The hook returns
  * a LIGHT fallback when no provider is mounted, so a screen rendered bare (e.g. the compile-net) is safe.
+ * The chosen mode (System/Light/Dark) is persisted to AsyncStorage — NOT the Zustand store — so it
+ * survives reloads without a persisted-store schema bump. Resolution math lives in utils/themeMode.
  */
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useColorScheme } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors as light } from './theme';
+import { resolveTheme, isThemeMode } from './utils/themeMode';
+
+const STORAGE_KEY = 'kithova-shell-theme';
 
 // The 10 tokens the new-shell screens use, in dark. Spread over `light` so any OTHER token a screen
 // references still resolves (to its light value) — no missing-color crashes.
@@ -35,8 +41,23 @@ const Ctx = createContext(null);
 
 export function ShellThemeProvider({ children }) {
   const sys = useColorScheme();                 // 'light' | 'dark' | null
-  const [mode, setMode] = useState('system');   // 'system' | 'light' | 'dark'
-  const resolved = mode === 'system' ? (sys === 'dark' ? 'dark' : 'light') : mode;
+  const [mode, setModeState] = useState('system');   // 'system' | 'light' | 'dark'
+
+  // Load the persisted choice once on mount (best-effort; defaults to 'system' on any failure).
+  useEffect(() => {
+    let alive = true;
+    AsyncStorage.getItem(STORAGE_KEY)
+      .then((saved) => { if (alive && isThemeMode(saved)) setModeState(saved); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const setMode = (next) => {
+    setModeState(next);
+    AsyncStorage.setItem(STORAGE_KEY, next).catch(() => {});
+  };
+
+  const resolved = resolveTheme(mode, sys);
   const c = resolved === 'dark' ? DARK_PALETTE : LIGHT_PALETTE;
   const value = useMemo(() => ({ c, mode, setMode, resolved }), [c, mode, resolved]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

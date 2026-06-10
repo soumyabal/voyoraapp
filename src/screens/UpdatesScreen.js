@@ -23,7 +23,7 @@ export default function UpdatesScreen({ navigation }) {
 
   const trips = useStore((st) => st.trips) || [];
   const setCurrentTrip = useStore((st) => st.setCurrentTrip);
-  const openTrip = (id) => { setCurrentTrip(id); navigation.navigate('Trip'); };
+  const openTrip = (id) => { setCurrentTrip(id); navigation.navigate('TripShell'); };
 
   const [now] = useState(() => Date.now());   // clock at open (lazy init → pure render)
   const ongoing = trips.filter((t) => isTripOngoing(t, now));

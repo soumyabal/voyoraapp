@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import HomeScreen from '../screens/HomeScreen';
 import MainShell from '../screens/MainShell';
 import TripScreen from '../screens/TripScreen';
+import TripShellScreen from '../screens/TripShellScreen';
 import { colors } from '../theme';
 import { RELEASE_FLAGS } from '../config';
 
@@ -32,6 +33,15 @@ export default function AppNavigator() {
         component={TripScreen}
         options={{ headerShown: false }}
       />
+      {/* New-shell trip detail (flat header + segmented subtabs). Registered only with the flag;
+          reached via navigation.navigate('TripShell') from the shell screens. Classic 'Trip' stays. */}
+      {RELEASE_FLAGS.newShell && (
+        <Stack.Screen
+          name="TripShell"
+          component={TripShellScreen}
+          options={{ headerShown: false }}
+        />
+      )}
     </Stack.Navigator>
   );
 }

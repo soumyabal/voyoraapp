@@ -49,7 +49,7 @@ export default function DiscoverScreen({ navigation }) {
   const [showNewTrip, setShowNewTrip] = useState(false);
   const [showBanner, setShowBanner]   = useState(true);
 
-  const openTrip = (tripId) => { setCurrentTrip(tripId); navigation.navigate('Trip'); };
+  const openTrip = (tripId) => { setCurrentTrip(tripId); navigation.navigate('TripShell'); };
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>

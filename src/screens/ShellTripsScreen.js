@@ -58,7 +58,7 @@ export default function ShellTripsScreen({ navigation }) {
   const [showPaste, setShowPaste] = useState(false);
   const [now] = useState(() => Date.now());
 
-  const openTrip = (id) => { setCurrentTrip(id); navigation.navigate('Trip'); };
+  const openTrip = (id) => { setCurrentTrip(id); navigation.navigate('TripShell'); };
   const manageTrip = (trip) => {
     Alert.alert(trip.name, undefined, [
       { text: trip.archived ? '↩ Reopen' : '✓ Mark complete', onPress: () => updateTrip(trip.id, { archived: !trip.archived }) },

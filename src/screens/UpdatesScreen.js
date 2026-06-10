@@ -14,6 +14,7 @@ import { useShellTheme } from '../shellTheme';
 import Icon from '../components/ui/Icon';
 import PressableScale from '../components/ui/PressableScale';
 import { isTripOngoing, dayNeedsExpenseLog } from '../utils/helpers';
+import { buildUpdates } from '../utils/shellUpdates';
 
 export default function UpdatesScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -32,6 +33,9 @@ export default function UpdatesScreen({ navigation }) {
       if (dayNeedsExpenseLog(t, i, now)) nudges.push({ tripId: t.id, tripName: t.name, dayLabel: d.label });
     });
   });
+  // Lifecycle reminders (pure, tested): post-trip settle-up + trip-starting-soon.
+  const lifecycle = buildUpdates(trips, now);
+  const hasReminders = nudges.length > 0 || lifecycle.length > 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
@@ -39,15 +43,25 @@ export default function UpdatesScreen({ navigation }) {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + spacing.sm, paddingBottom: 120 }}>
         <Text style={s.h1}>Updates</Text>
 
-        {nudges.length > 0 && (
+        {hasReminders && (
           <>
             <Text style={s.sec}>Don’t forget</Text>
             {nudges.map((n, i) => (
-              <PressableScale key={`${n.tripId}-${i}`} haptic="light" style={s.card} onPress={() => openTrip(n.tripId)}>
+              <PressableScale key={`log-${n.tripId}-${i}`} haptic="light" style={s.card} onPress={() => openTrip(n.tripId)} accessibilityRole="button" accessibilityLabel={`Log ${n.dayLabel} spend for ${n.tripName}`}>
                 <Text style={s.cardEmoji}>🧾</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={s.cardTitle}>Log {n.dayLabel}’s spend</Text>
                   <Text style={s.cardSub}>{n.tripName} · keeps each family’s split fair</Text>
+                </View>
+                <Icon name="forward" size={16} color={c.subtle} />
+              </PressableScale>
+            ))}
+            {lifecycle.map((u) => (
+              <PressableScale key={u.key} haptic="light" style={s.card} onPress={() => openTrip(u.tripId)} accessibilityRole="button" accessibilityLabel={`${u.title}. ${u.sub}`}>
+                <Text style={s.cardEmoji}>{u.emoji}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.cardTitle} numberOfLines={1}>{u.title}</Text>
+                  <Text style={s.cardSub} numberOfLines={1}>{u.sub}</Text>
                 </View>
                 <Icon name="forward" size={16} color={c.subtle} />
               </PressableScale>

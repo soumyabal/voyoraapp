@@ -3,21 +3,25 @@
  * for ongoing trips it surfaces "log your expenses" nudges (dayNeedsExpenseLog) and a quick jump
  * to each trip. Pure consumer of the engine — no rules here, it just renders what the engine says.
  *
- * Contract: docs/ux-engine-contract.md
+ * Theme via useShellTheme (local light/dark for the new shell). Contract: docs/ux-engine-contract.md
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useStore from '../store';
-import { colors, spacing, radius, shadow } from '../theme';
+import { spacing, radius, shadow } from '../theme';
+import { useShellTheme } from '../shellTheme';
 import Icon from '../components/ui/Icon';
 import PressableScale from '../components/ui/PressableScale';
 import { isTripOngoing, dayNeedsExpenseLog } from '../utils/helpers';
 
 export default function UpdatesScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const trips = useStore((s) => s.trips) || [];
-  const setCurrentTrip = useStore((s) => s.setCurrentTrip);
+  const { c, resolved } = useShellTheme();
+  const s = useMemo(() => makeStyles(c), [c]);
+
+  const trips = useStore((st) => st.trips) || [];
+  const setCurrentTrip = useStore((st) => st.setCurrentTrip);
   const openTrip = (id) => { setCurrentTrip(id); navigation.navigate('Trip'); };
 
   const [now] = useState(() => Date.now());   // clock at open (lazy init → pure render)
@@ -30,8 +34,8 @@ export default function UpdatesScreen({ navigation }) {
   });
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <StatusBar barStyle="dark-content" />
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
+      <StatusBar barStyle={resolved === 'dark' ? 'light-content' : 'dark-content'} />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + spacing.sm, paddingBottom: 120 }}>
         <Text style={s.h1}>Updates</Text>
 
@@ -45,7 +49,7 @@ export default function UpdatesScreen({ navigation }) {
                   <Text style={s.cardTitle}>Log {n.dayLabel}’s spend</Text>
                   <Text style={s.cardSub}>{n.tripName} · keeps each family’s split fair</Text>
                 </View>
-                <Icon name="forward" size={16} color={colors.subtle} />
+                <Icon name="forward" size={16} color={c.subtle} />
               </PressableScale>
             ))}
           </>
@@ -62,7 +66,7 @@ export default function UpdatesScreen({ navigation }) {
                 <Text style={s.cardTitle} numberOfLines={1}>{t.name}</Text>
                 <Text style={s.cardSub}>{isTripOngoing(t, now) ? '🟢 Happening now' : (t.destination || `${(t.families || []).length} families`)}</Text>
               </View>
-              <Icon name="forward" size={16} color={colors.subtle} />
+              <Icon name="forward" size={16} color={c.subtle} />
             </PressableScale>
           ))
         )}
@@ -71,12 +75,12 @@ export default function UpdatesScreen({ navigation }) {
   );
 }
 
-const s = StyleSheet.create({
-  h1: { fontSize: 36, fontWeight: '800', color: colors.text, letterSpacing: -0.5, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.xs },
-  sec: { fontSize: 13, fontWeight: '800', color: colors.subtle, letterSpacing: 0.5, textTransform: 'uppercase', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm },
-  card: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: spacing.lg, marginBottom: spacing.sm, padding: 14, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.hairline, ...shadow.sm },
+const makeStyles = (c) => StyleSheet.create({
+  h1: { fontSize: 36, fontWeight: '800', color: c.text, letterSpacing: -0.5, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.xs },
+  sec: { fontSize: 13, fontWeight: '800', color: c.subtle, letterSpacing: 0.5, textTransform: 'uppercase', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  card: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: spacing.lg, marginBottom: spacing.sm, padding: 14, borderRadius: radius.lg, backgroundColor: c.surface, borderWidth: 1, borderColor: c.hairline, ...shadow.sm },
   cardEmoji: { fontSize: 24 },
-  cardTitle: { fontWeight: '800', fontSize: 15, color: colors.text },
-  cardSub: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  empty: { paddingHorizontal: spacing.xl, color: colors.muted, fontSize: 14 },
+  cardTitle: { fontWeight: '800', fontSize: 15, color: c.text },
+  cardSub: { fontSize: 12, color: c.muted, marginTop: 2 },
+  empty: { paddingHorizontal: spacing.xl, color: c.muted, fontSize: 14 },
 });

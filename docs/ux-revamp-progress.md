@@ -12,7 +12,8 @@
 | App shell | `src/screens/MainShell.js` | custom bottom tab bar — **Trips · Discover · Updates · Profile** (no nav lib; state-based; Expo-Go-safe; tabs kept mounted) |
 | Discover | `src/screens/DiscoverScreen.js` | hero "Trip of the Week" + rails (Popular Categories · Start your trip · Made for groups). Onboarding wired to the **real** `PasteImportModal` + `NewTripModal`; not-yet-built cards are honest `showToast` placeholders |
 | Updates | `src/screens/UpdatesScreen.js` | **engine-driven** feed — "log expenses" nudges via `dayNeedsExpenseLog` + a trips list |
-| Profile | `src/screens/ProfileScreen.js` | stat strip (trips · people · groups) + saved families/groups + the traveler library; tapping a person opens the **real** `AddProfileModal` to edit, "+ Add person" opens it fresh. Read-only otherwise; accounts stay off |
+| Profile | `src/screens/ProfileScreen.js` | stat strip (trips · people · groups) + saved families/groups + the traveler library; tapping a person opens the **real** `AddProfileModal` to edit, "+ Add person" opens it fresh. Read-only otherwise; accounts stay off. Hosts the **Appearance** toggle |
+| **Dark theme** | `src/shellTheme.js` (`ShellThemeProvider` / `useShellTheme`) | a LOCAL light/dark palette for the new shell ONLY — dark values ported from the prototype's `:root`. Mode = **System / Light / Dark** (toggle on Profile; default follows the OS). Does **not** touch the light-only main app; the Trips tab is the existing HomeScreen and stays light |
 | Routing | `src/navigation/AppNavigator.js` | `Home → MainShell` only when the flag is on; **TripScreen (Itinerary/People/Split) is reused as-is** |
 
 **Trips** tab = the existing `HomeScreen`. Trip detail is the current TripScreen (untouched) — the
@@ -31,6 +32,7 @@ new *Itinerary look* from the prototype is a later, separate step.
 - **Discover** — hero + the three rails scroll sideways; **"Paste a plan"** opens Magic Paste, **"Group trip"** opens the create flow; both should build a trip and jump into it. Other cards show "… coming soon".
 - **Updates** — on an *ongoing* trip with an unlogged wrapped day, a "Log … spend" nudge appears and opens the trip.
 - **Profile** — stat strip reads real counts; saved groups show a colored dot + member count; tapping a person opens the edit sheet and "+ Add person" adds one (both write through the existing library). Cards should clear the floating tab bar.
+- **Dark theme** — the **Appearance** toggle at the top of Profile flips System/Light/Dark; **Dark** instantly recolors Discover · Updates · Profile · the tab bar (surfaces, text, hairlines, status-bar icons). **Known:** the **Trips** tab is the existing light HomeScreen — it stays light in dark mode (out of scope for the shell palette). Image-gradient cards keep their colors in both modes.
 - **Default app unaffected** when the flag is off.
 
 ## 🔜 Next (when you're back / with feedback)

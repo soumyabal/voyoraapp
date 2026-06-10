@@ -8,13 +8,13 @@
  * which is still pushed via navigation.navigate('Trip'). Contract: docs/ux-engine-contract.md
  *
  * Theme: the new-shell screens support light/dark via ShellThemeProvider (src/shellTheme.js) — a
- * LOCAL palette that does not touch the light-only main app. The Trips tab is the existing
- * HomeScreen and stays light (it reads the global theme, not the shell palette).
+ * LOCAL palette that does not touch the light-only main app. All four tabs are themed; the legacy
+ * HomeScreen still serves the flag-OFF app (AppNavigator) and is untouched.
  */
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import HomeScreen from './HomeScreen';
+import ShellTripsScreen from './ShellTripsScreen';
 import DiscoverScreen from './DiscoverScreen';
 import UpdatesScreen from './UpdatesScreen';
 import ProfileScreen from './ProfileScreen';
@@ -47,7 +47,7 @@ function Shell({ navigation }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }}>
-      <View style={show('trips')}><HomeScreen navigation={navigation} /></View>
+      <View style={show('trips')}><ShellTripsScreen navigation={navigation} /></View>
       <View style={show('discover')}><DiscoverScreen navigation={navigation} /></View>
       <View style={show('updates')}><UpdatesScreen navigation={navigation} /></View>
       <View style={show('profile')}><ProfileScreen navigation={navigation} /></View>
